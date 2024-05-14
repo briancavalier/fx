@@ -1,4 +1,4 @@
-import { Effect, Env, fx } from '../../src'
+import { Effect, Env, Fail, fx, ok } from '../../src'
 
 // -------------------------------------------------------------------
 // The number guessing game example from
@@ -14,6 +14,11 @@ const print = (s: string) => new Print(s)
 export class Read extends Effect('Read')<string, string> { }
 
 const read = (prompt: string) => new Read(prompt)
+
+export const toInteger = (s: string) => {
+  const i = Number.parseInt(s, 10)
+  return Number.isInteger(i) ? ok(i) : Fail.fail(`"${s}" is not an integer`)
+}
 
 export type Range = {
   readonly min: number,
@@ -56,8 +61,8 @@ const play = (name: string, range: Range) => fx(function* () {
 
   const result = yield* read(`Dear ${name}, please guess a number from ${range.min} to ${range.max}: `)
 
-  const guess = Number.parseInt(result, 10)
-  if (!Number.isInteger(guess))
+  const guess = yield* toInteger(result).pipe(Fail.orElse(undefined))
+  if (typeof guess !== 'number')
     yield* print('You did not enter an integer!')
   else if (checkAnswer(secret, guess))
     yield* print(`You guessed right, ${name}!`)

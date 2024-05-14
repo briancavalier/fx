@@ -3,15 +3,15 @@ import { describe, it } from 'node:test'
 
 import { fx, ok, runSync } from './Fx'
 
-import { catchIf, fail } from './Fail'
+import { catchOnly, fail } from './Fail'
 
 describe('Fail', () => {
-  describe('catchIf', () => {
+  describe('catchOnly', () => {
     it('given no failures, returns result', () => {
       const expected = Math.random()
       const f = ok(expected)
 
-      const actual = runSync(f.pipe(catchIf((x): x is unknown => true)))
+      const actual = runSync(f.pipe(catchOnly((x): x is unknown => true)))
       assert.equal(actual, expected)
     })
 
@@ -23,7 +23,7 @@ describe('Fail', () => {
       })
 
       // @ts-expect-error failure is not handled
-      const result = runSync(f.pipe(catchIf((x): x is string => typeof x === 'string')))
+      const result = runSync(f.pipe(catchOnly((x): x is string => typeof x === 'string')))
       assert.notEqual(result, unexpected)
     })
 
@@ -36,7 +36,7 @@ describe('Fail', () => {
         return result
       })
 
-      const actual = runSync(f.pipe(catchIf((x): x is number => typeof x === 'number')))
+      const actual = runSync(f.pipe(catchOnly((x): x is number => typeof x === 'number')))
       assert.equal(actual, expected)
     })
   })

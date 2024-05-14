@@ -17,13 +17,6 @@ export const acquire = <const R, const E1, const E2>(
   r: Resource<E1, E2, R>
 ) => new Acquire<E1 | E2>(r).returning<R>()
 
-export const bracket = <const E1, const E2, const E3, const R, const A>(
-  r: Resource<E1, E2, R>,
-  use: (r: R) => Fx<E3, A>
-) => fx(function* () {
-  return yield* use(yield* acquire(r))
-})
-
 export const finalize = <E>(release: Fx<E, void>) =>
   acquire({ acquire: unit, release: () => release })
 
@@ -36,7 +29,7 @@ export const scope = <const E, const A>(f: Fx<E, A>) => fx(function* () {
 
         if (is(Fail, a)) {
           const failures = yield* releaseSafely(resources)
-          return yield* fail([a.arg, ...failures])
+          return yield* fail(new AggregateError([a.arg, ...failures], 'Resource release failed'))
         }
 
         resources.push(release(a))
@@ -45,7 +38,7 @@ export const scope = <const E, const A>(f: Fx<E, A>) => fx(function* () {
     )
   } finally {
     const failures = yield* releaseSafely(resources)
-    if (failures.length) yield* fail(failures)
+    if (failures.length) yield* fail(new AggregateError(failures, 'Resource release failed'))
   }
 }) as Fx<UnwrapAcquire<E>, A>
 

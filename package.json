@@ -1,0 +1,33 @@
+{
+  "name": "@briancavalier/fx",
+  "version": "1.0.0",
+  "description": "TypeScript algebraic effects system",
+  "main": "dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "lint": "eslint src/**/*.ts --fix",
+    "test": "node --import tsx --test ./src/**/*.test.ts",
+    "test:watch": "node --import tsx --test --watch ./src/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.2.0",
+    "@types/node": "^20.12.11",
+    "eslint": "^8.57.0",
+    "tsx": "^4.10.2",
+    "typescript": "^5.4.5",
+    "typescript-eslint": "^7.9.0"
+  }
+}

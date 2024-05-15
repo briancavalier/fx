@@ -1,56 +1,54 @@
-
 import { Async } from '../Async'
 import { is } from '../Effect'
 import { Fail } from '../Fail'
+import { Fork } from '../Fork'
 import { Fx } from '../Fx'
+import { Task } from '../Task'
 import { Handler, } from './Handler'
 import { HandlerContext } from './HandlerContext'
-
-import { Fork } from '../Fork'
-import { Task } from '../Task'
 import { Semaphore } from './Semaphore'
 import { DisposableSet } from './disposable'
 
-export const runFork = <const E, const A>(f: Fx<E, A>, s: Semaphore, name = '?'): Task<A, Extract<E, Fail<any>>> => {
-  const scope = new DisposableSet()
+export const runFork = <const E, const A>(f: Fx<E, A>, s: Semaphore, name?: string): Task<A, Extract<E, Fail<any>>> => {
+  const disposables = new DisposableSet()
 
-  const promise = acquire(s, scope, () => new Promise<A>(async (resolve, reject) => {
+  const promise = acquire(s, disposables, () => new Promise<A>(async (resolve, reject) => {
     const i = f[Symbol.iterator]()
-    scope.add(new IteratorDisposable(i))
+    disposables.add(new IteratorDisposable(i))
     let ir = i.next()
 
     while (!ir.done) {
       if (is(Async, ir.value)) {
         const p = runTask(ir.value.arg)
-        scope.add(p)
+        disposables.add(p)
         const a = await p.promise
-          .finally(() => scope.remove(p))
-          .catch(e => reject(new ForkError('Awaited Async effect failed', e, name)))
+          .finally(() => disposables.remove(p))
+          .catch(e => reject(new TaskError('Awaited Async effect failed', e, name)))
         // stop if the scope was disposed while we were waiting
-        if (scope.disposed) return
+        if (disposables.disposed) return
         ir = i.next(a)
       }
       else if (is(Fork, ir.value)) {
         const { fx, context, name } = ir.value.arg
         const p = runFork(withContext(context, fx), s, name)
-        scope.add(p)
+        disposables.add(p)
         p.promise
-          .finally(() => scope.remove(p))
-          .catch(e => reject(new ForkError('Forked subtask failed', e, name)))
+          .finally(() => disposables.remove(p))
+          .catch(e => reject(new TaskError('Forked subtask failed', e, name)))
         ir = i.next(p)
       }
-      else if (is(Fail, ir.value)) return reject(new ForkError('Forked task failed', ir.value.arg, name))
-      else return reject(new ForkError('Unexpected effect in forked task', ir.value, name))
+      else if (is(Fail, ir.value)) return reject(new TaskError('Unhandled failure in forked task', ir.value.arg, name))
+      else return reject(new TaskError('Unexpected effect in forked task', ir.value, name))
     }
     resolve(ir.value as A)
-  }).finally(() => scope[Symbol.dispose]()))
+  }).finally(() => disposables[Symbol.dispose]()))
 
-  return new Task(promise, scope)
+  return new Task(promise, disposables)
 }
 
-class ForkError extends Error {
-  constructor(message: string, cause: unknown, public readonly task: string) {
-    super(`[${task}] ${message}`, { cause })
+class TaskError extends Error {
+  constructor(message: string, cause: unknown, public readonly task?: string) {
+    super(task ? `[${task}] ${message}` : message, { cause })
   }
 }
 

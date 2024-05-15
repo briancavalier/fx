@@ -26,10 +26,10 @@ export const console = handle(Log, ({ level, msg, data, context }) => fx(functio
     const t = yield* now
     const c = globalThis.console
     switch (level) {
-      case Level.debug: return c.debug(new Date(t).toISOString(), 'DEBUG', msg, { ...data, ...context })
-      case Level.warn: return c.warn(new Date(t).toISOString(), 'WARN ', msg, { ...data, ...context })
-      case Level.error: return c.error(new Date(t).toISOString(), 'ERROR', msg, { ...data, ...context })
-      default: return c.info(new Date(t).toISOString(), 'INFO ', msg, { ...data, ...context })
+      case Level.debug: return c.debug(new Date(t).toISOString(), 'DEBUG', msg, { ...context, ...data })
+      case Level.warn: return c.warn(new Date(t).toISOString(), 'WARN ', msg, { ...context, ...data })
+      case Level.error: return c.error(new Date(t).toISOString(), 'ERROR', msg, { ...context, ...data })
+      default: return c.info(new Date(t).toISOString(), 'INFO ', msg, { ...context, ...data })
     }
   }))
 
@@ -51,5 +51,5 @@ export const context = (context: Record<string, unknown>) =>
 
 export const debug = (msg: string, data?: Record<string, unknown>) => log({ level: Level.debug, msg, data })
 export const info = (msg: string, data?: Record<string, unknown>) => log({ level: Level.info, msg, data })
-export const warn = (msg: string, data?: Record<string, unknown>) => log({ level: Level.error, msg, data })
-export const error = (msg: string, data?: Record<string, unknown>) => log({ level: Level.warn, msg, data })
+export const warn = (msg: string, data?: Record<string, unknown>) => log({ level: Level.warn, msg, data })
+export const error = (msg: string, data?: Record<string, unknown>) => log({ level: Level.error, msg, data })

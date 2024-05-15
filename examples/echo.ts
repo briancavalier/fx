@@ -32,17 +32,17 @@ const handleRead = <E, A>(f: Fx<E, A>) => bracket(
 main.pipe(handleRead, handlePrint, run)
   .promise.then(console.log)
 
-// const handlePrintPure = <E, A>(f: Fx<E, A>) => fx(function* () {
+// const handlePrintPure = <E, A>(f: Fx<E, A>) => {
 //   const printed = [] as string[]
-//   return yield* f.pipe(
-//     handle(Print, s => ok(resume(void printed.push(s)))),
+//   return f.pipe(
+//     handle(Print, s => ok(void printed.push(s))),
 //     map(_ => printed)
 //   )
-// })
+// }
 
 // const handleReadPure = ([...inputs]: readonly string[]) =>
-//   handle(Read, _ => ok(resume(inputs.shift()!)))
+//   handle(Read, _ => ok(inputs.shift()!))
 
 // // Run with pure Read and Print effects that only collect input and output
-// main.pipe(handlePrintPure, handleReadPure(['a', 'b', 'c']), Run.async)
+// main.pipe(handlePrintPure, handleReadPure(['a', 'b', 'c']), run)
 //   .promise.then(console.log)

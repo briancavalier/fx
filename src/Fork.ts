@@ -38,11 +38,11 @@ export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs
   return T.race(ps)
 }) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | Fork, T.Task<ResultOf<Fxs[number]>, ErrorsOf<EffectsOf<Fxs[number]>>>>
 
-export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>) => fx(function* () {
+export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>) => {
   const s = new Semaphore(maxConcurrency)
-  return yield* f.pipe(
+  return f.pipe(
     handle(Fork, ({ fx, context, name }) => ok(runFork(withContext(context, fx), s, name)))
-  )
-}) as Fx<Exclude<E, Fork | Async | Fail<any>>, Task<A, Extract<E, Fail<any>>>>
+  ) as Fx<Exclude<E, Fork | Async | Fail<any>>, Task<A, Extract<E, Fail<any>>>>
+}
 
 export const unbounded = bounded(Infinity)

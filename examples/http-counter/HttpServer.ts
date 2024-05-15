@@ -1,6 +1,6 @@
 import { IncomingMessage, Server, ServerResponse, createServer } from 'http'
 
-import { Async, Effect, Env, Fork, Fx, bracket, fx, handle, ok } from '../../src'
+import { Async, Effect, Env, Fork, Fx, Log, bracket, fx, handle, ok } from '../../src'
 
 //----------------------------------------------------------------------
 // Http Server example
@@ -16,10 +16,13 @@ export const nextRequest = new NextRequest()
 
 export type Connection = Readonly<{ request: IncomingMessage; response: ServerResponse }>
 
+export type Request = Readonly<{ method: string; url: string }>
+export type Response = Readonly<{ status: number; headers: Record<string, string>; body: string }>
+
 // #endregion
 // ----------------------------------------------------------------------
 // #region Node Http Server handler
-// Runs a node server as a handler, with initially/finally to manage
+// Runs a node server as a handler, with bracket to manage
 // the server lifecycle
 
 export const serveNode = <E, A>(f: Fx<E, A>) => bracket(
@@ -41,12 +44,16 @@ export const serveNode = <E, A>(f: Fx<E, A>) => bracket(
   )
 )
 
-export const runServer = <E, A>(
-  handleRequest: (c: Connection) => Fx<E, A>
+export const runServer = <E>(
+  handleRequest: (c: Request) => Fx<E, Response>
 ) => serveNode(fx(function* () {
   while(true) {
-    const next = yield* nextRequest
-    yield* Fork.fork(handleRequest(next))
+    const { request, response, } = yield* nextRequest
+    yield* Fork.fork(fx(function* () {
+      const r = yield* handleRequest({ method: 'GET', url: '', ...request })
+      yield* Log.info('Handled request', { method: request.method, url: request.url, status: r.status })
+      response.writeHead(r.status, r.headers).end(r.body)
+    }))
   }
 }))
 

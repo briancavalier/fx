@@ -13,7 +13,7 @@
   ],
   "scripts": {
     "build": "tsc --build",
-    "lint": "eslint src/**/*.ts --fix",
+    "lint": "eslint",
     "test": "node --import tsx --test",
     "test:watch": "node --import tsx --test --watch ./src/*.test.ts",
     "typecheck": "tsc --noEmit"

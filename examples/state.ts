@@ -65,4 +65,4 @@ const main = fx(function* () {
   }
 })
 
-const r = run(main).promise.then(x => console.log(inspect(x, false, Infinity)))
+const r = main.pipe(run).promise.then(x => console.log(inspect(x, false, Infinity)))

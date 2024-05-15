@@ -16,7 +16,7 @@ export const catchOnly = <const F>(match: (x: unknown) => x is F) =>
 export const catchAll = <const E, const A>(f: Fx<E, A>) =>
   f.pipe(
     control(Fail, (_, e) => ok(e))
-  ) as Fx<Exclude<E, Fail<any>>, A | UnwrapFail<Extract<E, Fail<E>>>>
+  ) as Fx<Exclude<E, Fail<any>>, A | UnwrapFail<Extract<E, Fail<any>>>>
 
 export const catchFail = <const E, const A>(f: Fx<E, A>) =>
   f.pipe(

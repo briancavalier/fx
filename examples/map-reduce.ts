@@ -29,6 +29,6 @@ const inputs = Array.from({ length: 1000 }, (_, i) => i)
 
 // Run concurrent map-reduce
 // This should take a little over 1 second, not inputs.length seconds
-run(
-  mapReduce(inputs, i => delay(1000, i+1), (a, b) => ok(a + b), 0)
+mapReduce(inputs, i => delay(1000, i+1), (a, b) => ok(a + b), 0).pipe(
+  run
 ).promise.then(console.log)

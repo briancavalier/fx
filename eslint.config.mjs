@@ -16,6 +16,7 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': 'off',
       'no-async-promise-executor': 'off',
       'prefer-rest-params': 'off',
+      "require-yield": "off",
     },
     ignores: ['./experiments/']
   },

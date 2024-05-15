@@ -1,7 +1,7 @@
 import { Async } from '../Async'
 import { is } from '../Effect'
 import { Fail } from '../Fail'
-import { Fork } from '../Fork'
+import { Fork, ForkContext } from '../Fork'
 import { Fx } from '../Fx'
 import { Task } from '../Task'
 import { Handler, } from './Handler'
@@ -12,7 +12,14 @@ import { DisposableSet } from './disposable'
 export const runFork = <const E, const A>(f: Fx<E, A>, s: Semaphore, name?: string): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new DisposableSet()
 
-  const promise = acquire(s, disposables, () => new Promise<A>(async (resolve, reject) => {
+  return new Task(
+    runForkInternal(f, s, disposables, name).finally(() => disposables[Symbol.dispose]()),
+    disposables
+  )
+}
+
+const runForkInternal = <const E, const A>(f: Fx<E, A>, s: Semaphore, disposables: DisposableSet, name?: string): Promise<A> =>
+  new Promise<A>(async (resolve, reject) => {
     const i = f[Symbol.iterator]()
     disposables.add(new IteratorDisposable(i))
     let ir = i.next()
@@ -29,19 +36,25 @@ export const runFork = <const E, const A>(f: Fx<E, A>, s: Semaphore, name?: stri
         ir = i.next(a)
       }
       else if (is(Fork, ir.value)) {
-        const { fx, context, name } = ir.value.arg
-        const p = runFork(withContext(context, fx), s, name)
+        const p = acquireAndRunFork(ir.value.arg, s)
         disposables.add(p)
         p.promise
           .finally(() => disposables.remove(p))
-          .catch(e => reject(new TaskError('Forked subtask failed', e, name)))
+          .catch(reject) // subtask errors should already be wrapped in TaskError
         ir = i.next(p)
       }
-      else if (is(Fail, ir.value)) return reject(new TaskError('Unhandled failure in forked task', ir.value.arg, name))
+      else if (is(Fail, ir.value)) return reject(ir.value.arg instanceof TaskError ? ir.value.arg : new TaskError('Unhandled failure in forked task', ir.value.arg, name))
       else return reject(new TaskError('Unexpected effect in forked task', ir.value, name))
     }
     resolve(ir.value as A)
-  }).finally(() => disposables[Symbol.dispose]()))
+  })
+
+const acquireAndRunFork = (f: ForkContext, s: Semaphore): Task<unknown, unknown> => {
+  const disposables = new DisposableSet()
+
+  const promise = acquire(s, disposables,
+    () => runForkInternal(withContext(f.context, f.fx), s, disposables, f.name)
+      .finally(() => disposables[Symbol.dispose]()))
 
   return new Task(promise, disposables)
 }
@@ -55,23 +68,23 @@ class TaskError extends Error {
 const acquire = <A>(s: Semaphore, scope: DisposableSet, f: () => Promise<A>) => {
   const a = s.acquire()
   scope.add(a)
-  return a.promise.then(f).finally(() => {
+
+  return a.promise.then(() => {
     scope.remove(a)
-    s.release()
-  })
+    return f()
+  }).finally(() => s.release())
 }
 
 const runTask = <A>(run: (s: AbortSignal) => Promise<A>) => {
-  const s = new AbortController()
-  return new Task<A, unknown>(run(s.signal), new AbortControllerDisposable(s))
+  const s = new DisposableAbortController()
+  return new Task<A, unknown>(run(s.signal), s)
 }
 
-export const withContext = (c: readonly HandlerContext[], f: Fx<unknown, unknown>) =>
+const withContext = (c: readonly HandlerContext[], f: Fx<unknown, unknown>) =>
   c.reduce((f, handler) => new Handler(f, handler.handlers, new Map()), f)
 
-class AbortControllerDisposable {
-  constructor(private readonly controller: AbortController) { }
-  [Symbol.dispose]() { this.controller.abort() }
+class DisposableAbortController extends AbortController {
+  [Symbol.dispose]() { this.abort() }
 }
 
 class IteratorDisposable {

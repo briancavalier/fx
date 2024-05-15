@@ -1,7 +1,7 @@
-import { Async } from "./Async"
+import { Async } from './Async'
 import { EffectType } from './Effect'
 import { provideAll } from "./Env"
-import { Fork } from "./Fork"
+import { Fork } from './Fork'
 import { Task } from './Task'
 import { Arg, Handler, Return, empty, isHandler } from './internal/Handler'
 import { Semaphore } from "./internal/Semaphore"

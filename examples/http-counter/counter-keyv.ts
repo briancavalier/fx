@@ -2,8 +2,8 @@ import Keyv from 'keyv'
 import { Async, Fx, bracket, fx, handle, sync } from '../../src'
 import { Next } from './counter'
 
-// Not transactional, but just to show how to implement
-// another handler for the Counter/Increment effect
+// Not transactional or parameterized, but just to show how to implement
+// another handler for the Counter effect
 
 export const keyvCounter = <E, A>(f: Fx<E, A>) => bracket(
   sync(() => new Keyv<number>('sqlite://http-counter.sqlite')),

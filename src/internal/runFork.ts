@@ -17,10 +17,10 @@ type RunForkOptions = {
 export const runFork = <const E, const A>(f: Fx<E, A>, o: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new DisposableSet()
 
-  return new Task(
-    runForkInternal(f, new Semaphore(o.maxConcurrency ?? Infinity), disposables, o.name).finally(() => disposables[Symbol.dispose]()),
-    disposables
-  )
+  const promise = runForkInternal(f, new Semaphore(o.maxConcurrency ?? Infinity), disposables, o.name)
+      .finally(() => disposables[Symbol.dispose]())
+
+  return new Task(promise, disposables)
 }
 
 export const acquireAndRunFork = (f: ForkContext, s: Semaphore): Task<unknown, unknown> => {

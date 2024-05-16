@@ -1,7 +1,7 @@
 import { Fx, handle, ok } from '../../src'
 import { Next } from './counter'
 
-// A simple in-memory counter backed by a Map
+// A simple in-memory Counter backed by a Map
 
 export const mapCounter = <E, A>(f: Fx<E, A>) => {
   const store = new Map<string, number>()

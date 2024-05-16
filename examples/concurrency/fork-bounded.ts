@@ -1,7 +1,12 @@
 import { setTimeout } from 'node:timers/promises'
 import { Async, Fork, Task, fx, runAsync } from '../../src'
 
+// Number of tasks to fork
 const tasks = 4
+
+// Max number of tasks to allow to run concurrently
+// Setting this to n >= tasks will run all tasks concurrently
+// Setting this to n < tasks will allow at most n tasks in flight at a time
 const concurrency = 2
 
 let count = 0

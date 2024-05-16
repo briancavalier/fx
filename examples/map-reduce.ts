@@ -1,5 +1,5 @@
 import { setTimeout } from 'node:timers/promises'
-import { Async, Fork, Fx, Task, fx, ok, run } from '../src'
+import { Async, Fork, Fx, Task, fx, ok, runAsync } from '../src'
 
 // Concurrent map-reduce
 // Splits the input in half and runs mapReduce on each half concurrently
@@ -25,10 +25,10 @@ const delay = <const A>(ms: number, a: A) => Async.run(
 )
 
 // Generate inputs
-const inputs = Array.from({ length: 1000 }, (_, i) => i)
+const inputs = Array.from({ length: 4 }, (_, i) => i)
 
 // Run concurrent map-reduce
 // This should take a little over 1 second, not inputs.length seconds
 mapReduce(inputs, i => delay(1000, i+1), (a, b) => ok(a + b), 0).pipe(
-  run
+  Fork.unbounded, runAsync
 ).promise.then(console.log)

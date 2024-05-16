@@ -1,4 +1,4 @@
-import { Env, Log, Time, fx, run } from '../../src'
+import { Env, Fork, Log, Time, fx, runAsync } from '../../src'
 
 import { Request, runServer } from './HttpServer'
 import { increment } from './counter'
@@ -30,7 +30,8 @@ runServer(myHandler).pipe(
   Time.builtinDate,
   Env.provide({ port: +port }),
   mapCounter,
-  run
+  Fork.unbounded,
+  runAsync
 )
 
 //#endregion

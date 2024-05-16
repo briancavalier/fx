@@ -1,7 +1,7 @@
 
 import { createInterface } from 'node:readline/promises'
 
-import { Async, Effect, Fx, bracket, fx, handle, ok, run, sync } from '../src'
+import { Async, Effect, Fx, bracket, fx, handle, ok, runAsync, sync } from '../src'
 
 class Print extends Effect('Print')<string, void> { }
 
@@ -29,7 +29,7 @@ const handleRead = <E, A>(f: Fx<E, A>) => bracket(
   ))
 
 // Run with "real" Read and Print effects
-main.pipe(handleRead, handlePrint, run)
+main.pipe(handleRead, handlePrint, runAsync)
   .promise.then(console.log)
 
 // const handlePrintPure = <E, A>(f: Fx<E, A>) => {

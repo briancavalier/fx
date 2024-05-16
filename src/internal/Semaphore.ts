@@ -1,6 +1,13 @@
+type Waiter = () => void
+
 export class Semaphore {
-  private waiters: (() => void)[] = [];
-  constructor(private available: number) { }
+  private waiters: Waiter[] = [];
+  private available: number;
+
+  constructor(available: number) {
+    if (available <= 0) throw new RangeError(`Semaphore must have a positive number of available permits, got ${available}`)
+    this.available = Math.floor(available)
+  }
 
   acquire(): Acquiring {
     if (this.available > 0) {
@@ -27,15 +34,15 @@ const acquired = (): Acquiring => ({
   [Symbol.dispose]() { }
 })
 
-const acquiring = (waiters: (() => void)[]): Acquiring => {
-  let resolve: () => void
+const acquiring = (waiters: Waiter[]): Acquiring => {
+  let waiter: Waiter
   return {
     promise: new Promise<void>(r => {
-      resolve = r
+      waiter = r
       waiters.push(r)
     }),
     [Symbol.dispose]: () => {
-      const i = waiters.indexOf(resolve!)
+      const i = waiters.indexOf(waiter!)
       if (i >= 0) waiters.splice(i, 1)
     }
   }

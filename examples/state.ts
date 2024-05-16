@@ -1,7 +1,7 @@
 import { setTimeout } from 'timers/promises'
 import { inspect } from 'util'
 
-import { Async, Effect, Fork, Fx, Task, fx, handle, map, ok, run } from '../src'
+import { Async, Effect, Fork, Fx, Task, fx, handle, map, ok, runAsync } from '../src'
 
 // The usual state monad, as an effect
 class Get<A> extends Effect('State/Set')<void, A> { }
@@ -65,4 +65,4 @@ const main = fx(function* () {
   }
 })
 
-const r = main.pipe(run).promise.then(x => console.log(inspect(x, false, Infinity)))
+const r = main.pipe(Fork.unbounded, runAsync).promise.then(x => console.log(inspect(x, false, Infinity)))

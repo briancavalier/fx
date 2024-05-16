@@ -1,11 +1,11 @@
 import { Async } from './Async'
 import { Effect } from './Effect'
 import { Fail } from './Fail'
-import { Fx, fx } from './Fx'
+import { Fx, fx, handle, ok } from './Fx'
 import * as Task from './Task'
 import { HandlerContext } from './internal/HandlerContext'
 import { Semaphore } from './internal/Semaphore'
-import { runFork } from './internal/runFork'
+import { acquireAndRunFork } from './internal/runFork'
 
 export class Fork extends Effect('fx/Fork')<ForkContext, Task.Task<unknown, unknown>> { }
 
@@ -36,8 +36,11 @@ export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs
   return Task.race(ps)
 }) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | Fork, Task.Task<ResultOf<Fxs[number]>, ErrorsOf<EffectsOf<Fxs[number]>>>>
 
-export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>) => fx(function* () {
-  return runFork(f, new Semaphore(maxConcurrency))
-}) as Fx<Exclude<E, Fork | Async | Fail<any>>, Task.Task<A, Extract<E, Fail<any>>>>
+export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>) => {
+  const s = new Semaphore(maxConcurrency)
+  return f.pipe(
+    handle(Fork, f => ok(acquireAndRunFork(f, s)))
+  ) as Fx<Exclude<E, Fork>, A>
+}
 
 export const unbounded = bounded(Infinity)

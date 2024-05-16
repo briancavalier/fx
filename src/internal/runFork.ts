@@ -9,13 +9,28 @@ import { HandlerContext } from './HandlerContext'
 import { Semaphore } from './Semaphore'
 import { DisposableSet } from './disposable'
 
-export const runFork = <const E, const A>(f: Fx<E, A>, s: Semaphore, name?: string): Task<A, Extract<E, Fail<any>>> => {
+type RunForkOptions = {
+  readonly name?: string
+  readonly maxConcurrency?: number
+}
+
+export const runFork = <const E, const A>(f: Fx<E, A>, o: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new DisposableSet()
 
   return new Task(
-    runForkInternal(f, s, disposables, name).finally(() => disposables[Symbol.dispose]()),
+    runForkInternal(f, new Semaphore(o.maxConcurrency ?? Infinity), disposables, o.name).finally(() => disposables[Symbol.dispose]()),
     disposables
   )
+}
+
+export const acquireAndRunFork = (f: ForkContext, s: Semaphore): Task<unknown, unknown> => {
+  const disposables = new DisposableSet()
+
+  const promise = acquire(s, disposables,
+    () => runForkInternal(withContext(f.context, f.fx), s, disposables, f.name)
+      .finally(() => disposables[Symbol.dispose]()))
+
+  return new Task(promise, disposables)
 }
 
 const runForkInternal = <const E, const A>(f: Fx<E, A>, s: Semaphore, disposables: DisposableSet, name?: string): Promise<A> =>
@@ -48,16 +63,6 @@ const runForkInternal = <const E, const A>(f: Fx<E, A>, s: Semaphore, disposable
     }
     resolve(ir.value as A)
   })
-
-const acquireAndRunFork = (f: ForkContext, s: Semaphore): Task<unknown, unknown> => {
-  const disposables = new DisposableSet()
-
-  const promise = acquire(s, disposables,
-    () => runForkInternal(withContext(f.context, f.fx), s, disposables, f.name)
-      .finally(() => disposables[Symbol.dispose]()))
-
-  return new Task(promise, disposables)
-}
 
 class TaskError extends Error {
   constructor(message: string, cause: unknown, public readonly task?: string) {

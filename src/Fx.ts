@@ -1,10 +1,8 @@
 import { Async } from './Async'
 import { EffectType } from './Effect'
 import { provideAll } from "./Env"
-import { Fork } from './Fork'
 import { Task } from './Task'
 import { Arg, Handler, Return, empty, isHandler } from './internal/Handler'
-import { Semaphore } from "./internal/Semaphore"
 import * as generator from './internal/generator'
 import { Pipeable } from './internal/pipe'
 import { runFork } from './internal/runFork'
@@ -24,8 +22,8 @@ export const unit = ok(undefined)
 export const map = <const A, const B>(f: (a: A) => B) =>
   <const E>(x: Fx<E, A>): Fx<E, B> => new generator.Map<E, A, B>(f, x as any) as Fx<E, B>
 
-export const run = <const R>(f: Fx<Fork | Async, R>): Task<R, never> =>
-  runFork(f.pipe(provideAll({})), new Semaphore(Infinity), 'Fx:run')
+export const runAsync = <const R>(f: Fx<Async, R>): Task<R, never> =>
+  runFork(f.pipe(provideAll({})), { name: 'Fx:runAsync' })
 
 export const runSync = <const R>(f: Fx<never, R>): R =>
   getResult(f.pipe(provideAll({})))

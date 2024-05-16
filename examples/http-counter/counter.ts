@@ -1,5 +1,5 @@
 import { Effect } from '../../src'
 
-export class Increment extends Effect('Counter/Increment')<string, number> { }
+export class Next extends Effect('Counter/Next')<string, number> { }
 
-export const increment = (key: string) => new Increment(key)
+export const next = (key: string) => new Next(key)

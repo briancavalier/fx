@@ -1,0 +1,17 @@
+{
+  "name": "fx-http-counter-example",
+  "private": true,
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "npx tsx ./index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "description": "",
+  "dependencies": {
+    "@keyv/sqlite": "^3.6.7",
+    "keyv": "^4.5.4"
+  }
+}

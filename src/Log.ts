@@ -42,12 +42,12 @@ export const collect = <const E, const A>(f: Fx<E, A>) => fx(function* () {
 })
 
 export const minLevel = (min: Level) =>
-  handle(Log, message => fx(function* () {
-    return message.level >= min ? yield* log(message) : undefined
-  }))
+  handle(Log, message =>
+    message.level >= min ? log(message) : ok(undefined))
 
 export const context = (context: Record<string, unknown>) =>
-  handle(Log, message => log({ ...message, context: { ...message.context, ...context } }))
+  handle(Log, message =>
+    log({ ...message, context: { ...message.context, ...context } }))
 
 export const debug = (msg: string, data?: Record<string, unknown>) => log({ level: Level.debug, msg, data })
 export const info = (msg: string, data?: Record<string, unknown>) => log({ level: Level.info, msg, data })

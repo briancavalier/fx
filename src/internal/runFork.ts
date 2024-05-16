@@ -41,22 +41,22 @@ const runForkInternal = <const E, const A>(f: Fx<E, A>, s: Semaphore, disposable
 
     while (!ir.done) {
       if (is(Async, ir.value)) {
-        const p = runTask(ir.value.arg)
-        disposables.add(p)
-        const a = await p.promise
-          .finally(() => disposables.remove(p))
+        const t = runTask(ir.value.arg)
+        disposables.add(t)
+        const a = await t.promise
+          .finally(() => disposables.remove(t))
           .catch(e => reject(new TaskError('Awaited Async effect failed', e, name)))
         // stop if the scope was disposed while we were waiting
         if (disposables.disposed) return
         ir = i.next(a)
       }
       else if (is(Fork, ir.value)) {
-        const p = acquireAndRunFork(ir.value.arg, s)
-        disposables.add(p)
-        p.promise
-          .finally(() => disposables.remove(p))
+        const t = acquireAndRunFork(ir.value.arg, s)
+        disposables.add(t)
+        t.promise
+          .finally(() => disposables.remove(t))
           .catch(reject) // subtask errors should already be wrapped in TaskError
-        ir = i.next(p)
+        ir = i.next(t)
       }
       else if (is(Fail, ir.value)) return reject(ir.value.arg instanceof TaskError ? ir.value.arg : new TaskError('Unhandled failure in forked task', ir.value.arg, name))
       else return reject(new TaskError('Unexpected effect in forked task', ir.value, name))

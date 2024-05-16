@@ -8,7 +8,7 @@ export class Task<A, E> {
 
   public readonly E!: E
 
-  constructor(public readonly promise: Promise<A>, public readonly dispose: Disposable) {}
+  constructor(public readonly promise: Promise<A>, private readonly dispose: Disposable) {}
 
   [Symbol.dispose]() {
     if(this.disposed) return
@@ -48,5 +48,5 @@ export const race = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tas
 
 export class DisposeAll {
   constructor(private readonly tasks: Iterable<Task<unknown, unknown>>) { }
-  [Symbol.dispose]() { for (const t of this.tasks) t.dispose[Symbol.dispose]() }
+  [Symbol.dispose]() { for (const t of this.tasks) t[Symbol.dispose]() }
 }

@@ -15,7 +15,7 @@
     "build": "tsc --build",
     "lint": "eslint",
     "test": "find src -name '*.test.ts' | xargs node --import tsx --test",
-    "test:watch": "node --import tsx --test --watch ./src/*.test.ts",
+    "test:watch": "node --import tsx --test --watch './src/**/*.test.ts'",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],

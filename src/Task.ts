@@ -5,7 +5,6 @@ import { fx, Fx, ok } from './Fx'
 
 export class Task<A, E> {
   private disposed = false
-
   public readonly E!: E
 
   constructor(public readonly promise: Promise<A>, private readonly dispose: Disposable) {}
@@ -17,9 +16,9 @@ export class Task<A, E> {
   }
 }
 
-export const wait = <const A, const E>(p: Task<A, E>) => fx(function* () {
+export const wait = <const A, const E>(t: Task<A, E>) => fx(function* () {
   const r = yield* run<Fx<E, A>>(
-    s => new Promise(resolve => p.promise.then(
+    s => new Promise(resolve => t.promise.then(
       a => s.aborted || resolve(ok(a)),
       e => s.aborted || resolve(fail(e) as any))
     ))

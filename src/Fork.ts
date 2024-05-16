@@ -40,7 +40,7 @@ export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A
   const s = new Semaphore(maxConcurrency)
   return f.pipe(
     handle(Fork, f => ok(acquireAndRunFork(f, s)))
-  ) as Fx<Exclude<E, Fork>, A>
+  )
 }
 
 export const unbounded = bounded(Infinity)

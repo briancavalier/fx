@@ -1,5 +1,5 @@
 import { Effect } from './Effect'
-import { Fx, fx, handle, map, ok } from './Fx'
+import { Fx, fx, handle, handleIso, map, ok } from './Fx'
 
 import { now } from './Time'
 
@@ -42,11 +42,11 @@ export const collect = <const E, const A>(f: Fx<E, A>) => fx(function* () {
 })
 
 export const minLevel = (min: Level) =>
-  handle(Log, message =>
+  handleIso(Log, message =>
     message.level >= min ? log(message) : ok(undefined))
 
 export const context = (context: Record<string, unknown>) =>
-  handle(Log, message =>
+  handleIso(Log, message =>
     log({ ...message, context: { ...message.context, ...context } }))
 
 export const debug = (msg: string, data?: Record<string, unknown>) => log({ level: Level.debug, msg, data })

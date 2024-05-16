@@ -3,7 +3,7 @@ import { Fork } from '../Fork'
 import { Fx } from '../Fx'
 import { Pipeable, pipe } from './pipe'
 
-export type Return<E extends EffectType> = InstanceType<E>['R']
+export type Answer<E extends EffectType> = InstanceType<E>['R']
 export type Arg<E extends EffectType> = InstanceType<E>['arg']
 
 const HandlerTypeId = Symbol('fx/Handler')

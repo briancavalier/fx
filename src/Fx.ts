@@ -2,7 +2,7 @@ import { Async } from './Async'
 import { EffectType } from './Effect'
 import { provideAll } from "./Env"
 import { Task } from './Task'
-import { Arg, Handler, Return, empty, isHandler } from './internal/Handler'
+import { Answer, Arg, Handler, empty, isHandler } from './internal/Handler'
 import * as generator from './internal/generator'
 import { Pipeable } from './internal/pipe'
 import { runFork } from './internal/runFork'
@@ -26,7 +26,7 @@ export const runAsync = <const R>(f: Fx<Async, R>): Task<R, never> =>
   runFork(f.pipe(provideAll({})), { name: 'Fx:runAsync' })
 
 export const runSync = <const R>(f: Fx<never, R>): R =>
-  getResult(f.pipe(provideAll({})))
+  f.pipe(provideAll({}), getResult)
 
 const getResult = <const R>(f: Fx<never, R>): R => f[Symbol.iterator]().next().value
 
@@ -39,10 +39,20 @@ export const bracket = <const IE, const FE, const E, const R, const A>(init: Fx<
   }
 })
 
-export const handle = <T extends EffectType, OnEffects>(e: T, f: (e: Arg<T>) => Fx<OnEffects, Return<T>>) => <const E, const A>(fx: Fx<E, A>): Handler<Exclude<E, InstanceType<T>> | OnEffects, A> => (isHandler(fx)
-  ? new Handler(fx, new Map(fx.handlers).set(e._fxEffectId, f), fx.controls)
-  : new Handler(fx, new Map().set(e._fxEffectId, f), empty)) as Handler<Exclude<E, InstanceType<T>> | OnEffects, A>
+export const handle = <T extends EffectType, HandlerEffects>(e: T, f: (e: Arg<T>) => Fx<HandlerEffects, Answer<T>>) =>
+  <const E, const A>(fx: Fx<E, A>): Handler<Exclude<E, InstanceType<T>> | HandlerEffects, A> =>
+  (isHandler(fx)
+    ? new Handler(fx, new Map(fx.handlers).set(e._fxEffectId, f), fx.controls)
+    : new Handler(fx, new Map().set(e._fxEffectId, f), empty)) as Handler<Exclude<E, InstanceType<T>> | HandlerEffects, A>
 
-export const control = <T extends EffectType, OnEffects, R = never>(e: T, f: <A>(resume: (a: Return<T>) => A, e: Arg<T>) => Fx<OnEffects, R>) => <const E, const A>(fx: Fx<E, A>): Handler<Exclude<E, InstanceType<T>> | OnEffects, A | R> => (isHandler(fx)
-  ? new Handler(fx, fx.handlers, new Map(fx.controls).set(e._fxEffectId, f as any))
-  : new Handler(fx, empty, new Map().set(e._fxEffectId, f))) as Handler<Exclude<E, InstanceType<T>> | OnEffects, A | R>
+export const handleIso = <T extends EffectType>(e: T, f: (e: Arg<T>) => Fx<InstanceType<T>, Answer<T>>) =>
+  <const E, const A>(fx: Fx<E, A>): Handler<E, A> =>
+  (isHandler(fx)
+    ? new Handler(fx, new Map(fx.handlers).set(e._fxEffectId, f), fx.controls)
+    : new Handler(fx, new Map().set(e._fxEffectId, f), empty)) as Handler<E, A>
+
+export const control = <T extends EffectType, HandlerEffects, R = never>(e: T, f: <A>(resume: (a: Answer<T>) => A, e: Arg<T>) => Fx<HandlerEffects, R>) =>
+  <const E, const A>(fx: Fx<E, A>): Handler<Exclude<E, InstanceType<T>> | HandlerEffects, A> =>
+  (isHandler(fx)
+    ? new Handler(fx, fx.handlers, new Map(fx.controls).set(e._fxEffectId, f as any))
+    : new Handler(fx, empty, new Map().set(e._fxEffectId, f))) as Handler<Exclude<E, InstanceType<T>> | HandlerEffects, A>

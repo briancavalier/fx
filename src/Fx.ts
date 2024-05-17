@@ -11,7 +11,16 @@ export interface Fx<E, A> extends Pipeable {
   [Symbol.iterator](): Iterator<E, A, unknown>
 }
 
-export const fx = <const E, const A>(f: () => Generator<E, A>): Fx<E, A> => new generator.Gen(f)
+export const fx: {
+  <const E, const A>(f: () => Generator<E, A>): Fx<E, A>
+  <const T, const E, const A>(self: T, f: (this: T) => Generator<E, A>): Fx<E, A>
+} = function () {
+  if (arguments.length === 1) {
+    return new generator.Gen(arguments[0])
+  } else {
+    return new generator.Gen(arguments[1].bind(arguments[0]))
+  }
+}
 
 export const ok = <const A>(a: A): Fx<never, A> => new generator.Ok(a)
 

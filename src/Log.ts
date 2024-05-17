@@ -1,7 +1,6 @@
 import { Effect } from './Effect'
 import { Fx, fx, handle, handleIso, map, ok } from './Fx'
 
-import { now } from './Time'
 
 export class Log extends Effect('fx/Log')<LogMessage, void> {}
 
@@ -23,13 +22,12 @@ export interface LogMessage {
 }
 
 export const console = handle(Log, ({ level, msg, data, context }) => fx(function* () {
-    const t = yield* now
     const c = globalThis.console
     switch (level) {
-      case Level.debug: return c.debug(new Date(t).toISOString(), 'DEBUG', msg, { ...context, ...data })
-      case Level.warn: return c.warn(new Date(t).toISOString(), 'WARN ', msg, { ...context, ...data })
-      case Level.error: return c.error(new Date(t).toISOString(), 'ERROR', msg, { ...context, ...data })
-      default: return c.info(new Date(t).toISOString(), 'INFO ', msg, { ...context, ...data })
+      case Level.debug: return c.debug(msg, { ...context, ...data })
+      case Level.warn: return c.warn(msg, { ...context, ...data })
+      case Level.error: return c.error(msg, { ...context, ...data })
+      default: return c.info(msg, { ...context, ...data })
     }
   }))
 

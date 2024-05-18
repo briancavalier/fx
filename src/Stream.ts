@@ -44,7 +44,16 @@ class CurrentTask<E> {
   run<A>(fx: Fx.Fx<E, A>) {
     return Fx.fx(this, function* () {
       dispose(this)
-      this.task = yield* Fork.fork(fx)
+      
+      const task = this.task = yield* Fork.fork(Fx.fx(this, function* () { 
+        const x = yield* fx
+        
+        if (this.task === task) {
+          this.task = null
+        }
+
+        return x
+      }))
     })
   }
 

@@ -43,7 +43,7 @@ describe('Stream', () => {
 function collectAll<E, A>(fx: Fx.Fx<E, A>): Fx.Fx<Stream.ExcludeStream<E>, readonly Stream.Event<E>[]> {
   return Fx.fx(function* () {
     const events: Stream.Event<E>[] = []
-    yield* Stream.observe(fx, a => { 
+    yield* Stream.forEach(fx, a => { 
       events.push(a)
       return Fx.unit
     })

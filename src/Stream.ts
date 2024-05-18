@@ -45,13 +45,9 @@ class CurrentTask<E> {
     return Fx.fx(this, function* () {
       dispose(this)
       
-      const task = this.task = yield* Fork.fork(Fx.fx(this, function* () { 
+      this.task = yield* Fork.fork(Fx.fx(this, function* () { 
         const x = yield* fx
-        
-        if (this.task === task) {
-          this.task = null
-        }
-
+        this.task = null
         return x
       }))
     })

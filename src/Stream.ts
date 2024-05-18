@@ -20,10 +20,10 @@ export const map = <E, A, B>(fx: Fx.Fx<E, A>, f: (a: Event<E>) => B): Fx.Fx<Excl
   forEach(fx, a => event(f(a)))
 
 export const filter: {
-  <E, A, B extends Event<E>>(fx: Fx.Fx<E, A>, f: (a: Event<E>) => a is B): Fx.Fx<ExcludeStream<E> | Stream<B>, A>
-  <E, A>(fx: Fx.Fx<E, A>, f: (a: Event<E>) => boolean): Fx.Fx<ExcludeStream<E> | Stream<Event<E>>, A>
-} = <E, A>(fx: Fx.Fx<E, A>, f: (a: Event<E>) => boolean): Fx.Fx<ExcludeStream<E> | Stream<Event<E>>, A> => 
-   forEach(fx, a => f(a) ? event(a) : Fx.unit)
+  <E, A, B extends Event<E>>(fx: Fx.Fx<E, A>, refinement: (a: Event<E>) => a is B): Fx.Fx<ExcludeStream<E> | Stream<B>, A>
+  <E, A>(fx: Fx.Fx<E, A>, predicate: (a: Event<E>) => boolean): Fx.Fx<ExcludeStream<E> | Stream<Event<E>>, A>
+} = <E, A>(fx: Fx.Fx<E, A>, predicate: (a: Event<E>) => boolean): Fx.Fx<ExcludeStream<E> | Stream<Event<E>>, A> => 
+   forEach(fx, a => predicate(a) ? event(a) : Fx.unit)
 
 export const switchMap = <E, X, E2>(fx: Fx.Fx<E, X>, f: (a: Event<E>) => Fx.Fx<E2, unknown>): Fx.Fx<Fork.Fork | Async.Async | ExcludeStream<E> | E2, X> => 
   Fx.bracket(

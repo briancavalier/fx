@@ -4,6 +4,7 @@ import * as Task from "./Task";
 import * as Async from "./Async";
 import * as Fail from "./Fail";
 import * as Fork from "./Fork";
+import * as Queue from './Queue';
 
 export class Stream<A> extends Effect('Stream')<A, void> { }
 
@@ -37,6 +38,41 @@ export const switchMap = <E, X, E2>(fx: Fx.Fx<E, X>, f: (a: Event<E>) => Fx.Fx<E
       return x
     })
   )
+
+export const withEmitter = <A, E>(f: (emitter: Emitter<A>) => Fx.Fx<E, Disposable>): Fx.Fx<Async.Async | Fork.Fork | Stream<A> | E, void> =>
+  Fx.fx(function* () { 
+    const queue = yield* Queue.make<A>()
+    let disposable: Disposable | null = null
+
+    const fiber = yield* Fork.fork(Fx.fx(function* () { 
+      disposable = yield* f({
+        event(a) { 
+          Fx.runSync(queue.offer(a))
+        },
+        end() { 
+          Fx.runSync(queue.shutdown)
+        }
+      })
+
+      yield* Async.never
+    }))
+
+    while (true) { 
+      const next = yield* Queue.take(queue)
+      if (next.tag === 'QueueShutdown') break
+      yield* event(next.value)
+    }
+
+    if (disposable) {
+      dispose(disposable)
+    }
+    dispose(fiber)
+  })
+
+export interface Emitter<A> { 
+  event(a: A): void
+  end(): void
+}
 
 class CurrentTask<E> {
   private task: Task.Task<any, Extract<E, Fail.Fail<any>>> | null = null

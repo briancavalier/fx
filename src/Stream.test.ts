@@ -7,28 +7,28 @@ import * as Async from './Async'
 import { EventEmitter } from 'node:events'
 
 describe('Stream', () => {
-  it("allows emitting events and observing those events", async () => {
+  it('allows emitting events and observing those events', async () => {
     const producer = Fx.fx(function* () {
       for (let i = 0; i < 25; i++) { 
         yield* Stream.event(i)
       }
     }).pipe(
-      (_) => Stream.filter(_, a => a % 2 === 0),
-      (_) => Stream.map(_, a => a * 2)
+      _ => Stream.filter(_, a => a % 2 === 0),
+      _ => Stream.map(_, a => a * 2)
     )
     const test = collectAll(producer)
 
     assert.deepEqual(Fx.runSync(test), [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48])
   })
 
-  describe("switchMap", () => { 
-    it("allows chaining multiple streams, favoring the latest", async () => {
+  describe('switchMap', () => { 
+    it('allows chaining multiple streams, favoring the latest', async () => {
       const test = Fx.fx(function* () {
         for (let i = 0; i < 25; i++) { 
           yield* Stream.event(i)
         }
       }).pipe(
-        (_) => Stream.switchMap(_, a => Fx.fx(function* () {
+        _ => Stream.switchMap(_, a => Fx.fx(function* () {
           yield* Stream.event(String(a))
           yield* Stream.event(BigInt(a))
         })),
@@ -37,12 +37,12 @@ describe('Stream', () => {
       )
       const task = Fx.runAsync(test)
       
-      assert.deepEqual(await task.promise, ["24", 24n])
+      assert.deepEqual(await task.promise, ['24', 24n])
     })
   })
 
-  describe("withEmitter", () => { 
-    it("adapts a callback-based API", async () => {
+  describe('withEmitter', () => { 
+    it('adapts a callback-based API', async () => {
       const eventEmitter = new EventEmitter<{ event: [number] }>()
       const emit = (...values: number[]) => Fx.fx(function* () {
         // Give fiber time to start
@@ -53,7 +53,7 @@ describe('Stream', () => {
         // Give emits time to start their own fibers
         yield* Async.sleep(1)
       })
-      const producer = Stream.withEmitter<number, Fork.Fork>((emitter) => Fx.fx(function* () { 
+      const producer = Stream.withEmitter<number, Fork.Fork>(emitter => Fx.fx(function* () { 
         eventEmitter.on('event', emitter.event)
         return {
           [Symbol.dispose]() { 

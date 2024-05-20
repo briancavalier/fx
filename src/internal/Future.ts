@@ -1,8 +1,8 @@
-import * as Async from "../Async";
-import * as Fx from "../Fx";
+import * as Async from '../Async';
+import * as Fx from '../Fx';
 
 export interface Future<E, A> {
-  readonly state: "Resolving" | "Resolved";
+  readonly state: 'Resolving' | 'Resolved';
   readonly wait: Fx.Fx<Async.Async | E, A>;
   readonly complete: (fx: Fx.Fx<E, A>) => boolean;
 }
@@ -10,12 +10,12 @@ export interface Future<E, A> {
 type FutureState<E, A> = Resolving<E, A> | Resolved<E, A>;
 
 class Resolving<E, A> {
-  readonly tag = "Resolving";
+  readonly tag = 'Resolving';
   constructor(readonly observers: ((fx: Fx.Fx<E, A>) => void)[] = []) {}
 }
 
 class Resolved<E, A> {
-  readonly tag = "Resolved";
+  readonly tag = 'Resolved';
   constructor(readonly fx: Fx.Fx<E, A>) {}
 }
 
@@ -30,14 +30,14 @@ class FutureImpl<E, A> implements Future<E, A> {
 
   get wait() {
     return Fx.fx(this, function* () {
-      if (this._state.tag === "Resolving") {
+      if (this._state.tag === 'Resolving') {
         const observers = this._state.observers;
         return yield* yield* Async.run(
-          (signal) =>
-            new Promise<Fx.Fx<E, A>>((resolve) => {
+          signal =>
+            new Promise<Fx.Fx<E, A>>(resolve => {
               observers.push(resolve);
               signal.addEventListener(
-                "abort",
+                'abort',
                 () => observers.splice(observers.indexOf(resolve), 1),
                 { once: true }
               );
@@ -50,8 +50,8 @@ class FutureImpl<E, A> implements Future<E, A> {
   }
 
   complete(fx: Fx.Fx<E, A>) {
-    if (this._state.tag === "Resolving") {
-      this._state.observers.forEach((observer) => observer(fx));
+    if (this._state.tag === 'Resolving') {
+      this._state.observers.forEach(observer => observer(fx));
       this._state = new Resolved(fx);
       return true;
     } else {

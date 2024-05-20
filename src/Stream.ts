@@ -1,9 +1,9 @@
-import { Effect } from "./Effect";
-import * as Fx from "./Fx";
-import * as Task from "./Task";
-import * as Async from "./Async";
-import * as Fail from "./Fail";
-import * as Fork from "./Fork";
+import { Effect } from './Effect';
+import * as Fx from './Fx';
+import * as Task from './Task';
+import * as Async from './Async';
+import * as Fail from './Fail';
+import * as Fork from './Fork';
 import * as Queue from './internal/Queue';
 
 export class Stream<A> extends Effect('Stream')<A, void> { }
@@ -15,7 +15,7 @@ export type ExcludeStream<E> = Exclude<E, Stream<any>>
 export const event = <const A>(a: A): Fx.Fx<Stream<A>, void> => new Stream(a)
 
 export const forEach = <E, R, E2>(fx: Fx.Fx<E, R>, f: (a: Event<E>) => Fx.Fx<E2, void>): Fx.Fx<ExcludeStream<E> | E2, R> =>
-  fx.pipe(Fx.handle(Stream, (a) => f(a as Event<E>)))
+  fx.pipe(Fx.handle(Stream, a => f(a as Event<E>)))
 
 export const map = <E, A, B>(fx: Fx.Fx<E, A>, f: (a: Event<E>) => B): Fx.Fx<ExcludeStream<E> | Stream<B>, A> => 
   forEach(fx, a => event(f(a)))
@@ -29,8 +29,8 @@ export const filter: {
 export const switchMap = <E, X, E2>(fx: Fx.Fx<E, X>, f: (a: Event<E>) => Fx.Fx<E2, unknown>): Fx.Fx<Fork.Fork | Async.Async | ExcludeStream<E> | E2, X> => 
   Fx.bracket(
     Fx.sync(() => new CurrentTask<ExcludeStream<E> | E2>()),
-    (task) => Fx.sync(() => dispose(task)),
-    (task) => Fx.fx(function* () {
+    task => Fx.sync(() => dispose(task)),
+    task => Fx.fx(function* () {
       const x = yield* forEach(fx, a => task.run(f(a)))
 
       yield* task.wait()

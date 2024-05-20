@@ -1,7 +1,7 @@
-import * as Async from "../Async";
-import * as Fail from "../Fail";
-import * as Future from "./Future";
-import * as Fx from "../Fx";
+import * as Async from '../Async';
+import * as Fail from '../Fail';
+import * as Future from './Future';
+import * as Fx from '../Fx';
 
 export interface Queue<A> {
   readonly offer: (a: A) => Fx.Fx<never, boolean>;
@@ -11,11 +11,11 @@ export interface Queue<A> {
 }
 
 export class QueueShutdown {
-  readonly tag = "QueueShutdown";
+  readonly tag = 'QueueShutdown';
 }
 
 export class Take<A> {
-  readonly tag = "Take";
+  readonly tag = 'Take';
   constructor(readonly value: A) {}
 }
 
@@ -81,6 +81,6 @@ export const take = <A>(
   Async.Async,
   QueueShutdown | Take<A>
 >  => queue.take.pipe(
-    Fx.map((a) => new Take(a)),
+    Fx.map(a => new Take(a)),
     Fail.catchAll
   )

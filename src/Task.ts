@@ -24,7 +24,7 @@ export const wait = <const A, const E>(t: Task<A, E>) => fx(function* () {
     )))
 
   return yield* r
-})
+}) as Fx<Extract<E, Fail<any>>, A>
 
 type Result<P> = P extends Task<infer A, unknown> ? A : never
 type Errors<P> = P extends Task<unknown, infer E> ? E : never

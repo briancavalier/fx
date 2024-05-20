@@ -5,7 +5,6 @@ import { fx, runSync } from './Fx'
 
 import { get, provide, provideAll } from './Env'
 
-
 describe('Env', () => {
   describe('get', () => {
     it('given environment, returns requested items', () => {

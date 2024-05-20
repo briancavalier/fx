@@ -2,7 +2,7 @@ import { Effect } from './Effect'
 import { Fx, fx, handle, handleIso, map, ok } from './Fx'
 
 
-export class Log extends Effect('fx/Log')<LogMessage, void> {}
+export class Log extends Effect('fx/Log')<LogMessage, void> { }
 
 export const log = (m: LogMessage) => new Log(m)
 
@@ -22,14 +22,14 @@ export interface LogMessage {
 }
 
 export const console = handle(Log, ({ level, msg, data, context }) => fx(function* () {
-    const c = globalThis.console
-    switch (level) {
-      case Level.debug: return c.debug(msg, { ...context, ...data })
-      case Level.warn: return c.warn(msg, { ...context, ...data })
-      case Level.error: return c.error(msg, { ...context, ...data })
-      default: return c.info(msg, { ...context, ...data })
-    }
-  }))
+  const c = globalThis.console
+  switch (level) {
+    case Level.debug: return c.debug(msg, { ...context, ...data })
+    case Level.warn: return c.warn(msg, { ...context, ...data })
+    case Level.error: return c.error(msg, { ...context, ...data })
+    default: return c.info(msg, { ...context, ...data })
+  }
+}))
 
 export const collect = <const E, const A>(f: Fx<E, A>) => fx(function* () {
   const log = [] as LogMessage[]

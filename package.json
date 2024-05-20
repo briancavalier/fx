@@ -12,7 +12,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc --build",
+    "build": "tsc --project ./tsconfig.build.json",
     "lint": "eslint",
     "test": "find src -name '*.test.ts' | xargs node --import tsx --test",
     "test:watch": "node --import tsx --test --watch './src/**/*.test.ts'",

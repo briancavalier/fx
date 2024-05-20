@@ -4,7 +4,7 @@ import * as Task from "./Task";
 import * as Async from "./Async";
 import * as Fail from "./Fail";
 import * as Fork from "./Fork";
-import * as Queue from './Queue';
+import * as Queue from './internal/Queue';
 
 export class Stream<A> extends Effect('Stream')<A, void> { }
 
@@ -41,7 +41,7 @@ export const switchMap = <E, X, E2>(fx: Fx.Fx<E, X>, f: (a: Event<E>) => Fx.Fx<E
 
 export const withEmitter = <A, E>(f: (emitter: Emitter<A>) => Fx.Fx<E, Disposable>): Fx.Fx<Async.Async | Fork.Fork | Stream<A> | E, void> =>
   Fx.fx(function* () { 
-    const queue = yield* Queue.make<A>()
+    const queue = Queue.make<A>()
     let disposable: Disposable | null = null
 
     const fiber = yield* Fork.fork(Fx.fx(function* () { 

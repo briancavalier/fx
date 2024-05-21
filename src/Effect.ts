@@ -15,8 +15,8 @@ export interface AnyEffect {
   readonly arg: unknown
 }
 
-export const Effect = <const T extends string>(id: T) => class <A, R = unknown> implements Pipeable {
-  public readonly _fxTypeId = EffectTypeId;
+export const Effect = <const T extends string>(id: T) => class <A, R = unknown> implements AnyEffect, Pipeable {
+  public readonly _fxTypeId: typeof EffectTypeId = EffectTypeId;
   public readonly _fxEffectId = id;
   public static readonly _fxEffectId = id;
   public readonly R!: R

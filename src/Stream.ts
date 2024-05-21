@@ -44,12 +44,8 @@ export const withEmitter = <A>(f: (emitter: Emitter<A>) => Disposable): Fx.Fx<As
     const queue = new Queue.UnboundedQueue<A>()
 
     const disposable = f({
-      event(a) {
-        queue.offer(a)
-      },
-      end() {
-        dispose(queue)
-      }
+      event(a) { queue.offer(a) },
+      end() { dispose(queue) }
     })
 
     while (!queue.disposed) {

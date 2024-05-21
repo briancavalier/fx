@@ -9,7 +9,7 @@ import { EventEmitter } from 'node:events'
 describe('Stream', () => {
   it('allows emitting events and observing those events', async () => {
     const producer = Fx.fx(function* () {
-      for (let i = 0; i < 25; i++) { 
+      for (let i = 0; i < 25; i++) {
         yield* Stream.event(i)
       }
     }).pipe(
@@ -21,10 +21,10 @@ describe('Stream', () => {
     assert.deepEqual(Fx.runSync(test), [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48])
   })
 
-  describe('switchMap', () => { 
+  describe('switchMap', () => {
     it('allows chaining multiple streams, favoring the latest', async () => {
       const test = Fx.fx(function* () {
-        for (let i = 0; i < 25; i++) { 
+        for (let i = 0; i < 25; i++) {
           yield* Stream.event(i)
         }
       }).pipe(
@@ -36,32 +36,32 @@ describe('Stream', () => {
         Fork.unbounded,
       )
       const task = Fx.runAsync(test)
-      
+
       assert.deepEqual(await task.promise, ['24', 24n])
     })
   })
 
-  describe('withEmitter', () => { 
+  describe('withEmitter', () => {
     it('adapts a callback-based API', async () => {
       const eventEmitter = new EventEmitter<{ event: [number] }>()
       const emit = (...values: number[]) => Fx.fx(function* () {
         // Give fiber time to start
         yield* Async.sleep(1)
-        for (const value of values) { 
+        for (const value of values) {
           eventEmitter.emit('event', value)
         }
         // Give emits time to start their own fibers
         yield* Async.sleep(1)
       })
-      const producer = Stream.withEmitter<number, Fork.Fork>(emitter => Fx.fx(function* () { 
+      const producer = Stream.withEmitter<number, Fork.Fork>(emitter => {
         eventEmitter.on('event', emitter.event)
         return {
-          [Symbol.dispose]() { 
+          [Symbol.dispose]() {
             eventEmitter.off('event', emitter.event)
             emitter.end()
           }
         }
-      }))
+      })
 
       const test = Fx.fx(function* () {
         const events: number[] = []
@@ -86,7 +86,7 @@ describe('Stream', () => {
 function collectAll<E, A>(fx: Fx.Fx<E, A>): Fx.Fx<Stream.ExcludeStream<E>, readonly Stream.Event<E>[]> {
   return Fx.fx(function* () {
     const events: Stream.Event<E>[] = []
-    yield* Stream.forEach(fx, a => { 
+    yield* Stream.forEach(fx, a => {
       events.push(a)
       return Fx.unit
     })

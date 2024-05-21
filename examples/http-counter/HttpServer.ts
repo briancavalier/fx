@@ -1,6 +1,6 @@
-import { IncomingMessage, Server, ServerResponse, createServer } from 'http'
+import { IncomingMessage, ServerResponse, createServer } from 'http'
 
-import { Async, Effect, Env, Fork, Fx, Log, bracket, fx, handle, ok } from '../../src'
+import { Effect, Env, Fork, Fx, Log, Stream, bracket, fx, ok } from '../../src'
 
 //----------------------------------------------------------------------
 // Http Server example
@@ -25,41 +25,28 @@ export type Response = Readonly<{ status: number; headers: Record<string, string
 // Runs a node server as a handler, with bracket to manage
 // the server lifecycle
 
-export const serveNode = <E, A>(f: Fx<E, A>) => bracket(
-  fx(function*() {
+export const serveNode = bracket(
+  fx(function* () {
     const { port } = yield* Env.get<{ port: number }>()
     return createServer().listen(port)
   }),
   server => ok(void server.close()),
-  server => f.pipe(
-    handle(NextRequest, () => {
-      const close = () => server.close()
-
-      return Async.run((signal) => {
-        signal.addEventListener('abort', close, { once: true })
-        return getNextRequest(server)
-          .finally(() => signal.removeEventListener('abort', close))
-      })
-    })
-  )
+  server => Stream.withEmitter<Connection>(emitter => {
+    server.on('request', (request, response) => emitter.event({ request, response }))
+    return {
+      [Symbol.dispose]() {
+        emitter.end()
+      }
+    }
+  })
 )
 
 export const runServer = <E>(
   handleRequest: (c: Request) => Fx<E, Response>
-) => serveNode(fx(function* () {
-  while(true) {
-    const { request, response, } = yield* nextRequest
-    yield* Fork.fork(fx(function* () {
-      const r = yield* handleRequest({ method: 'GET', url: '', ...request })
-      yield* Log.info('Handled request', { method: request.method, url: request.url, status: r.status })
-      response.writeHead(r.status, r.headers).end(r.body)
-    }))
-  }
+) => Stream.forEach(serveNode, ({ request, response }) => fx(function* () {
+  yield* Fork.fork(fx(function* () {
+    const r = yield* handleRequest({ method: 'GET', url: '', ...request })
+    yield* Log.info('Handled request', { method: request.method, url: request.url, status: r.status })
+    response.writeHead(r.status, r.headers).end(r.body)
+  }))
 }))
-
-const getNextRequest = (server: Server) =>
-  new Promise<{ request: IncomingMessage; response: ServerResponse}>((resolve) =>
-    server.once("request", (request, response) =>
-      resolve({ request, response })))
-
-// #endregion

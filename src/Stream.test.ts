@@ -1,10 +1,10 @@
 import * as assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import { describe, it } from 'node:test'
+import * as Async from './Async'
+import * as Fork from './Fork'
 import * as Fx from './Fx'
 import * as Stream from './Stream'
-import * as Fork from './Fork'
-import * as Async from './Async'
-import { EventEmitter } from 'node:events'
 
 describe('Stream', () => {
   it('allows emitting events and observing those events', async () => {
@@ -53,7 +53,7 @@ describe('Stream', () => {
         // Give emits time to start their own fibers
         yield* Async.sleep(1)
       })
-      const producer = Stream.withEmitter<number, Fork.Fork>(emitter => {
+      const producer = Stream.withEmitter<number>(emitter => {
         eventEmitter.on('event', emitter.event)
         return {
           [Symbol.dispose]() {

@@ -39,7 +39,7 @@ export const switchMap = <E, X, E2>(fx: Fx.Fx<E, X>, f: (a: Event<E>) => Fx.Fx<E
     })
   )
 
-export const withEmitter = <A, E>(f: (emitter: Emitter<A>) => Disposable): Fx.Fx<Async.Async | Fork.Fork | Stream<A> | E, void> =>
+export const withEmitter = <A>(f: (emitter: Emitter<A>) => Disposable): Fx.Fx<Async.Async | Stream<A>, void> =>
   Fx.fx(function* () {
     const queue = new Queue.UnboundedQueue<A>()
 
@@ -53,8 +53,8 @@ export const withEmitter = <A, E>(f: (emitter: Emitter<A>) => Disposable): Fx.Fx
     })
 
     while (!queue.disposed) {
-      const next = yield* Async.run<Queue.Taken<A> | Queue.QueueDisposed>(() => queue.take())
-      if (next.tag === 'fx/Queue/Taken') yield* event(next.value)
+      const next = yield* Async.run<Queue.Take<A> | Queue.QueueDisposed>(() => queue.take())
+      if (next.tag === 'fx/Queue/Take') yield* event(next.value)
     }
 
     dispose(disposable)

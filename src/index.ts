@@ -7,6 +7,7 @@ export * as Fail from './Fail'
 export * as Fork from './Fork'
 export * as Log from './Log'
 export * as Resource from './Resource'
+export * as Stream from './Stream'
 export * as Time from './Time'
 
 export * as Task from './Task'

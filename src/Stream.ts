@@ -5,6 +5,7 @@ import * as Fork from './Fork'
 import * as Fx from './Fx'
 import * as Task from './Task'
 import * as Queue from './internal/Queue'
+import { IfAny } from './internal/type'
 
 export class Stream<A> extends Effect('fx/Stream')<A, void> { }
 
@@ -63,13 +64,30 @@ export interface Emitter<A> {
   end(): void
 }
 
+export interface IterableWithReturn<Y, R> {
+  [Symbol.iterator](): Iterator<Y, R>
+}
+
+export const fromIterable = <A, R>(i: IterableWithReturn<A, R>): Fx.Fx<Stream<A>, IfAny<R, void>> => Fx.bracket(
+  Fx.sync(() => i[Symbol.iterator]()),
+  iterator => Fx.ok(void iterator.return?.()),
+  iterator => Fx.fx(function* () {
+    let result = iterator.next()
+    while (!result.done) {
+      yield* event(result.value)
+      result = iterator.next()
+    }
+    return result.value
+  })
+) as Fx.Fx<Stream<A>, IfAny<R, void>>
+
 export interface AsyncIterableWithReturn<Y, R> {
   [Symbol.asyncIterator](): AsyncIterator<Y, R>
 }
 
 export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>): Fx.Fx<Async.Async | Stream<A>, R> => Fx.bracket(
   Fx.sync(() => f()[Symbol.asyncIterator]()),
-  iterator => Async.run(() => (iterator.return?.().then(() => { }) ?? Promise.resolve())),
+  iterator => Async.run(() => iterator.return?.().then(() => { }) ?? Promise.resolve()),
   iterator => Fx.fx(function* () {
     const next = Async.run(() => iterator.next())
     let result = yield* next
@@ -88,12 +106,12 @@ export const toAsyncIterable = <E extends Async.Async | Stream<any> | Fail.Fail<
     let result = iterator.next()
 
     try {
-      while (!result.done) { 
+      while (!result.done) {
         const next = result.value
         if (next._fxEffectId === 'fx/Async') {
           const value = await next.arg(controller.signal)
           result = iterator.next(value)
-        } else if (next._fxEffectId === 'fx/Fail') { 
+        } else if (next._fxEffectId === 'fx/Fail') {
           throw next.arg
         } else {
           yield next.arg

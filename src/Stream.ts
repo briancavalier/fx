@@ -65,7 +65,7 @@ export interface AsyncIterableWithReturn<Y, R> {
   [Symbol.asyncIterator](): AsyncIterator<Y, R>
 }
 
-export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>): Fx.Fx<Async.Async | Stream<A>, unknown> => Fx.bracket(
+export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>): Fx.Fx<Async.Async | Stream<A>, R> => Fx.bracket(
   Fx.sync(() => f()[Symbol.asyncIterator]()),
   iterator => Async.run(() => (iterator.return?.().then(() => { }) ?? Promise.resolve())),
   iterator => Fx.fx(function* () {

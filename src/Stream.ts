@@ -66,18 +66,21 @@ export const fromAsyncIterable: {
   <A>(iterable: AsyncIterable<A>): Fx.Fx<Async.Async | Stream<A>, unknown>
 } = <A>(iterable: AsyncIterable<A>): Fx.Fx<Async.Async | Stream<A>, unknown> => Fx.bracket(
   Fx.sync(() => iterable[Symbol.asyncIterator]()),
-  iterator => Async.run(() => (iterator.return?.() ?? Promise.resolve()).then(() => { })),
+  iterator => Async.run(() => (iterator.return?.().then(() => { }) ?? Promise.resolve())),
   iterator => Fx.fx(function* () {
-    let next = yield* Async.run(() => iterator.next())
-    while (!next.done) {
-      yield* event(next.value)
-      next = yield* Async.run(() => iterator.next())
+    const next = Async.run(() => iterator.next())
+    let result = yield* next
+    while (!result.done) {
+      yield* event(result.value)
+      result = yield* next
     }
-    return next.value
+    return result.value
   })
 )
 
-export const toAsyncIterable = <Error, Event, A>(fx: Fx.Fx<Async.Async | Fail.Fail<Error> | Stream<Event>, A>): AsyncIterable<Event> => ({
+export const toAsyncIterable = <Error, Event, A>(fx: Fx.Fx<Async.Async | Fail.Fail<Error> | Stream<Event>, A>): {
+  [Symbol.asyncIterator](): AsyncGenerator<Event, A>
+} => ({
   async *[Symbol.asyncIterator]() {
     const controller = new AbortController()
     const iterator = fx[Symbol.iterator]()
@@ -96,6 +99,7 @@ export const toAsyncIterable = <Error, Event, A>(fx: Fx.Fx<Async.Async | Fail.Fa
           result = iterator.next()
         }
       }
+      return result.value
     } finally {
       controller.abort()
       iterator.return?.()

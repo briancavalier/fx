@@ -86,8 +86,7 @@ describe('Stream', () => {
     it('converts an async iterable to a stream', async () => {
       const makeAsyncIterable = async function* () { 
         for (let i = 0; i < 25; i++) {
-          yield i
-          await new Promise(resolve => setTimeout(resolve, 1))
+          yield Promise.resolve(i)
         }
         return 42
       }

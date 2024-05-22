@@ -81,6 +81,45 @@ describe('Stream', () => {
       await Fx.runAsync(test).promise
     })
   })
+
+  describe('fromAsyncIterable', () => { 
+    it('converts an async iterable to a stream', async () => {
+      const makeAsyncIterable = async function* () { 
+        for (let i = 0; i < 25; i++) {
+          yield i
+          await new Promise(resolve => setTimeout(resolve, 1))
+        }
+        return 42
+      }
+      const test = Fx.fx(function* () { 
+        assert.equal(yield* Stream.fromAsyncIterable(makeAsyncIterable()), 42)
+      }).pipe(collectAll)
+
+      assert.deepEqual(await Fx.runAsync(test).promise, Array.from({length: 25}, (_, i) => i))
+    })
+  })
+
+  describe('toAsyncIterable', () => { 
+    it('converts a stream to an async iterable', async () => { 
+      const test = Fx.fx(function* () { 
+        for (let i = 0; i < 25; i++) {
+          yield* Stream.event(i)
+        }
+        
+        return 42
+      }).pipe(Stream.toAsyncIterable)
+
+      const events = []
+      const iterable = test[Symbol.asyncIterator]()
+      let result = await iterable.next()
+      while (!result.done) { 
+        events.push(result.value)
+        result = await iterable.next()
+      }
+      assert.deepEqual(events, Array.from({ length: 25 }, (_, i) => i))
+      assert.deepEqual(result.value, 42)
+    })
+  })
 })
 
 function collectAll<E, A>(fx: Fx.Fx<E, A>): Fx.Fx<Stream.ExcludeStream<E>, readonly Stream.Event<E>[]> {

@@ -61,16 +61,12 @@ export interface Emitter<A> {
   end(): void
 }
 
-export interface AsyncGen<Y, R> {
+export interface AsyncIterableWithReturn<Y, R> {
   [Symbol.asyncIterator](): AsyncIterator<Y, R>
-  // We want to intentionlly avoid using AsyncGenerators directly because they are not referentially transparent.
-  next?: never
-  throw?: never
-  return?: never
 }
 
-export const fromAsyncIterable = <A, R>(iterable: AsyncGen<A, R>): Fx.Fx<Async.Async | Stream<A>, unknown> => Fx.bracket(
-  Fx.sync(() => iterable[Symbol.asyncIterator]()),
+export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>): Fx.Fx<Async.Async | Stream<A>, unknown> => Fx.bracket(
+  Fx.sync(() => f()[Symbol.asyncIterator]()),
   iterator => Async.run(() => (iterator.return?.().then(() => { }) ?? Promise.resolve())),
   iterator => Fx.fx(function* () {
     const next = Async.run(() => iterator.next())
@@ -83,7 +79,7 @@ export const fromAsyncIterable = <A, R>(iterable: AsyncGen<A, R>): Fx.Fx<Async.A
   })
 )
 
-export const toAsyncIterable = <Error, Event, A>(fx: Fx.Fx<Async.Async | Fail.Fail<Error> | Stream<Event>, A>): AsyncGen<Event, A> => ({
+export const toAsyncIterable = <Error, Event, A>(fx: Fx.Fx<Async.Async | Fail.Fail<Error> | Stream<Event>, A>): AsyncIterableWithReturn<Event, A> => ({
   async *[Symbol.asyncIterator]() {
     const controller = new AbortController()
     const iterator = fx[Symbol.iterator]()

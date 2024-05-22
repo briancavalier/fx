@@ -91,7 +91,7 @@ describe('Stream', () => {
         return 42
       }
       const test = Fx.fx(function* () { 
-        assert.equal(yield* Stream.fromAsyncIterable({ [Symbol.asyncIterator]: makeAsyncGenerator }), 42)
+        assert.equal(yield* Stream.fromAsyncIterable(makeAsyncGenerator), 42)
       }).pipe(collectAll)
 
       assert.deepEqual(await Fx.runAsync(test).promise, Array.from({length: 25}, (_, i) => i))

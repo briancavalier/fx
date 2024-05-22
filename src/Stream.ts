@@ -63,6 +63,51 @@ export interface Emitter<A> {
   end(): void
 }
 
+export interface AsyncIterableWithReturn<Y, R> {
+  [Symbol.asyncIterator](): AsyncIterator<Y, R>
+}
+
+export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>): Fx.Fx<Async.Async | Stream<A>, R> => Fx.bracket(
+  Fx.sync(() => f()[Symbol.asyncIterator]()),
+  iterator => Async.run(() => (iterator.return?.().then(() => { }) ?? Promise.resolve())),
+  iterator => Fx.fx(function* () {
+    const next = Async.run(() => iterator.next())
+    let result = yield* next
+    while (!result.done) {
+      yield* event(result.value)
+      result = yield* next
+    }
+    return result.value
+  })
+)
+
+export const toAsyncIterable = <Error, Event, A>(fx: Fx.Fx<Async.Async | Fail.Fail<Error> | Stream<Event>, A>): AsyncIterableWithReturn<Event, A> => ({
+  async *[Symbol.asyncIterator]() {
+    const controller = new AbortController()
+    const iterator = fx[Symbol.iterator]()
+    let result = iterator.next()
+
+    try {
+      while (!result.done) { 
+        const next = result.value
+        if (next._fxEffectId === 'fx/Async') {
+          const value = await next.arg(controller.signal)
+          result = iterator.next(value)
+        } else if (next._fxEffectId === 'fx/Fail') { 
+          throw next.arg
+        } else {
+          yield next.arg
+          result = iterator.next()
+        }
+      }
+      return result.value
+    } finally {
+      controller.abort()
+      iterator.return?.()
+    }
+  }
+})
+
 class CurrentTask<E> {
   private task: Task.Task<any, Extract<E, Fail.Fail<any>>> | null = null
 

@@ -81,7 +81,7 @@ export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>):
   })
 )
 
-export const toAsyncIterable = <Error, Event, A>(fx: Fx.Fx<Async.Async | Fail.Fail<Error> | Stream<Event>, A>): AsyncIterableWithReturn<Event, A> => ({
+export const toAsyncIterable = <E extends Async.Async | Stream<any> | Fail.Fail<any>, A>(fx: Fx.Fx<E, A>): AsyncIterableWithReturn<Event<E>, A> => ({
   async *[Symbol.asyncIterator]() {
     const controller = new AbortController()
     const iterator = fx[Symbol.iterator]()

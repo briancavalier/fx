@@ -100,22 +100,24 @@ describe('Stream', () => {
 
   describe('toAsyncIterable', () => { 
     it('converts a stream to an async iterable', async () => { 
-      const test = Fx.fx(function* () { 
+      const fx = Fx.fx(function* () { 
         for (let i = 0; i < 25; i++) {
           yield* Stream.event(i)
+          yield* Stream.event(String(i))
         }
         
         return 42
-      }).pipe(Stream.toAsyncIterable)
+      })
+      const asyncIterable = Stream.toAsyncIterable(fx)
 
       const events = []
-      const iterable = test[Symbol.asyncIterator]()
-      let result = await iterable.next()
+      const iterator = asyncIterable[Symbol.asyncIterator]()
+      let result = await iterator.next()
       while (!result.done) { 
         events.push(result.value)
-        result = await iterable.next()
+        result = await iterator.next()
       }
-      assert.deepEqual(events, Array.from({ length: 25 }, (_, i) => i))
+      assert.deepEqual(events, Array.from({ length: 25 }, (_, i) => i).flatMap(i => [i, String(i)]))
       assert.deepEqual(result.value, 42)
     })
   })

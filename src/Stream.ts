@@ -48,8 +48,10 @@ export const withEmitter = <A>(f: (emitter: Emitter<A>) => Disposable): Fx.Fx<As
       end() { dispose(queue) }
     })
 
+    const take = Async.run(() => queue.take())
+
     while (!queue.disposed) {
-      const next = yield* Async.run<Queue.Take<A> | Queue.QueueDisposed>(() => queue.take())
+      const next = yield* take
       if (next.tag === 'fx/Queue/Take') yield* event(next.value)
     }
 

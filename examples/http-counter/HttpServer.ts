@@ -22,13 +22,9 @@ export const httpServer = bracket(
     return createServer().listen(port)
   }),
   server => ok(void server.close()),
-  server => Stream.withEmitter<Connection>(emitter => {
-    server.on('request', (request, response) => emitter.event({ request, response }))
-    return {
-      [Symbol.dispose]() {
-        emitter.end()
-      }
-    }
+  server => Stream.withEmitter<Connection>(({ event, end }) => {
+    server.on('request', (request, response) => event({ request, response }))
+    return { [Symbol.dispose]: end }
   })
 )
 

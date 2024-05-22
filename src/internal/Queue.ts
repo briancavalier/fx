@@ -35,6 +35,8 @@ export class UnboundedQueue<A> {
   [Symbol.dispose]() {
     if (this._disposed) return
     this._disposed = true
+    this.items.length = 0
     for (const taker of this.takers) taker(queueDisposed)
+    this.takers.length = 0
   }
 }

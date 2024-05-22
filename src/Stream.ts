@@ -61,7 +61,10 @@ export interface Emitter<A> {
   end(): void
 }
 
-export const fromAsyncIterable = <A>(iterable: AsyncIterable<A>): Fx.Fx<Async.Async | Stream<A>, void> => Fx.bracket(
+export const fromAsyncIterable: {
+  <A, R>(iterable: AsyncGenerator<A, R>): Fx.Fx<Async.Async | Stream<A>, R>
+  <A>(iterable: AsyncIterable<A>): Fx.Fx<Async.Async | Stream<A>, unknown>
+} = <A>(iterable: AsyncIterable<A>): Fx.Fx<Async.Async | Stream<A>, unknown> => Fx.bracket(
   Fx.sync(() => iterable[Symbol.asyncIterator]()),
   iterator => Async.run(() => (iterator.return?.() ?? Promise.resolve()).then(() => { })),
   iterator => Fx.fx(function* () {
@@ -70,6 +73,7 @@ export const fromAsyncIterable = <A>(iterable: AsyncIterable<A>): Fx.Fx<Async.As
       yield* event(next.value)
       next = yield* Async.run(() => iterator.next())
     }
+    return next.value
   })
 )
 

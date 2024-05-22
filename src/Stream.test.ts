@@ -84,14 +84,14 @@ describe('Stream', () => {
 
   describe('fromAsyncIterable', () => { 
     it('converts an async iterable to a stream', async () => {
-      const makeAsyncIterable = async function* () { 
+      const makeAsyncGenerator = async function* () { 
         for (let i = 0; i < 25; i++) {
           yield Promise.resolve(i)
         }
         return 42
       }
       const test = Fx.fx(function* () { 
-        assert.equal(yield* Stream.fromAsyncIterable(makeAsyncIterable()), 42)
+        assert.equal(yield* Stream.fromAsyncIterable({ [Symbol.asyncIterator]: makeAsyncGenerator }), 42)
       }).pipe(collectAll)
 
       assert.deepEqual(await Fx.runAsync(test).promise, Array.from({length: 25}, (_, i) => i))

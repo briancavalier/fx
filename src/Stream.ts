@@ -40,29 +40,25 @@ export const switchMap = <E, X, E2>(fx: Fx.Fx<E, X>, f: (a: Event<E>) => Fx.Fx<E
     })
   )
 
-export const withEmitter = <A>(f: (emitter: Emitter<A>) => Disposable): Fx.Fx<Async.Async | Stream<A>, void> =>
+export const fromQueue = <A>(queue: Queue.Take<A>): Fx.Fx<Async.Async | Stream<A>, void> => Fx.fx(function* () {
+  const take = Queue.take(queue)
+
+  while (!queue.disposed) {
+    const next = yield* take
+    if (next.tag === 'fx/Queue/Taken') yield* event(next.value)
+  }
+})
+
+export const withEmitter = <A>(
+  f: (o: Queue.Offer<A>) => Disposable,
+  q: Queue.Queue<A> = new Queue.UnboundedQueue<A>()
+): Fx.Fx<Async.Async | Stream<A>, void> =>
   Fx.fx(function* () {
-    const queue = new Queue.UnboundedQueue<A>()
-
-    const disposable = f({
-      event(a) { queue.offer(a) },
-      end() { dispose(queue) }
-    })
-
-    const take = Async.run(() => queue.take())
-
-    while (!queue.disposed) {
-      const next = yield* take
-      if (next.tag === 'fx/Queue/Take') yield* event(next.value)
-    }
+    const disposable = f(q)
+    yield* fromQueue(q)
 
     dispose(disposable)
   })
-
-export interface Emitter<A> {
-  event(a: A): void
-  end(): void
-}
 
 export interface IterableWithReturn<Y, R> {
   [Symbol.iterator](): Iterator<Y, R>

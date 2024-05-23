@@ -56,12 +56,13 @@ describe('Stream', () => {
         // Give emits time to start their own tasks
         yield* Async.sleep(1)
       })
-      const producer = Stream.withEmitter<number>(emitter => {
-        eventEmitter.on('event', emitter.event)
+      const producer = Stream.withEmitter<number>(q => {
+        const emit = (e: number) => q.offer(e)
+        eventEmitter.on('event', emit)
         return {
           [Symbol.dispose]() {
-            eventEmitter.off('event', emitter.event)
-            emitter.end()
+            eventEmitter.off('event', emit)
+            q[Symbol.dispose]()
           }
         }
       })

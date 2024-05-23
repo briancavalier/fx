@@ -22,9 +22,9 @@ export const httpServer = bracket(
     return createServer().listen(port)
   }),
   server => ok(void server.close()),
-  server => Stream.withEmitter<Connection>(({ event, end }) => {
-    server.on('request', (request, response) => event({ request, response }))
-    return { [Symbol.dispose]: end }
+  server => Stream.withEnqueue<Connection>(q => {
+    server.on('request', (request, response) => q.enqueue({ request, response }))
+    return q
   })
 )
 

@@ -5,6 +5,7 @@ import * as Fork from './Fork'
 import * as Fx from './Fx'
 import * as Task from './Task'
 import * as Queue from './internal/Queue'
+import { dispose } from './internal/disposable'
 import { IfAny } from './internal/type'
 
 export class Stream<A> extends Effect('fx/Stream')<A, void> { }
@@ -40,29 +41,23 @@ export const switchMap = <E, X, E2>(fx: Fx.Fx<E, X>, f: (a: Event<E>) => Fx.Fx<E
     })
   )
 
-export const withEmitter = <A>(f: (emitter: Emitter<A>) => Disposable): Fx.Fx<Async.Async | Stream<A>, void> =>
-  Fx.fx(function* () {
-    const queue = new Queue.UnboundedQueue<A>()
+export const fromDequeue = <A>(queue: Queue.Dequeue<A>): Fx.Fx<Async.Async | Stream<A>, void> => Fx.fx(function* () {
+  const take = Queue.dequeue(queue)
 
-    const disposable = f({
-      event(a) { queue.offer(a) },
-      end() { dispose(queue) }
-    })
+  while (!queue.disposed) {
+    const next = yield* take
+    if (next.tag === 'fx/Queue/Dequeued') yield* event(next.value)
+  }
+})
 
-    const take = Async.run(() => queue.take())
-
-    while (!queue.disposed) {
-      const next = yield* take
-      if (next.tag === 'fx/Queue/Take') yield* event(next.value)
-    }
-
-    dispose(disposable)
-  })
-
-export interface Emitter<A> {
-  event(a: A): void
-  end(): void
-}
+export const withEnqueue = <A>(
+  f: (o: Queue.Enqueue<A>) => Disposable,
+  q: Queue.Queue<A> = new Queue.UnboundedQueue()
+): Fx.Fx<Async.Async | Stream<A>, void> => Fx.bracket(
+  Fx.sync(() => f(q)),
+  disposable => Fx.ok(dispose(disposable)),
+  _ => fromDequeue(q)
+)
 
 export interface IterableWithReturn<Y, R> {
   [Symbol.iterator](): Iterator<Y, R>
@@ -152,5 +147,3 @@ class CurrentTask<E> {
     }
   }
 }
-
-const dispose = (d: Disposable) => d[Symbol.dispose]()

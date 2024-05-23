@@ -1,23 +1,22 @@
 import * as assert from 'node:assert/strict'
-import { EventEmitter } from 'node:events'
 import { describe, it } from 'node:test'
-import * as Async from './Async'
 import * as Fork from './Fork'
 import * as Fx from './Fx'
 import * as Stream from './Stream'
+import { Enqueue, UnboundedQueue } from './internal/Queue'
+import { dispose } from './internal/disposable'
 
 describe('Stream', () => {
   it('allows emitting events and observing those events', async () => {
-    const producer = Fx.fx(function* () {
+    const [r, events] = Fx.fx(function* () {
       for (let i = 0; i < 25; i++) yield* Stream.event(i)
       return 42
     }).pipe(
       _ => Stream.filter(_, a => a % 2 === 0),
       _ => Stream.map(_, a => a * 2),
-      collectAll
+      collectAll,
+      Fx.runSync
     )
-
-    const [r, events] = Fx.runSync(producer)
 
     assert.equal(r, 42)
     assert.deepEqual(events, [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48])
@@ -25,7 +24,7 @@ describe('Stream', () => {
 
   describe('switchMap', () => {
     it('allows chaining multiple streams, favoring the latest', async () => {
-      const test = Fx.fx(function* () {
+      const [r, events] = await Fx.fx(function* () {
         for (let i = 0; i < 25; i++) yield* Stream.event(i)
         return 42
       }).pipe(
@@ -35,58 +34,57 @@ describe('Stream', () => {
         })),
         collectAll,
         Fork.unbounded,
-      )
-
-      const [r, events] = await Fx.runAsync(test).promise
+        Fx.runAsync
+      ).promise
 
       assert.equal(r, 42)
       assert.deepEqual(events, ['24', 24n])
     })
   })
 
-  describe('withEmitter', () => {
+  describe('fromDequeue', () => {
+    it('given queue, produces all enqueued items', async () => {
+      const expected = Array.from({ length: 10 }, (_, i) => i)
+
+      const queue = new UnboundedQueue<number>()
+
+      enqueueAllAsync(queue, expected)
+
+      const [r, events] = await Stream.fromDequeue(queue)
+        .pipe(collectAll, Fx.runAsync)
+        .promise
+
+      assert.equal(r, undefined)
+      assert.deepEqual(events, expected)
+    })
+  })
+
+  describe('withEnqueue', () => {
     it('adapts a callback-based API', async () => {
-      const eventEmitter = new EventEmitter<{ event: [number] }>()
-      const emit = (...values: number[]) => Fx.fx(function* () {
-        // Give fiber time to start
-        yield* Async.sleep(1)
-        for (const value of values) {
-          eventEmitter.emit('event', value)
-        }
-        // Give emits time to start their own tasks
-        yield* Async.sleep(1)
-      })
-      const producer = Stream.withEmitter<number>(emitter => {
-        eventEmitter.on('event', emitter.event)
+      const expected = Array.from({ length: 10 }, (_, i) => i)
+
+      const queue = new UnboundedQueue<number>()
+      let disposed = false
+
+      const [r, events] = await Stream.withEnqueue(q => {
+        enqueueAllAsync(q, expected)
+
         return {
-          [Symbol.dispose]() {
-            eventEmitter.off('event', emitter.event)
-            emitter.end()
-          }
+          [Symbol.dispose]: () => { disposed = true }
         }
-      })
+      }, queue)
+        .pipe(collectAll, Fx.runAsync)
+        .promise
 
-      const test = Fx.fx(function* () {
-        const events: number[] = []
-        const task = yield* Fork.fork(Stream.forEach(producer, a => {
-          events.push(a)
-          return Fx.unit
-        }))
-        yield* emit(0, 1, 2, 3)
-        assert.deepEqual(events, [0, 1, 2, 3])
-        yield* emit(4, 5, 6, 7)
-        assert.deepEqual(events, [0, 1, 2, 3, 4, 5, 6, 7])
-        task[Symbol.dispose]()
-      }).pipe(
-        Fork.unbounded
-      )
-
-      await Fx.runAsync(test).promise
+      assert.equal(r, undefined)
+      assert.deepEqual(events, expected)
+      assert.ok(disposed)
+      assert.ok(queue.disposed)
     })
   })
 
   describe('fromIterable', () => {
-    it('converts an iterable to a stream', async () => {
+    it('converts an iterable to a stream', () => {
       const inputs = Array.from({ length: 25 }, (_, i) => i)
 
       function* makeIterable() {
@@ -94,9 +92,8 @@ describe('Stream', () => {
         return 42
       }
 
-      const [r, events] = Fx.runSync(
-        Stream.fromIterable(makeIterable()).pipe(collectAll)
-      )
+      const [r, events] = Stream.fromIterable(makeIterable())
+        .pipe(collectAll, Fx.runSync)
 
       assert.equal(r, 42)
       assert.deepEqual(events, inputs)
@@ -113,9 +110,9 @@ describe('Stream', () => {
         return 42
       }
 
-      const [r, events] = await Fx.runAsync(
-        Stream.fromAsyncIterable(makeAsyncGenerator).pipe(collectAll)
-      ).promise
+      const [r, events] = await Stream.fromAsyncIterable(makeAsyncGenerator)
+        .pipe(collectAll, Fx.runAsync)
+        .promise
 
       assert.equal(r, 42)
       assert.deepEqual(events, inputs)
@@ -158,4 +155,12 @@ function collectAll<E, A>(fx: Fx.Fx<E, A>): Fx.Fx<Stream.ExcludeStream<E>, reado
     })
     return [r, events]
   })
+}
+
+const enqueueAllAsync = <A>(queue: Enqueue<A>, values: readonly A[]) => {
+  if (values.length === 0) return dispose(queue)
+
+  const [a, ...rest] = values
+  queue.enqueue(a)
+  setTimeout(enqueueAllAsync, 0, queue, rest)
 }

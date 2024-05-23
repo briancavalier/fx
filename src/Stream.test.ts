@@ -5,6 +5,7 @@ import * as Async from './Async'
 import * as Fork from './Fork'
 import * as Fx from './Fx'
 import * as Stream from './Stream'
+import { dispose } from './internal/disposable'
 
 describe('Stream', () => {
   it('allows emitting events and observing those events', async () => {
@@ -57,12 +58,12 @@ describe('Stream', () => {
         yield* Async.sleep(1)
       })
       const producer = Stream.withEmitter<number>(q => {
-        const emit = (e: number) => q.offer(e)
-        eventEmitter.on('event', emit)
+        const enqueue = (e: number) => q.enqueue(e)
+        eventEmitter.on('event', enqueue)
         return {
           [Symbol.dispose]() {
-            eventEmitter.off('event', emit)
-            q[Symbol.dispose]()
+            eventEmitter.off('event', enqueue)
+            dispose(q)
           }
         }
       })
@@ -77,7 +78,7 @@ describe('Stream', () => {
         assert.deepEqual(events, [0, 1, 2, 3])
         yield* emit(4, 5, 6, 7)
         assert.deepEqual(events, [0, 1, 2, 3, 4, 5, 6, 7])
-        task[Symbol.dispose]()
+        dispose(task)
       }).pipe(
         Fork.unbounded
       )

@@ -4,41 +4,41 @@ import { Variant } from './Variant'
 
 export type Sink<A> = (a: A) => void
 
-export type Taken<A> = Variant<'fx/Queue/Taken', A>
+export type Dequeued<A> = Variant<'fx/Queue/Dequeued', A>
 
 export type QueueDisposed = Variant<'fx/Queue/Disposed', void>
 
 const queueDisposed: QueueDisposed = { tag: 'fx/Queue/Disposed', value: undefined }
 
 export interface Queue<A> extends Disposable {
-  offer(a: A): boolean
-  take(): Promise<Taken<A> | QueueDisposed>
+  enqueue(a: A): boolean
+  dequeue(): Promise<Dequeued<A> | QueueDisposed>
   readonly disposed: boolean
 }
 
-export type Offer<A> = Omit<Queue<A>, 'take'>
-export type Take<A> = Omit<Queue<A>, 'offer'>
+export type Enqueue<A> = Pick<Queue<A>, 'enqueue' | 'disposed' | keyof Disposable>
+export type Dequeue<A> = Pick<Queue<A>, 'dequeue' | 'disposed' | keyof Disposable>
 
-export const take = <A>(q: Take<A>): Fx<Async.Async, Taken<A> | QueueDisposed> => Async.run(() => q.take())
+export const dequeue = <A>(q: Dequeue<A>): Fx<Async.Async, Dequeued<A> | QueueDisposed> => Async.run(() => q.dequeue())
 
-export class UnboundedQueue<A> {
+export class UnboundedQueue<A> implements Queue<A> {
   private readonly items: A[] = []
-  private readonly takers: Sink<Taken<A> | QueueDisposed>[] = []
+  private readonly takers: Sink<Dequeued<A> | QueueDisposed>[] = []
   private _disposed = false
 
-  offer(a: A) {
+  enqueue(a: A) {
     if (this._disposed) return false
 
-    if (this.takers.length > 0) this.takers.shift()!({ tag: 'fx/Queue/Taken', value: a })
+    if (this.takers.length > 0) this.takers.shift()!({ tag: 'fx/Queue/Dequeued', value: a })
     else this.items.push(a)
     return true
   }
 
-  async take(): Promise<Taken<A> | QueueDisposed> {
+  async dequeue(): Promise<Dequeued<A> | QueueDisposed> {
     if (this._disposed) return queueDisposed
 
-    if (this.items.length > 0) return { tag: 'fx/Queue/Taken', value: this.items.shift()! } as const
-    else return new Promise<Taken<A> | QueueDisposed>(resolve => this.takers.push(resolve))
+    if (this.items.length > 0) return { tag: 'fx/Queue/Dequeued', value: this.items.shift()! } as const
+    else return new Promise<Dequeued<A> | QueueDisposed>(resolve => this.takers.push(resolve))
   }
 
   get disposed() {

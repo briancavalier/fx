@@ -1,3 +1,5 @@
+export const dispose = (d: Disposable) => d[Symbol.dispose]()
+
 export class DisposableSet {
   private _disposed = false;
   private readonly disposables = [] as Disposable[]
@@ -9,7 +11,7 @@ export class DisposableSet {
 
   remove(disposable: Disposable) {
     const i = this.disposables.indexOf(disposable)
-    if(i >= 0) this.disposables.splice(i, 1)
+    if (i >= 0) this.disposables.splice(i, 1)
   }
 
   get disposed() { return this._disposed }

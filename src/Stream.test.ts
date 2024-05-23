@@ -8,16 +8,15 @@ import { dispose } from './internal/disposable'
 
 describe('Stream', () => {
   it('allows emitting events and observing those events', async () => {
-    const producer = Fx.fx(function* () {
+    const [r, events] = Fx.fx(function* () {
       for (let i = 0; i < 25; i++) yield* Stream.event(i)
       return 42
     }).pipe(
       _ => Stream.filter(_, a => a % 2 === 0),
       _ => Stream.map(_, a => a * 2),
-      collectAll
+      collectAll,
+      Fx.runSync
     )
-
-    const [r, events] = Fx.runSync(producer)
 
     assert.equal(r, 42)
     assert.deepEqual(events, [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48])
@@ -25,7 +24,7 @@ describe('Stream', () => {
 
   describe('switchMap', () => {
     it('allows chaining multiple streams, favoring the latest', async () => {
-      const test = Fx.fx(function* () {
+      const [r, events] = await Fx.fx(function* () {
         for (let i = 0; i < 25; i++) yield* Stream.event(i)
         return 42
       }).pipe(
@@ -35,9 +34,8 @@ describe('Stream', () => {
         })),
         collectAll,
         Fork.unbounded,
-      )
-
-      const [r, events] = await Fx.runAsync(test).promise
+        Fx.runAsync
+      ).promise
 
       assert.equal(r, 42)
       assert.deepEqual(events, ['24', 24n])
@@ -52,9 +50,9 @@ describe('Stream', () => {
 
       enqueueAllAsync(queue, expected)
 
-      const [r, events] = await Fx.runAsync(
-        Stream.fromDequeue(queue).pipe(collectAll)
-      ).promise
+      const [r, events] = await Stream.fromDequeue(queue)
+        .pipe(collectAll, Fx.runAsync)
+        .promise
 
       assert.equal(r, undefined)
       assert.deepEqual(events, expected)
@@ -74,10 +72,9 @@ describe('Stream', () => {
         return {
           [Symbol.dispose]: () => { disposed = true }
         }
-      }, queue).pipe(
-        collectAll,
-        Fx.runAsync
-      ).promise
+      }, queue)
+        .pipe(collectAll, Fx.runAsync)
+        .promise
 
       assert.equal(r, undefined)
       assert.deepEqual(events, expected)
@@ -87,7 +84,7 @@ describe('Stream', () => {
   })
 
   describe('fromIterable', () => {
-    it('converts an iterable to a stream', async () => {
+    it('converts an iterable to a stream', () => {
       const inputs = Array.from({ length: 25 }, (_, i) => i)
 
       function* makeIterable() {
@@ -95,9 +92,8 @@ describe('Stream', () => {
         return 42
       }
 
-      const [r, events] = Fx.runSync(
-        Stream.fromIterable(makeIterable()).pipe(collectAll)
-      )
+      const [r, events] = Stream.fromIterable(makeIterable())
+        .pipe(collectAll, Fx.runSync)
 
       assert.equal(r, 42)
       assert.deepEqual(events, inputs)
@@ -114,9 +110,9 @@ describe('Stream', () => {
         return 42
       }
 
-      const [r, events] = await Fx.runAsync(
-        Stream.fromAsyncIterable(makeAsyncGenerator).pipe(collectAll)
-      ).promise
+      const [r, events] = await Stream.fromAsyncIterable(makeAsyncGenerator)
+        .pipe(collectAll, Fx.runAsync)
+        .promise
 
       assert.equal(r, 42)
       assert.deepEqual(events, inputs)

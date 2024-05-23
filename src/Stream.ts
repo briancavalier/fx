@@ -41,7 +41,7 @@ export const switchMap = <E, X, E2>(fx: Fx.Fx<E, X>, f: (a: Event<E>) => Fx.Fx<E
     })
   )
 
-export const fromQueue = <A>(queue: Queue.Dequeue<A>): Fx.Fx<Async.Async | Stream<A>, void> => Fx.fx(function* () {
+export const fromDequeue = <A>(queue: Queue.Dequeue<A>): Fx.Fx<Async.Async | Stream<A>, void> => Fx.fx(function* () {
   const take = Queue.dequeue(queue)
 
   while (!queue.disposed) {
@@ -50,14 +50,14 @@ export const fromQueue = <A>(queue: Queue.Dequeue<A>): Fx.Fx<Async.Async | Strea
   }
 })
 
-export const withEmitter = <A>(
+export const withEnqueue = <A>(
   f: (o: Queue.Enqueue<A>) => Disposable,
   q: Queue.Queue<A> = new Queue.UnboundedQueue()
-): Fx.Fx<Async.Async | Stream<A>, void> =>
-  Fx.bracket(
-    Fx.sync(() => f(q)),
-    disposable => Fx.ok(dispose(disposable)),
-    _ => fromQueue(q))
+): Fx.Fx<Async.Async | Stream<A>, void> => Fx.bracket(
+  Fx.sync(() => f(q)),
+  disposable => Fx.ok(dispose(disposable)),
+  _ => fromDequeue(q)
+)
 
 export interface IterableWithReturn<Y, R> {
   [Symbol.iterator](): Iterator<Y, R>

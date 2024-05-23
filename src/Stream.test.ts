@@ -1,10 +1,9 @@
 import * as assert from 'node:assert/strict'
-import { EventEmitter } from 'node:events'
 import { describe, it } from 'node:test'
-import * as Async from './Async'
 import * as Fork from './Fork'
 import * as Fx from './Fx'
 import * as Stream from './Stream'
+import { UnboundedQueue } from './internal/Queue'
 import { dispose } from './internal/disposable'
 
 describe('Stream', () => {
@@ -47,43 +46,36 @@ describe('Stream', () => {
 
   describe('withEmitter', () => {
     it('adapts a callback-based API', async () => {
-      const eventEmitter = new EventEmitter<{ event: [number] }>()
-      const emit = (...values: number[]) => Fx.fx(function* () {
-        // Give fiber time to start
-        yield* Async.sleep(1)
-        for (const value of values) {
-          eventEmitter.emit('event', value)
+
+      const expected = Array.from({ length: 10 }, (_, i) => i)
+
+      const queue = new UnboundedQueue<number>()
+      let disposed = false
+
+      const [r, events] = await Stream.withEnqueue(q => {
+        const emit = (values: readonly number[]) => {
+          if (values.length === 0) return dispose(q)
+
+          const [a, ...rest] = values
+          q.enqueue(a)
+          setTimeout(emit, 0, rest)
         }
-        // Give emits time to start their own tasks
-        yield* Async.sleep(1)
-      })
-      const producer = Stream.withEmitter<number>(q => {
-        const enqueue = (e: number) => q.enqueue(e)
-        eventEmitter.on('event', enqueue)
+
+        emit(expected)
+
         return {
-          [Symbol.dispose]() {
-            eventEmitter.off('event', enqueue)
-            dispose(q)
-          }
+          [Symbol.dispose]: () => { disposed = true }
         }
-      })
+      }, queue).pipe(
+        collectAll,
+        Fork.unbounded,
+        Fx.runAsync
+      ).promise
 
-      const test = Fx.fx(function* () {
-        const events: number[] = []
-        const task = yield* Fork.fork(Stream.forEach(producer, a => {
-          events.push(a)
-          return Fx.unit
-        }))
-        yield* emit(0, 1, 2, 3)
-        assert.deepEqual(events, [0, 1, 2, 3])
-        yield* emit(4, 5, 6, 7)
-        assert.deepEqual(events, [0, 1, 2, 3, 4, 5, 6, 7])
-        dispose(task)
-      }).pipe(
-        Fork.unbounded
-      )
-
-      await Fx.runAsync(test).promise
+      assert.equal(r, undefined)
+      assert.deepEqual(events, expected)
+      assert.ok(disposed)
+      assert.ok(queue.disposed)
     })
   })
 

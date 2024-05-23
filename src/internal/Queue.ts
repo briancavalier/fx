@@ -6,24 +6,24 @@ export type Sink<A> = (a: A) => void
 
 export type Dequeued<A> = Variant<'fx/Queue/Dequeued', A>
 
-export type QueueDisposed = Variant<'fx/Queue/Disposed', void>
+export type Disposed = Variant<'fx/Queue/Disposed', void>
 
-const queueDisposed: QueueDisposed = { tag: 'fx/Queue/Disposed', value: undefined }
+const queueDisposed: Disposed = { tag: 'fx/Queue/Disposed', value: undefined }
 
 export interface Queue<A> extends Disposable {
   enqueue(a: A): boolean
-  dequeue(): Promise<Dequeued<A> | QueueDisposed>
+  dequeue(): Promise<Dequeued<A> | Disposed>
   readonly disposed: boolean
 }
 
 export type Enqueue<A> = Pick<Queue<A>, 'enqueue' | 'disposed' | keyof Disposable>
 export type Dequeue<A> = Pick<Queue<A>, 'dequeue' | 'disposed' | keyof Disposable>
 
-export const dequeue = <A>(q: Dequeue<A>): Fx<Async.Async, Dequeued<A> | QueueDisposed> => Async.run(() => q.dequeue())
+export const dequeue = <A>(q: Dequeue<A>): Fx<Async.Async, Dequeued<A> | Disposed> => Async.run(() => q.dequeue())
 
 export class UnboundedQueue<A> implements Queue<A> {
   private readonly items: A[] = []
-  private readonly takers: Sink<Dequeued<A> | QueueDisposed>[] = []
+  private readonly takers: Sink<Dequeued<A> | Disposed>[] = []
   private _disposed = false
 
   enqueue(a: A) {
@@ -34,11 +34,11 @@ export class UnboundedQueue<A> implements Queue<A> {
     return true
   }
 
-  async dequeue(): Promise<Dequeued<A> | QueueDisposed> {
+  async dequeue(): Promise<Dequeued<A> | Disposed> {
     if (this._disposed) return queueDisposed
 
     if (this.items.length > 0) return { tag: 'fx/Queue/Dequeued', value: this.items.shift()! } as const
-    else return new Promise<Dequeued<A> | QueueDisposed>(resolve => this.takers.push(resolve))
+    else return new Promise<Dequeued<A> | Disposed>(resolve => this.takers.push(resolve))
   }
 
   get disposed() {

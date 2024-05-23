@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import * as Fork from './Fork'
 import * as Fx from './Fx'
 import * as Stream from './Stream'
-import { UnboundedQueue } from './internal/Queue'
+import { Enqueue, UnboundedQueue } from './internal/Queue'
 import { dispose } from './internal/disposable'
 
 describe('Stream', () => {
@@ -44,31 +44,38 @@ describe('Stream', () => {
     })
   })
 
-  describe('withEmitter', () => {
-    it('adapts a callback-based API', async () => {
+  describe('fromDequeue', () => {
+    it('given queue, produces all enqueued items', async () => {
+      const expected = Array.from({ length: 10 }, (_, i) => i)
 
+      const queue = new UnboundedQueue<number>()
+
+      enqueueAllAsync(queue, expected)
+
+      const [r, events] = await Fx.runAsync(
+        Stream.fromDequeue(queue).pipe(collectAll)
+      ).promise
+
+      assert.equal(r, undefined)
+      assert.deepEqual(events, expected)
+    })
+  })
+
+  describe('withEnqueue', () => {
+    it('adapts a callback-based API', async () => {
       const expected = Array.from({ length: 10 }, (_, i) => i)
 
       const queue = new UnboundedQueue<number>()
       let disposed = false
 
       const [r, events] = await Stream.withEnqueue(q => {
-        const emit = (values: readonly number[]) => {
-          if (values.length === 0) return dispose(q)
-
-          const [a, ...rest] = values
-          q.enqueue(a)
-          setTimeout(emit, 0, rest)
-        }
-
-        emit(expected)
+        enqueueAllAsync(q, expected)
 
         return {
           [Symbol.dispose]: () => { disposed = true }
         }
       }, queue).pipe(
         collectAll,
-        Fork.unbounded,
         Fx.runAsync
       ).promise
 
@@ -152,4 +159,12 @@ function collectAll<E, A>(fx: Fx.Fx<E, A>): Fx.Fx<Stream.ExcludeStream<E>, reado
     })
     return [r, events]
   })
+}
+
+const enqueueAllAsync = <A>(queue: Enqueue<A>, values: readonly A[]) => {
+  if (values.length === 0) return dispose(queue)
+
+  const [a, ...rest] = values
+  queue.enqueue(a)
+  setTimeout(enqueueAllAsync, 0, queue, rest)
 }

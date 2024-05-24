@@ -1,4 +1,9 @@
-// Adapted from pure-rand (MIT License). Thank you @dubzzz!
+export interface UnsafeGen {
+  unsafeNext(): number
+}
+
+// #region XorhoShiro128+ generator
+// Adapted from pure-rand (MIT License)
 // See: https://github.com/dubzzz/pure-rand
 // XoroShiro128+ with a=24, b=16, c=37,
 // - https://en.wikipedia.org/wiki/Xoroshiro128%2B
@@ -8,8 +13,12 @@
  * Mutable XoroShiro128+ generator.
  * Should not be exposed in public APIs
  */
-export class XoroShiro128Plus {
+export class XoroShiro128Plus implements UnsafeGen {
   constructor(private s01: number, private s00: number, private s11: number, private s10: number) { }
+
+  static fromSeed(seed: number) {
+    return new XoroShiro128Plus(-1, ~seed, seed | 0, 0)
+  }
 
   clone(): XoroShiro128Plus {
     return new XoroShiro128Plus(this.s01, this.s00, this.s11, this.s10)
@@ -58,4 +67,37 @@ export class XoroShiro128Plus {
   }
 }
 
-export const fromSeed = (seed: number) => new XoroShiro128Plus(-1, ~seed, seed | 0, 0)
+// #endregion
+
+// #regions Random distributions
+// Adapted from pcg-random (MIT License)
+// https://github.com/thomcc/pcg-random
+
+const BIT_53 = 9007199254740992.0
+const BIT_27 = 134217728.0
+
+export const uniformFloat = (g: UnsafeGen) => {
+  const hi = (g.unsafeNext() & 67108863) * 1
+  const lo = (g.unsafeNext() & 134217727) * 1
+  return (hi * BIT_27 + lo) / BIT_53
+}
+
+export const uniformIntMax = (max: number, g: UnsafeGen) => {
+  if (!max) {
+    return g.unsafeNext()
+  }
+  max = max >>> 0
+  if ((max & (max - 1)) === 0) {
+    return g.unsafeNext() & (max - 1) // fast path for power of 2
+  }
+
+  let num = 0
+  const skew = (-max >>> 0) % max >>> 0
+  for (num = g.unsafeNext(); num < skew; num = g.unsafeNext()) {
+    // this loop will rarely execute more than twice,
+    // and is intentionally empty
+  }
+  return num % max
+}
+
+// #endregion

@@ -1,26 +1,26 @@
 import { Effect } from './Effect'
 import { Fx, fx, handle, ok } from './Fx'
-import { XoroShiro128Plus, fromSeed } from './internal/random'
+import { XoroShiro128Plus, uniformFloat, uniformIntMax } from './internal/random'
 
 /**
- * Get the next 32-bit integer.
+ * The next 32-bit integer in [0, max)
  */
-export class Int32 extends Effect('fx/Random/Int32')<void, number> { }
+export class Int extends Effect('fx/Random/Int')<number, number> { }
 
 /**
- * Get the next 32-bit integer.
+ * Get the next 32-bit integer in [0, max)
  */
-export const int32 = new Int32()
+export const int = (max: number = Number.MAX_SAFE_INTEGER) => new Int(max)
 
 /**
- * Get the next N 32-bit integers. This is more efficient than calling `int32` N times
+ * The next float in range [0, 1]
  */
-export class Int32n extends Effect('fx/Random/Int32n')<number, readonly number[]> { }
+export class Float extends Effect('fx/Random/Float')<void, number> { }
 
 /**
- * Get the next N 32-bit integers. This is more efficient than calling `int32` N times
+ * Get the next float in range [0, 1]
  */
-export const int32n = (n: number) => new Int32n(n)
+export const float = new Float()
 
 /**
  * Split the random number generator into two independent generators.
@@ -35,21 +35,17 @@ export const split = <const E, const A>(f: Fx<E, A>): Fx<E | Split, A> => fx(fun
   return yield* f2
 })
 
-type Random = Int32 | Int32n | Split
+type Random = Int | Float | Split
 
 /**
  * Random handler using the xoroshiro128+ algorithm.
  */
 export const xoroshiro128plus = (seed: number) => <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Random>, A> =>
-  runXoroShiro128Plus(fromSeed(seed), f)
+  runXoroShiro128Plus(XoroShiro128Plus.fromSeed(seed), f)
 
 const runXoroShiro128Plus = <const E, const A>(gen: XoroShiro128Plus, f: Fx<E, A>): Fx<Exclude<E, Random>, A> => f.pipe(
-  handle(Int32, _ => ok(gen.unsafeNext())),
-  handle(Int32n, n => {
-    const ns: number[] = []
-    for (let i = 0; i < n; ++i) ns.push(gen.unsafeNext())
-    return ok(ns)
-  }),
+  handle(Int, max => ok(uniformIntMax(max, gen))),
+  handle(Float, _ => ok(uniformFloat(gen))),
   handle(Split, f => {
     const gen2 = gen.clone()
     gen2.unsafeJump()

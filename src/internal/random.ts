@@ -67,6 +67,8 @@ export class XoroShiro128Plus implements UnsafeGen {
   }
 }
 
+export const generateSeed = (): number => Date.now() ^ (Math.random() * 0x100000000)
+
 // #endregion
 
 // #regions Random distributions

@@ -80,8 +80,8 @@ const BIT_27 = 134217728.0
  * Uniform float distribution in [0, 1)
  */
 export const uniformFloat = (g: UnsafeGen) => {
-  const hi = (g.unsafeNext() & 67108863) * 1
-  const lo = (g.unsafeNext() & 134217727) * 1
+  const hi = (g.unsafeNext() & 0x03ffffff) * 1
+  const lo = (g.unsafeNext() & 0x07ffffff) * 1
   return (hi * BIT_27 + lo) / BIT_53
 }
 

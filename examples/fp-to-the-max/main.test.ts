@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { Env, Fx, handle, map, ok, runSync } from '../../src'
+import { Env, Fx, Random, handle, map, ok, runSync } from '../../src'
 
-import { Print, RandomInt, Read, checkAnswer, main } from './main'
+import { Print, Read, checkAnswer, main } from './main'
 
 // -------------------------------------------------------------------
 // #region Handlers
@@ -22,7 +22,7 @@ const handleRead = ([...inputs]: readonly string[]) =>
   handle(Read, _ => ok(inputs.shift()!))
 
 const handleRandom = ([...values]: readonly number[]) =>
-  handle(RandomInt, ({ min, max }) => ok(Math.max(min, Math.min(max, values.shift()!))))
+  handle(Random.Int, max => ok(Math.min(max, values.shift()!)))
 
 // #endregion
 // -------------------------------------------------------------------
@@ -45,10 +45,9 @@ describe('checkAnswer', () => {
 // Tests are pure, no async, no promises, no side effects.
 describe('main', () => {
   it('should play the game', () => {
-    const secretNumbers = [1, 2, 3, 4]
+    const secretNumbers = [0, 1, 2, 3]
     const range = {
-      min: Math.min(...secretNumbers),
-      max: Math.max(...secretNumbers)
+      max: Math.max(...secretNumbers) + 1
     }
 
     const result = main.pipe(

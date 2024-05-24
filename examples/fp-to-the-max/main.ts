@@ -1,4 +1,4 @@
-import { Effect, Env, Fail, fx, ok } from '../../src'
+import { Effect, Env, Fail, Random, fx, ok } from '../../src'
 
 // -------------------------------------------------------------------
 // The number guessing game example from
@@ -20,14 +20,9 @@ export const toInteger = (s: string) => {
   return Number.isInteger(i) ? ok(i) : Fail.fail(`"${s}" is not an integer`)
 }
 
-export type Range = {
-  readonly min: number,
-  readonly max: number
-}
-
-export class RandomInt extends Effect('RandomInt')<Range, number> { }
-
-const nextInt = (range: Range) => new RandomInt(range)
+const generateSecret = (max: number) => fx(function* () {
+  return 1 + (yield* Random.int(max))
+})
 
 // #endregion
 
@@ -43,10 +38,10 @@ export const main = fx(function* () {
   const name = yield* read(`What's your name? `)
   yield* print(`Hello, ${name}. Welcome to the game!`)
 
-  const range = yield* Env.get<Range>()
+  const { max } = yield* Env.get<{ max: number }>()
 
   do
-    yield* play(name, range)
+    yield* play(name, max)
   while (yield* checkContinue(name))
 
   yield* print(`Thanks for playing, ${name}.`)
@@ -54,12 +49,12 @@ export const main = fx(function* () {
 
 // Play one round of the game.  Generate a number and ask the user
 // to guess it.
-const play = (name: string, range: Range) => fx(function* () {
+const play = (name: string, max: number) => fx(function* () {
   // It doesn't actually matter whether we generate the number before
   // or after the user guesses, but we'll do it here
-  const secret = yield* nextInt(range)
+  const secret = yield* generateSecret(max)
 
-  const result = yield* read(`Dear ${name}, please guess a number from ${range.min} to ${range.max}: `)
+  const result = yield* read(`Dear ${name}, please guess a number from 1 to ${max}: `)
 
   const guess = yield* toInteger(result).pipe(Fail.orElse(undefined))
   if (typeof guess !== 'number')
@@ -73,7 +68,7 @@ const play = (name: string, range: Range) => fx(function* () {
 // Ask the user if they want to play again.
 // Note that we keep asking until the user gives an answer we recognize
 const checkContinue = (name: string) => fx(function* () {
-  while(true) {
+  while (true) {
     const answer = yield* read(`Do you want to continue, ${name}? (y/n) `)
     switch (answer.trim().toLowerCase()) {
       case 'y': return true

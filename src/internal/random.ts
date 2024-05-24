@@ -76,12 +76,18 @@ export class XoroShiro128Plus implements UnsafeGen {
 const BIT_53 = 9007199254740992.0
 const BIT_27 = 134217728.0
 
+/**
+ * Uniform float distribution in [0, 1)
+ */
 export const uniformFloat = (g: UnsafeGen) => {
   const hi = (g.unsafeNext() & 67108863) * 1
   const lo = (g.unsafeNext() & 134217727) * 1
   return (hi * BIT_27 + lo) / BIT_53
 }
 
+/**
+ * Uniform int distribution in [0, max)
+ */
 export const uniformIntMax = (max: number, g: UnsafeGen) => {
   if (!max) {
     return g.unsafeNext()

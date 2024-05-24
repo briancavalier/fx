@@ -10,15 +10,15 @@ export class Int extends Effect('fx/Random/Int')<number, number> { }
 /**
  * Get the next 32-bit integer in [0, max)
  */
-export const int = (max: number = Number.MAX_SAFE_INTEGER) => new Int(max)
+export const int = (max = 0xFFFFFFFF) => new Int(max)
 
 /**
- * The next float in range [0, 1]
+ * The next float in range [0, 1)
  */
 export class Float extends Effect('fx/Random/Float')<void, number> { }
 
 /**
- * Get the next float in range [0, 1]
+ * Get the next float in range [0, 1)
  */
 export const float = new Float()
 
@@ -44,7 +44,7 @@ export const xoroshiro128plus = (seed: number) => <const E, const A>(f: Fx<E, A>
   runXoroShiro128Plus(XoroShiro128Plus.fromSeed(seed), f)
 
 const runXoroShiro128Plus = <const E, const A>(gen: XoroShiro128Plus, f: Fx<E, A>): Fx<Exclude<E, Random>, A> => f.pipe(
-  handle(Int, max => ok(uniformIntMax(max, gen))),
+  handle(Int, max => ok(uniformIntMax(max + 1, gen))),
   handle(Float, _ => ok(uniformFloat(gen))),
   handle(Split, f => {
     const gen2 = gen.clone()

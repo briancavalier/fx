@@ -65,7 +65,6 @@ describe('Random', () => {
         const r1 = f.pipe(xoroshiro128plus(seed), runSync)
         const r2 = split(f).pipe(xoroshiro128plus(seed), runSync)
 
-        console.log(r1, r2)
         assert.notDeepEqual(r1, r2)
       })
     })

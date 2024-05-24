@@ -12,9 +12,9 @@ class Read extends Effect('Read')<string, string> { }
 const read = (prompt: string) => new Read(prompt)
 
 const main = fx(function* () {
-  while(true) {
+  while (true) {
     const x = yield* read('echo> ')
-    if(!x) return
+    if (!x) return
     yield* print(x)
   }
 })

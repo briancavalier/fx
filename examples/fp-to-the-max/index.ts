@@ -27,7 +27,7 @@ const { max = 10 } = process.env
 main.pipe(
   Env.provide({ max: +max }),
   handleGenerateSecret,
-  Random.xoroshiro128plus(Date.now()),
+  Random.defaultRandom(),
   handlePrint,
   handleRead,
   runAsync

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { Env, Fx, Random, handle, map, ok, runSync } from '../../src'
+import { Env, Fx, handle, map, ok, runSync } from '../../src'
 
-import { Print, Read, checkAnswer, main } from './main'
+import { GenerateSecret, Print, Read, checkAnswer, main } from './main'
 
 // -------------------------------------------------------------------
 // #region Handlers
@@ -21,8 +21,8 @@ const handlePrint = <E, A>(f: Fx<E, A>) => {
 const handleRead = ([...inputs]: readonly string[]) =>
   handle(Read, _ => ok(inputs.shift()!))
 
-const handleRandom = ([...values]: readonly number[]) =>
-  handle(Random.Int, max => ok(Math.min(max, values.shift()!)))
+const handleGenerateSecret = ([...values]: readonly number[]) =>
+  handle(GenerateSecret, max => ok(Math.min(max, values.shift()!)))
 
 // #endregion
 // -------------------------------------------------------------------
@@ -45,13 +45,14 @@ describe('checkAnswer', () => {
 // Tests are pure, no async, no promises, no side effects.
 describe('main', () => {
   it('should play the game', () => {
-    const secretNumbers = [0, 1, 2, 3]
+    // Random.Int generates [0, max), so we need to add 1 to the max
+    const secretNumbers = [1, 2, 3, 4]
     const range = {
-      max: Math.max(...secretNumbers) + 1
+      max: Math.max(...secretNumbers)
     }
 
     const result = main.pipe(
-      handleRandom(secretNumbers),
+      handleGenerateSecret(secretNumbers),
       handleRead(['Brian', '1', 'y', '2', 'y', '3', 'y', '1', 'n']),
       handlePrint,
       Env.provide(range),

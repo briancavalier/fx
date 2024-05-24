@@ -1,4 +1,4 @@
-import { Effect, Env, Fail, Random, fx, ok } from '../../src'
+import { Effect, Env, Fail, fx, ok } from '../../src'
 
 // -------------------------------------------------------------------
 // The number guessing game example from
@@ -20,9 +20,9 @@ export const toInteger = (s: string) => {
   return Number.isInteger(i) ? ok(i) : Fail.fail(`"${s}" is not an integer`)
 }
 
-const generateSecret = (max: number) => fx(function* () {
-  return 1 + (yield* Random.int(max))
-})
+export class GenerateSecret extends Effect('GetSecret')<number, number> { }
+
+const generateSecret = (max: number) => new GenerateSecret(max)
 
 // #endregion
 

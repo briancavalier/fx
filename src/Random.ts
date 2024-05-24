@@ -15,12 +15,12 @@ export const int32 = new Int32()
 /**
  * Get the next N 32-bit integers. This is more efficient than calling `int32` N times
  */
-export class Int32s extends Effect('fx/Random/Int32s')<number, readonly number[]> { }
+export class Int32n extends Effect('fx/Random/Int32n')<number, readonly number[]> { }
 
 /**
  * Get the next N 32-bit integers. This is more efficient than calling `int32` N times
  */
-export const int32s = (n: number) => new Int32s(n)
+export const int32n = (n: number) => new Int32n(n)
 
 /**
  * Split the random number generator into two independent generators.
@@ -35,7 +35,7 @@ export const split = <const E, const A>(f: Fx<E, A>): Fx<E | Split, A> => fx(fun
   return yield* f2
 })
 
-type Random = Int32 | Int32s | Split
+type Random = Int32 | Int32n | Split
 
 /**
  * Random handler using the xoroshiro128+ algorithm.
@@ -45,7 +45,7 @@ export const xoroshiro128plus = (seed: number) => <const E, const A>(f: Fx<E, A>
 
 const runXoroShiro128Plus = <const E, const A>(gen: XoroShiro128Plus, f: Fx<E, A>): Fx<Exclude<E, Random>, A> => f.pipe(
   handle(Int32, _ => ok(gen.unsafeNext())),
-  handle(Int32s, n => {
+  handle(Int32n, n => {
     const ns: number[] = []
     for (let i = 0; i < n; ++i) ns.push(gen.unsafeNext())
     return ok(ns)

@@ -1,9 +1,13 @@
-
 // Adapted from pure-rand (MIT License). Thank you @dubzzz!
 // See: https://github.com/dubzzz/pure-rand
 // XoroShiro128+ with a=24, b=16, c=37,
 // - https://en.wikipedia.org/wiki/Xoroshiro128%2B
 // - http://prng.di.unimi.it/xoroshiro128plus.c
+
+/**
+ * Mutable XoroShiro128+ generator.
+ * Should not be exposed in public APIs
+ */
 export class XoroShiro128Plus {
   constructor(private s01: number, private s00: number, private s11: number, private s10: number) { }
 

@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { fx, runSync } from './Fx'
-import { int32, int32s, split, xoroshiro128plus } from './Random'
+import { int32, int32n, split, xoroshiro128plus } from './Random'
 
 describe('Random', () => {
   describe('xoroshiro128plus', () => {
@@ -40,7 +40,7 @@ describe('Random', () => {
     describe('int32s', () => {
       it('given same seed, generates same sequence', () => {
         const f = fx(function* () {
-          return yield* int32s(10)
+          return yield* int32n(10)
         })
 
         const seed = Date.now()
@@ -52,7 +52,7 @@ describe('Random', () => {
 
       it('given different seed, generates different sequence', () => {
         const f = fx(function* () {
-          return yield* int32s(10)
+          return yield* int32n(10)
         })
 
         const seed = Date.now()
@@ -66,7 +66,7 @@ describe('Random', () => {
     describe('split', () => {
       it('given same seed, split generates different sequence', () => {
         const f = fx(function* () {
-          return yield* int32s(10)
+          return yield* int32n(10)
         })
 
         const seed = Date.now()

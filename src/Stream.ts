@@ -1,14 +1,15 @@
 import * as Async from './Async'
-import { Effect } from './Effect'
+import * as Effect from './Effect'
 import * as Fail from './Fail'
 import * as Fork from './Fork'
 import * as Fx from './Fx'
+import * as Sink from './Sink'
 import * as Task from './Task'
 import * as Queue from './internal/Queue'
 import { dispose } from './internal/disposable'
 import { IfAny } from './internal/type'
 
-export class Stream<A> extends Effect('fx/Stream')<A, void> { }
+export class Stream<A> extends Effect.Effect('fx/Stream')<A, void> { }
 
 export type Event<T> = T extends Stream<infer A> ? A : never
 
@@ -147,3 +148,30 @@ class CurrentTask<E> {
     }
   }
 }
+
+export const to = <E2, A, R>(sink: Fx.Fx<E2 | Sink.Sink<A>, R>) => <E1>(stream: Fx.Fx<E1 | Stream<A>, R>) => Fx.fx(function* () {
+  const sii = sink[Symbol.iterator]()
+  const sti = stream[Symbol.iterator]()
+
+  let sir = sii.next()
+  let str = sti.next()
+
+  try {
+    while (true) {
+      while (!sir.done && !str.done && !Effect.is(Sink.Sink, sir.value))
+        sir = sii.next(yield sir.value)
+
+      while (!sir.done && !str.done && !Effect.is(Stream, str.value))
+        str = sti.next(yield str.value)
+
+      if (sir.done) return sir.value
+      if (str.done) return str.value
+
+      sir = sii.next((str.value as Stream<A>).arg)
+      str = sti.next()
+    }
+  } finally {
+    sti.return?.()
+    sii.return?.()
+  }
+}) as Fx.Fx<Exclude<E1, Stream<A>> | Exclude<E2, Sink.Sink<A>>, R>

@@ -29,6 +29,11 @@ export const unit = ok(undefined)
 export const map = <const A, const B>(f: (a: A) => B) =>
   <const E>(x: Fx<E, A>): Fx<E, B> => new generator.Map<E, A, B>(f, x as any) as Fx<E, B>
 
+export const flatMap = <const A, const E2, const B>(f: (a: A) => Fx<E2, B>) =>
+  <const E1>(x: Fx<E1, A>): Fx<E1 | E2, B> => fx(function* () {
+    return yield* f(yield* x)
+  })
+
 export const runAsync = <const R>(f: Fx<Async, R>): Task<R, never> =>
   runFork(f.pipe(provideAll({})), { name: 'Fx:runAsync' })
 

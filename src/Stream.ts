@@ -151,7 +151,7 @@ class CurrentTask<E> {
 
 type Sinks<E> = E extends Sink.Sink<infer A> ? A : never
 
-export const to = <E1, E2, R>(stream: Fx.Fx<E1, R>, sink: Fx.Fx<E2, R>) => Fx.fx(function* () {
+export const to = <E1, E2, R>(stream: Fx.Fx<E1, R>, sink: Fx.Fx<E2, R>): Fx.Fx<Exclude<E1, Stream<Sinks<E2>>> | Exclude<E2, Sink.Sink<any>>, R> => Fx.fx(function* () {
   const sii = sink[Symbol.iterator]()
   const sti = stream[Symbol.iterator]()
 

@@ -1,5 +1,4 @@
 import { Async } from '../Async'
-import { is } from '../Effect'
 import { Fail } from '../Fail'
 import { Fork, ForkContext } from '../Fork'
 import { Fx } from '../Fx'
@@ -18,7 +17,7 @@ export const runFork = <const E, const A>(f: Fx<E, A>, o: RunForkOptions = {}): 
   const disposables = new DisposableSet()
 
   const promise = runForkInternal(f, new Semaphore(o.maxConcurrency ?? Infinity), disposables, o.name)
-      .finally(() => disposables[Symbol.dispose]())
+    .finally(() => disposables[Symbol.dispose]())
 
   return new Task(promise, disposables)
 }
@@ -40,7 +39,7 @@ const runForkInternal = <const E, const A>(f: Fx<E, A>, s: Semaphore, disposable
     let ir = i.next()
 
     while (!ir.done) {
-      if (is(Async, ir.value)) {
+      if (Async.is(ir.value)) {
         const t = runTask(ir.value.arg)
         disposables.add(t)
         const a = await t.promise
@@ -50,7 +49,7 @@ const runForkInternal = <const E, const A>(f: Fx<E, A>, s: Semaphore, disposable
         if (disposables.disposed) return
         ir = i.next(a)
       }
-      else if (is(Fork, ir.value)) {
+      else if (Fork.is(ir.value)) {
         const t = acquireAndRunFork(ir.value.arg, s)
         disposables.add(t)
         t.promise
@@ -58,7 +57,7 @@ const runForkInternal = <const E, const A>(f: Fx<E, A>, s: Semaphore, disposable
           .catch(reject) // subtask errors should already be wrapped in TaskError
         ir = i.next(t)
       }
-      else if (is(Fail, ir.value)) return reject(ir.value.arg instanceof TaskError ? ir.value.arg : new TaskError('Unhandled failure in forked task', ir.value.arg, name))
+      else if (Fail.is(ir.value)) return reject(ir.value.arg instanceof TaskError ? ir.value.arg : new TaskError('Unhandled failure in forked task', ir.value.arg, name))
       else return reject(new TaskError('Unexpected effect in forked task', ir.value, name))
     }
     resolve(ir.value as A)

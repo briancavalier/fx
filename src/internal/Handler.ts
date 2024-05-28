@@ -1,4 +1,4 @@
-import { EffectType, is, isEffect } from '../Effect'
+import { EffectType, isEffect } from '../Effect'
 import { Fork } from '../Fork'
 import { Fx } from '../Fx'
 import { Pipeable, pipe } from './pipe'
@@ -40,10 +40,10 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable {
             const control = controls.get(ir.value._fxEffectId)
             if (control) {
               const hr = yield* control(k, ir.value.arg) as any
-              if(done) return hr
+              if (done) return hr
               done = true
               ir = i.next(hr)
-            } else if (is(Fork, ir.value)) {
+            } else if (Fork.is(ir.value)) {
               ir = i.next(yield new Fork({ ...ir.value.arg, context: [...ir.value.arg.context, this] }) as any)
             } else {
               ir = i.next(yield ir.value as any)

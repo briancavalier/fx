@@ -160,10 +160,10 @@ export const to = <E1, E2, R>(stream: Fx.Fx<E1, R>, sink: Fx.Fx<E2, R>) => Fx.fx
 
   try {
     while (true) {
-      while (!sir.done && !str.done && !Effect.is(Sink.Sink, sir.value))
+      while (!sir.done && !str.done && !Sink.Sink.is(sir.value))
         sir = sii.next(yield sir.value)
 
-      while (!sir.done && !str.done && !Effect.is(Stream, str.value))
+      while (!sir.done && !str.done && !Stream.is(str.value))
         str = sti.next(yield str.value)
 
       if (sir.done) return sir.value

@@ -1,6 +1,6 @@
 import { Fx } from './Fx'
 import { Once } from './internal/generator'
-import { Pipeable, pipe } from './internal/pipe'
+import { Pipeable, pipeThis } from './internal/pipe'
 
 export interface EffectType {
   readonly _fxEffectId: unknown
@@ -20,12 +20,11 @@ export const Effect = <const T extends string>(id: T) => class <A, R = unknown> 
   public readonly _fxEffectId = id;
   public static readonly _fxEffectId = id;
   public readonly R!: R
+  public readonly pipe = pipeThis as Pipeable['pipe']
 
   constructor(public readonly arg: A) { }
 
   returning<RR extends R>() { return this as Fx<this, RR> }
-
-  pipe() { return pipe(this, arguments) }
 
   [Symbol.iterator](): Iterator<this, R, any> {
     return new Once<this, R>(this)

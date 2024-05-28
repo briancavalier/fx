@@ -15,19 +15,19 @@ export type Event<T> = T extends Stream<infer A> ? A : never
 
 export type ExcludeStream<E> = Exclude<E, Stream<any>>
 
-export const event = <const A>(a: A) => new Stream(a)
+export const emit = <const A>(a: A) => new Stream(a)
 
 export const forEach = <E, R, E2>(fx: Fx.Fx<E, R>, f: (a: Event<E>) => Fx.Fx<E2, void>): Fx.Fx<ExcludeStream<E> | E2, R> =>
   fx.pipe(Fx.handle(Stream, a => f(a as Event<E>)))
 
 export const map = <E, A, B>(fx: Fx.Fx<E, A>, f: (a: Event<E>) => B): Fx.Fx<ExcludeStream<E> | Stream<B>, A> =>
-  forEach(fx, a => event(f(a)))
+  forEach(fx, a => emit(f(a)))
 
 export const filter: {
   <E, A, B extends Event<E>>(fx: Fx.Fx<E, A>, refinement: (a: Event<E>) => a is B): Fx.Fx<ExcludeStream<E> | Stream<B>, A>
   <E, A>(fx: Fx.Fx<E, A>, predicate: (a: Event<E>) => boolean): Fx.Fx<ExcludeStream<E> | Stream<Event<E>>, A>
 } = <E, A>(fx: Fx.Fx<E, A>, predicate: (a: Event<E>) => boolean): Fx.Fx<ExcludeStream<E> | Stream<Event<E>>, A> =>
-    forEach(fx, a => predicate(a) ? event(a) : Fx.unit)
+    forEach(fx, a => predicate(a) ? emit(a) : Fx.unit)
 
 export const switchMap = <E, X, E2>(fx: Fx.Fx<E, X>, f: (a: Event<E>) => Fx.Fx<E2, unknown>): Fx.Fx<Fork.Fork | Async.Async | ExcludeStream<E> | E2, X> =>
   Fx.bracket(
@@ -47,7 +47,7 @@ export const fromDequeue = <A>(queue: Queue.Dequeue<A>): Fx.Fx<Async.Async | Str
 
   while (!queue.disposed) {
     const next = yield* take
-    if (next.tag === 'fx/Queue/Dequeued') yield* event(next.value)
+    if (next.tag === 'fx/Queue/Dequeued') yield* emit(next.value)
   }
 })
 
@@ -70,7 +70,7 @@ export const fromIterable = <A, R>(i: IterableWithReturn<A, R>): Fx.Fx<Stream<A>
   iterator => Fx.fx(function* () {
     let result = iterator.next()
     while (!result.done) {
-      yield* event(result.value)
+      yield* emit(result.value)
       result = iterator.next()
     }
     return result.value
@@ -88,7 +88,7 @@ export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>):
     const next = Async.run(() => iterator.next())
     let result = yield* next
     while (!result.done) {
-      yield* event(result.value)
+      yield* emit(result.value)
       result = yield* next
     }
     return result.value
@@ -151,14 +151,14 @@ class CurrentTask<E> {
 
 type Sinks<E> = E extends Sink.Sink<infer A> ? A : never
 
-export const to = <E1, E2, R>(stream: Fx.Fx<E1, R>, sink: Fx.Fx<E2, R>): Fx.Fx<Exclude<E1, Stream<Sinks<E2>>> | Exclude<E2, Sink.Sink<any>>, R> => Fx.fx(function* () {
+export const to = <E1, E2, R1, R2>(stream: Fx.Fx<E1, R1>, sink: Fx.Fx<E2, R2>): Fx.Fx<Exclude<E1, Stream<Sinks<E2>>> | Exclude<E2, Sink.Sink<any>>, R2> => Fx.fx(function* () {
   const sii = sink[Symbol.iterator]()
   const sti = stream[Symbol.iterator]()
 
-  let sir = sii.next()
-  let str = sti.next()
-
   try {
+    let sir = sii.next()
+    let str = sti.next()
+
     while (true) {
       while (!sir.done && !str.done && !Sink.Sink.is(sir.value))
         sir = sii.next(yield sir.value)
@@ -167,7 +167,7 @@ export const to = <E1, E2, R>(stream: Fx.Fx<E1, R>, sink: Fx.Fx<E2, R>): Fx.Fx<E
         str = sti.next(yield str.value)
 
       if (sir.done) return sir.value
-      if (str.done) return str.value
+      if (str.done) return sii.return?.().value
 
       sir = sii.next((str.value as Stream<Sinks<E2>>).arg)
       str = sti.next()
@@ -176,4 +176,4 @@ export const to = <E1, E2, R>(stream: Fx.Fx<E1, R>, sink: Fx.Fx<E2, R>): Fx.Fx<E
     sti.return?.()
     sii.return?.()
   }
-}) as Fx.Fx<Exclude<E1, Stream<Sinks<E2>>> | Exclude<E2, Sink.Sink<any>>, R>
+}) as Fx.Fx<Exclude<E1, Stream<Sinks<E2>>> | Exclude<E2, Sink.Sink<any>>, R2>

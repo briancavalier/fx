@@ -15,14 +15,26 @@ export type Event<T> = T extends Stream<infer A> ? A : never
 
 export type ExcludeStream<E> = Exclude<E, Stream<any>>
 
+/**
+ * Emit a value
+ */
 export const emit = <const A>(a: A) => new Stream(a)
 
+/**
+ * Apply an effectul function to each value in a stream
+ */
 export const forEach = <E, R, E2>(fx: Fx.Fx<E, R>, f: (a: Event<E>) => Fx.Fx<E2, void>): Fx.Fx<ExcludeStream<E> | E2, R> =>
   fx.pipe(Fx.handle(Stream, a => f(a as Event<E>)))
 
+/**
+ * Transform each value in a stream
+ */
 export const map = <E, A, B>(fx: Fx.Fx<E, A>, f: (a: Event<E>) => B): Fx.Fx<ExcludeStream<E> | Stream<B>, A> =>
   forEach(fx, a => emit(f(a)))
 
+/**
+ * Drop values from the stream that don't satisfy the predicate
+ */
 export const filter: {
   <E, A, B extends Event<E>>(fx: Fx.Fx<E, A>, refinement: (a: Event<E>) => a is B): Fx.Fx<ExcludeStream<E> | Stream<B>, A>
   <E, A>(fx: Fx.Fx<E, A>, predicate: (a: Event<E>) => boolean): Fx.Fx<ExcludeStream<E> | Stream<Event<E>>, A>
@@ -42,6 +54,9 @@ export const switchMap = <E, X, E2>(fx: Fx.Fx<E, X>, f: (a: Event<E>) => Fx.Fx<E
     })
   )
 
+/**
+ * Create a stream that emits all values from a {@link Queue.Dequeue}
+ */
 export const fromDequeue = <A>(queue: Queue.Dequeue<A>): Fx.Fx<Async.Async | Stream<A>, void> => Fx.fx(function* () {
   const take = Queue.dequeue(queue)
 
@@ -51,6 +66,9 @@ export const fromDequeue = <A>(queue: Queue.Dequeue<A>): Fx.Fx<Async.Async | Str
   }
 })
 
+/**
+ * Create a stream that emits all values enqueued by f
+ */
 export const withEnqueue = <A>(
   f: (o: Queue.Enqueue<A>) => Disposable,
   q: Queue.Queue<A> = new Queue.UnboundedQueue()
@@ -64,6 +82,9 @@ export interface IterableWithReturn<Y, R> {
   [Symbol.iterator](): Iterator<Y, R>
 }
 
+/**
+ * Create a stream that emits all values from an Iterable
+ */
 export const fromIterable = <A, R>(i: IterableWithReturn<A, R>): Fx.Fx<Stream<A>, IfAny<R, void>> => Fx.bracket(
   Fx.sync(() => i[Symbol.iterator]()),
   iterator => Fx.ok(void iterator.return?.()),
@@ -81,6 +102,9 @@ export interface AsyncIterableWithReturn<Y, R> {
   [Symbol.asyncIterator](): AsyncIterator<Y, R>
 }
 
+/**
+ * Create a stream that emits all values from an AsyncIterable
+ */
 export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>): Fx.Fx<Async.Async | Stream<A>, R> => Fx.bracket(
   Fx.sync(() => f()[Symbol.asyncIterator]()),
   iterator => Async.run(() => iterator.return?.().then(() => { }) ?? Promise.resolve()),
@@ -151,6 +175,9 @@ class CurrentTask<E> {
 
 type Sinks<E> = E extends Sink.Sink<infer A> ? A : never
 
+/**
+ * Pipe all values from a stream into a sink.
+ */
 export const to = <E1, E2, R1, R2>(stream: Fx.Fx<E1, R1>, sink: Fx.Fx<E2, R2>): Fx.Fx<Exclude<E1, Stream<Sinks<E2>>> | Exclude<E2, Sink.Sink<any>>, R2> => Fx.fx(function* () {
   const sii = sink[Symbol.iterator]()
   const sti = stream[Symbol.iterator]()

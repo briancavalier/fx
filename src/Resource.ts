@@ -1,4 +1,4 @@
-import { Effect, is } from './Effect'
+import { Effect } from './Effect'
 import { Fx, fx, handle, unit } from './Fx'
 
 import { Fail, catchFail, fail } from './Fail'
@@ -27,7 +27,7 @@ export const scope = <const E, const A>(f: Fx<E, A>) => fx(function* () {
       handle(Acquire, ({ acquire, release }) => fx(function* () {
         const a = yield* catchFail(acquire)
 
-        if (is(Fail, a)) {
+        if (Fail.is(a)) {
           const failures = yield* releaseSafely(resources)
           return yield* fail(new AggregateError([a.arg, ...failures], 'Resource release failed'))
         }
@@ -46,7 +46,7 @@ const releaseSafely = (resources: readonly Fx<unknown, unknown>[]) => fx(functio
   const failures = [] as unknown[]
   for (const release of resources) {
     const r = yield* catchFail(release)
-    if (is(Fail, r)) failures.push(r.arg)
+    if (Fail.is(r)) failures.push(r.arg)
   }
   return failures
 })

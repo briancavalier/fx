@@ -23,6 +23,10 @@ export const Effect = <const T extends string>(id: T) => class <A, R = unknown> 
 
   constructor(public readonly arg: A) { }
 
+  static is<E extends EffectType>(this: E, x: unknown): x is InstanceType<E> {
+    return !!x && (x as any)._fxEffectId === this._fxEffectId
+  }
+
   returning<RR extends R>() { return this as Fx<this, RR> }
 
   pipe() { return pipe(this, arguments) }
@@ -34,6 +38,3 @@ export const Effect = <const T extends string>(id: T) => class <A, R = unknown> 
 
 export const isEffect = <E>(e: E): e is E & AnyEffect =>
   !!e && (e as any)._fxTypeId === EffectTypeId
-
-export const is = <const E extends EffectType>(e: E, x: unknown): x is InstanceType<E> =>
-  !!x && (x as any)._fxEffectId === e._fxEffectId

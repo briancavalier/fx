@@ -149,7 +149,9 @@ class CurrentTask<E> {
   }
 }
 
-export const to = <E2, A, R>(sink: Fx.Fx<E2 | Sink.Sink<A>, R>) => <E1>(stream: Fx.Fx<E1 | Stream<A>, R>) => Fx.fx(function* () {
+type Sinks<E> = E extends Sink.Sink<infer A> ? A : never
+
+export const to = <E1, E2, R>(stream: Fx.Fx<E1, R>, sink: Fx.Fx<E2, R>) => Fx.fx(function* () {
   const sii = sink[Symbol.iterator]()
   const sti = stream[Symbol.iterator]()
 
@@ -167,11 +169,11 @@ export const to = <E2, A, R>(sink: Fx.Fx<E2 | Sink.Sink<A>, R>) => <E1>(stream: 
       if (sir.done) return sir.value
       if (str.done) return str.value
 
-      sir = sii.next((str.value as Stream<A>).arg)
+      sir = sii.next((str.value as Stream<Sinks<E2>>).arg)
       str = sti.next()
     }
   } finally {
     sti.return?.()
     sii.return?.()
   }
-}) as Fx.Fx<Exclude<E1, Stream<A>> | Exclude<E2, Sink.Sink<A>>, R>
+}) as Fx.Fx<Exclude<E1, Stream<Sinks<E2>>> | Exclude<E2, Sink.Sink<any>>, R>

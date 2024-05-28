@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import * as Fork from './Fork'
 import * as Fx from './Fx'
+import * as Sink from './Sink'
 import * as Stream from './Stream'
 import { Enqueue, UnboundedQueue } from './internal/Queue'
 import { dispose } from './internal/disposable'
@@ -143,6 +144,59 @@ describe('Stream', () => {
       assert.deepEqual(events, inputs.flatMap(i => [i, String(i)]))
       assert.deepEqual(result.value, 42)
     })
+  })
+})
+
+describe('to', () => {
+  it('given stream < sink, has stream proportion', () => {
+    const expected = [1, 2, 3]
+    const stream = Stream.fromIterable(expected).pipe(Fx.map(_ => 'stream'))
+
+    const actual = [] as number[]
+    const sink = Fx.fx(function* () {
+      while (true) actual.push(yield* Sink.next<number>())
+    })
+
+    const r = stream.pipe(_ => Stream.to(_, sink), Fx.runSync)
+
+    assert.equal(r, 'stream')
+    assert.deepEqual(actual, expected)
+  })
+
+  it('given stream > sink, has sink proportion', () => {
+    const stream = Fx.fx(function* () {
+      let i = 1
+      while (true) yield* Stream.event(i++)
+    })
+
+    const actual = [] as number[]
+    const sink = Fx.fx(function* () {
+      let i = 3
+      while (--i >= 0) actual.push(yield* Sink.next<number>())
+      return 'sink'
+    })
+
+    const r = stream.pipe(_ => Stream.to(_, sink), Fx.runSync)
+
+    assert.equal(r, 'sink')
+    assert.deepEqual(actual, [1, 2, 3])
+  })
+
+  it('given stream ~ sink, has expected proportion and prefers sink return', () => {
+    const expected = [1, 2, 3]
+    const stream = Stream.fromIterable(expected).pipe(Fx.map(_ => 'stream'))
+
+    const actual = [] as number[]
+    const sink = Fx.fx(function* () {
+      let i = expected.length
+      while (--i >= 0) actual.push(yield* Sink.next<number>())
+      return 'sink'
+    })
+
+    const r = stream.pipe(_ => Stream.to(_, sink), Fx.runSync)
+
+    assert.equal(r, 'sink')
+    assert.deepEqual(actual, expected)
   })
 })
 

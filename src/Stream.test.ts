@@ -152,7 +152,7 @@ describe('Stream', () => {
       const expected = [1, 2, 3]
       const stream = Stream.fromIterable(expected).pipe(Fx.map(_ => 'stream'))
 
-      const actual = [] as number[]
+      const actual: number[] = []
       const sink = Fx.fx(function* () {
         while (true) actual.push(yield* Sink.next<number>())
       })
@@ -169,7 +169,7 @@ describe('Stream', () => {
         while (true) yield* Stream.event(i++)
       })
 
-      const actual = [] as number[]
+      const actual: number[] = []
       const sink = Fx.fx(function* () {
         let i = 3
         while (--i >= 0) actual.push(yield* Sink.next<number>())
@@ -186,7 +186,7 @@ describe('Stream', () => {
       const expected = [1, 2, 3]
       const stream = Stream.fromIterable(expected).pipe(Fx.map(_ => 'stream'))
 
-      const actual = [] as number[]
+      const actual: number[] = []
       const sink = Fx.fx(function* () {
         let i = expected.length
         while (--i >= 0) actual.push(yield* Sink.next<number>())

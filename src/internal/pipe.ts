@@ -305,3 +305,5 @@ export const pipe = <A>(self: A, args: IArguments): unknown => {
     }
   }
 }
+
+export function pipeThis<T>(this: T) { return pipe(this, arguments) }

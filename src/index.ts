@@ -8,6 +8,7 @@ export * as Fork from './Fork'
 export * as Log from './Log'
 export * as Random from './Random'
 export * as Resource from './Resource'
+export * as Sink from './Sink'
 export * as Stream from './Stream'
 export * as Time from './Time'
 

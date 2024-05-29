@@ -54,7 +54,7 @@ export class TimeStep {
       const time = this._monotonic + Math.max(0, at)
       const t = { at: time, task }
       this._tasks.push(t)
-      if (time < this._target) this.runTasks()
+      // if (time < this._target) this.runTasks()
 
       return ok({
         [Symbol.dispose]: () => {
@@ -97,5 +97,13 @@ export class TimeStep {
         this.runTaskLoop(resolve)
       }
     }, 0)
+  }
+}
+
+export class TimeoutDisposable implements Disposable {
+  constructor(private readonly timeout: any) { }
+
+  [Symbol.dispose]() {
+    clearTimeout(this.timeout)
   }
 }

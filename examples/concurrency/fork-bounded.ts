@@ -1,5 +1,4 @@
-import { setTimeout } from 'node:timers/promises'
-import { Async, Fork, Task, fx, runAsync } from '../../src'
+import { Async, Fork, Task, Time, fx, runAsync } from '../../src'
 
 // Number of tasks to fork
 const tasks = 4
@@ -11,7 +10,7 @@ const concurrency = 2
 
 let count = 0
 const delay = fx(function* () {
-  yield* Async.run(signal => setTimeout (1000, { signal }))
+  yield* Async.sleep(1000)
   console.log(++count, new Date().toISOString())
 })
 
@@ -24,6 +23,7 @@ const main = fx(function* () {
 })
 
 main.pipe(
+  Time.defaultTime,
   Fork.bounded(concurrency),
   runAsync
 ).promise.catch(console.error)

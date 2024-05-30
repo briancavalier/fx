@@ -11,7 +11,24 @@ export type SleepToAsync<E> = E extends Sleep ? Async.Async : never
 export interface Clock {
   readonly now: bigint
   readonly monotonic: number
-  schedule(ms: number, task: () => void): () => void
+  schedule(ms: number, task: () => void): Disposable
+}
+
+/**
+ * Clock that uses Date.now, performance.now, and setTimeout.
+ */
+export class RealClock implements Clock {
+  get now(): bigint {
+    return BigInt(Date.now())
+  }
+
+  get monotonic(): number {
+    return performance.now()
+  }
+
+  schedule(ms: number, task: () => void): Disposable {
+    return new TimeoutDisposable(setTimeout(task, Math.max(0, ms)))
+  }
 }
 
 /**
@@ -75,13 +92,10 @@ export class VirtualClock {
     return this.step(Infinity)
   }
 
-  schedule(ms: number, task: () => void): () => void {
+  schedule(ms: number, task: () => void): Disposable {
     const t = { at: this.monotonic + Math.max(0, ms), task }
     this._tasks.push(t)
-    return () => {
-      const i = this._tasks.indexOf(t)
-      if (i >= 0) this._tasks.splice(i, 1)
-    }
+    return new SpliceDisposable(this._tasks, t)
   }
 
   private clearTimeout() {
@@ -124,5 +138,14 @@ export class TimeoutDisposable implements Disposable {
 
   [Symbol.dispose]() {
     clearTimeout(this.timeout)
+  }
+}
+
+export class SpliceDisposable<A> {
+  constructor(private readonly array: A[], private readonly value: A) { }
+
+  [Symbol.dispose]() {
+    const i = this.array.indexOf(this.value)
+    if (i >= 0) this.array.splice(i, 1)
   }
 }

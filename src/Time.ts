@@ -3,10 +3,10 @@ import { Effect } from './Effect'
 import { Fx, handle, ok } from './Fx'
 import { SleepToAsync, TimeStep } from './internal/time'
 
-export class Now extends Effect('fx/Time/Now')<void, number> { }
+export class Now extends Effect('fx/Time/Now')<void, bigint> { }
 
 /**
- * Get the current system time as milliseconds since the unix epoch.
+ * Get the current system time as integer milliseconds since the unix epoch.
  * This is subject to system time caveats such as drift, Daylight Savings
  * Time, setting the system time, etc.
  */
@@ -15,8 +15,9 @@ export const now = new Now()
 export class Monotonic extends Effect('fx/Time/Monotonic')<void, number> { }
 
 /**
- * Get the elapsed time in milliseconds since some fixed point in the past.
- * This is guaranteed to be monotonic: it cannot decrease or be set/changed.
+ * Get the elapsed time in *decimal* milliseconds (i.e. with fractional microseconds)
+ * since some fixed point in the past. This is guaranteed to be monotonic: it cannot
+ * decrease or be set/changed.
  */
 export const monotonic = new Monotonic()
 
@@ -32,7 +33,7 @@ export const sleep = (millis: number) => new Sleep(millis)
  * Date.now, performance.now, and setTimeout.
  */
 export const defaultTime = <E, A>(f: Fx<E, A>): Fx<Exclude<E, Now | Monotonic | Sleep> | SleepToAsync<E>, A> => f.pipe(
-  handle(Now, () => ok(Date.now())),
+  handle(Now, () => ok(BigInt(Date.now()))),
   handle(Monotonic, () => ok(performance.now())),
   handle(Sleep, ms => Async.run(signal => {
     let resolve: () => void
@@ -63,5 +64,5 @@ export const defaultTime = <E, A>(f: Fx<E, A>): Fx<Exclude<E, Now | Monotonic | 
  * // for up to 1 second will execute
  * await s.step(1000)
  */
-export const stepTime = (nowOrigin = 0): TimeStep =>
+export const stepTime = (nowOrigin = 0n): TimeStep =>
   new TimeStep(nowOrigin)

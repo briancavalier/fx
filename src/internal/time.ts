@@ -16,14 +16,14 @@ export class TimeStep {
   private _timeout: any
   private _disposed = false
 
-  constructor(public readonly nowOrigin: number) { }
+  constructor(public readonly nowOrigin: bigint) { }
 
   get monotonic(): number {
     return this._monotonic
   }
 
-  get now(): number {
-    return this.nowOrigin + this._monotonic
+  get now(): bigint {
+    return this.nowOrigin + roundTowardZero(this._monotonic)
   }
 
   get target(): number {
@@ -108,3 +108,5 @@ export class TimeoutDisposable implements Disposable {
     clearTimeout(this.timeout)
   }
 }
+
+const roundTowardZero = (n: number): bigint => BigInt(n === 0 ? n : n > 0 ? Math.floor(n) : Math.ceil(n))

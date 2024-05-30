@@ -2,7 +2,7 @@ import * as Async from './Async'
 import { Effect } from './Effect'
 import { Fx, handle, ok } from './Fx'
 import { dispose } from './internal/disposable'
-import { Clock, RealClock, SleepToAsync } from './internal/time'
+import { Clock, RealClock } from './internal/time'
 
 export { VirtualClock } from './internal/time'
 
@@ -52,3 +52,9 @@ export const withClock = (c: Clock) => <E, A>(f: Fx<E, A>): Fx<Exclude<E, Now | 
  * Date.now, performance.now, and setTimeout.
  */
 export const defaultTime = withClock(new RealClock())
+
+/**
+ * Replace Sleep with Async
+ * @deprecated use Fx.Handle once it is merged
+ */
+type SleepToAsync<E> = E extends Sleep ? Async.Async : never

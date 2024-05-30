@@ -1,12 +1,8 @@
-import * as Async from '../Async'
-import { Sleep } from '../Time'
 
 export interface ScheduledTask {
   readonly at: number
   readonly task: () => void
 }
-
-export type SleepToAsync<E> = E extends Sleep ? Async.Async : never
 
 export interface Clock {
   readonly now: bigint

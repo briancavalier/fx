@@ -80,8 +80,8 @@ describe('time', () => {
       it('given negative duration, does not advance', async () => {
         const s = new VirtualClock(1n)
         await s.step(-1000)
-        assert.equal(s.now, 1n)
-        assert.equal(s.monotonic, 0)
+        assert.equal(s.now(), 1n)
+        assert.equal(s.monotonic(), 0)
       })
     })
 

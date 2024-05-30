@@ -51,8 +51,6 @@ export const bracket = <const IE, const FE, const E, const R, const A>(init: Fx<
   }
 })
 
-// type Exclude<T, U> = T extends U ? never : T;
-
 export type Handle<E, A, B = never> = E extends A ? B : E
 
 export const handle = <T extends EffectType, HandlerEffects>(e: T, f: (e: Arg<T>) => Fx<HandlerEffects, Answer<T>>) =>
@@ -60,12 +58,6 @@ export const handle = <T extends EffectType, HandlerEffects>(e: T, f: (e: Arg<T>
     (isHandler(fx)
       ? new Handler(fx, new Map(fx.handlers).set(e._fxEffectId, f), fx.controls)
       : new Handler(fx, new Map().set(e._fxEffectId, f), empty)) as Handler<Handle<E, InstanceType<T>, HandlerEffects>, A>
-
-// export const handleIso = <T extends EffectType>(e: T, f: (e: Arg<T>) => Fx<InstanceType<T>, Answer<T>>) =>
-//   <const E, const A>(fx: Fx<E, A>): Handler<E, A> =>
-//     (isHandler(fx)
-//       ? new Handler(fx, new Map(fx.handlers).set(e._fxEffectId, f), fx.controls)
-//       : new Handler(fx, new Map().set(e._fxEffectId, f), empty)) as Handler<E, A>
 
 export const control = <T extends EffectType, HandlerEffects, R = never>(e: T, f: <A>(resume: (a: Answer<T>) => A, e: Arg<T>) => Fx<HandlerEffects, R>) =>
   <const E, const A>(fx: Fx<E, A>): Handler<Exclude<E, InstanceType<T>> | HandlerEffects, A> =>

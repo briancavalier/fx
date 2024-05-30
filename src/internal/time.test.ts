@@ -21,7 +21,7 @@ describe('time', () => {
     })
 
     describe('step', () => {
-      it('advances time by specified amount', async () => {
+      it('given duration >= 0, advances time by specified amount', async () => {
         const results: (readonly [number, bigint])[] = []
         const test = fx(function* () {
           yield* Time.sleep(1000)
@@ -51,7 +51,7 @@ describe('time', () => {
         assert.deepEqual(r, [4000, 4001n])
       })
 
-      it('runs all ready tasks', async () => {
+      it('given duration >= 0, runs all ready tasks', async () => {
         const results: (readonly [number, bigint])[] = []
         const test = fx(function* () {
           yield* Time.sleep(1000)
@@ -75,6 +75,13 @@ describe('time', () => {
 
         const r = await p
         assert.deepEqual(r, [4000, 4001n])
+      })
+
+      it('given negative duration, does not advance', async () => {
+        const s = new TimeStep(1n)
+        await s.step(-1000)
+        assert.equal(s.now, 1n)
+        assert.equal(s.monotonic, 0)
       })
     })
 

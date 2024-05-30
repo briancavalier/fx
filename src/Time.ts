@@ -1,7 +1,9 @@
 import * as Async from './Async'
 import { Effect } from './Effect'
 import { Fx, handle, ok } from './Fx'
-import { SleepToAsync, TimeStep } from './internal/time'
+import { Clock, SleepToAsync } from './internal/time'
+
+export { VirtualClock } from './internal/time'
 
 export class Now extends Effect('fx/Time/Now')<void, bigint> { }
 
@@ -47,22 +49,13 @@ export const defaultTime = <E, A>(f: Fx<E, A>): Fx<Exclude<E, Now | Monotonic | 
 ) as Fx<Exclude<E, Now | Monotonic | Sleep> | SleepToAsync<E>, A>
 
 /**
- * Handle Now, Monotonic, and Schedule using a TimeStep instance that
- * allows time to be controlled manually.  Now will start at 0 or the
- * provided origin, and monotonic time will always start at 0. Time
- * must be advanced explicitly by calling the step(milliseconds) or
- * waitAll() methods.
- *
- * @example
- * // now and monotonic start at 0
- * const s = stepTime()
- *
- * myProgramThatUsesTime.pipe(s.handle, runAsync)
- *
- * // advance time by 1 second
- * // now and monotonic will be 1000, and any tasks scheduled
- * // for up to 1 second will execute
- * await s.step(1000)
+ * Handle Now, Monotonic, and Schedule using the provided Clock
  */
-export const stepTime = (nowOrigin = 0n): TimeStep =>
-  new TimeStep(nowOrigin)
+export const withClock = (c: Clock) => <E, A>(f: Fx<E, A>): Fx<Exclude<E, Now | Monotonic | Sleep> | SleepToAsync<E>, A> => f.pipe(
+  handle(Now, () => ok(c.now)),
+  handle(Monotonic, () => ok(c.monotonic)),
+  handle(Sleep, ms => Async.run(signal => new Promise(resolve => {
+    const cancel = c.schedule(ms, resolve)
+    signal.addEventListener('abort', cancel, { once: true })
+  })))
+) as Fx<Exclude<E, Now | Monotonic | Sleep> | SleepToAsync<E>, A>

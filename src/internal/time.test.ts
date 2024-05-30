@@ -3,20 +3,20 @@ import { describe, it } from 'node:test'
 import { fx, runAsync } from '../Fx'
 import * as Time from '../Time'
 import { dispose } from './disposable'
-import { TimeStep } from './time'
+import { VirtualClock } from './time'
 
 describe('time', () => {
-  describe('TimeStep', () => {
+  describe('VirtualClock', () => {
     it('now starts at specified origin', async () => {
       const origin = BigInt(Date.now())
-      const s = new TimeStep(origin)
-      const r = await Time.now.pipe(s.handle, runAsync).promise
+      const schedule = new VirtualClock(origin)
+      const r = await Time.now.pipe(Time.withClock(s), runAsync).promise
       assert.equal(r, origin)
     })
 
     it('monotonic starts at 0', async () => {
-      const s = new TimeStep(BigInt(Date.now()))
-      const r = await Time.monotonic.pipe(s.handle, runAsync).promise
+      const c = new VirtualClock(BigInt(Date.now()))
+      const r = await Time.monotonic.pipe(Time.withClock(c), runAsync).promise
       assert.equal(r, 0)
     })
 
@@ -34,19 +34,19 @@ describe('time', () => {
           return [yield* Time.monotonic, yield* Time.now]
         })
 
-        const s = new TimeStep(1n)
-        const p = test.pipe(s.handle, runAsync).promise
+        const c = new VirtualClock(1n)
+        const p = test.pipe(Time.withClock(c), runAsync).promise
 
-        await s.step(1000)
+        await c.step(1000)
         assert.deepEqual(results, [[1000, 1001n]])
 
-        await s.step(1000)
+        await c.step(1000)
         assert.deepEqual(results, [[1000, 1001n], [2000, 2001n]])
 
-        await s.step(1000)
+        await c.step(1000)
         assert.deepEqual(results, [[1000, 1001n], [2000, 2001n], [3000, 3001n]])
 
-        await s.step(1000)
+        await c.step(1000)
         const r = await p
         assert.deepEqual(r, [4000, 4001n])
       })
@@ -64,13 +64,13 @@ describe('time', () => {
           return [yield* Time.monotonic, yield* Time.now]
         })
 
-        const s = new TimeStep(1n)
-        const p = test.pipe(s.handle, runAsync).promise
+        const c = new VirtualClock(1n)
+        const p = test.pipe(Time.withClock(c), runAsync).promise
 
-        await s.step(1000)
+        await c.step(1000)
         assert.deepEqual(results, [[1000, 1001n]])
 
-        await s.step(3000)
+        await c.step(3000)
         assert.deepEqual(results, [[1000, 1001n], [2000, 2001n], [3000, 3001n]])
 
         const r = await p
@@ -78,7 +78,7 @@ describe('time', () => {
       })
 
       it('given negative duration, does not advance', async () => {
-        const s = new TimeStep(1n)
+        const s = new VirtualClock(1n)
         await s.step(-1000)
         assert.equal(s.now, 1n)
         assert.equal(s.monotonic, 0)
@@ -99,10 +99,10 @@ describe('time', () => {
           return [yield* Time.monotonic, yield* Time.now]
         })
 
-        const s = new TimeStep(1n)
-        const p = test.pipe(s.handle, runAsync).promise
+        const c = new VirtualClock(1n)
+        const p = test.pipe(Time.withClock(c), runAsync).promise
 
-        await s.waitAll()
+        await c.waitAll()
         assert.deepEqual(results, [[1000, 1001n], [2000, 2001n], [3000, 3001n]])
 
         const r = await p
@@ -124,15 +124,15 @@ describe('time', () => {
           return [yield* Time.monotonic, yield* Time.now]
         })
 
-        const s = new TimeStep(1n)
-        const p = test.pipe(s.handle, runAsync).promise
+        const c = new VirtualClock(1n)
+        const p = test.pipe(Time.withClock(c), runAsync).promise
 
-        await s.step(1000)
+        await c.step(1000)
         assert.deepEqual(results, [[1000, 1001n]])
 
-        dispose(s)
+        dispose(c)
 
-        await s.waitAll()
+        await c.waitAll()
         assert.deepEqual(results, [[1000, 1001n]])
       })
     })

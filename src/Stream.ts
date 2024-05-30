@@ -43,7 +43,7 @@ export const filter: {
 
 export const switchMap = <E, X, E2>(fx: Fx.Fx<E, X>, f: (a: Event<E>) => Fx.Fx<E2, unknown>): Fx.Fx<ExcludeStream<E, Fork.Fork | Async.Async | E2>, X> =>
   Fx.bracket(
-    Fx.sync(() => new CurrentTask<ExcludeStream<E> | E2>()),
+    Fx.sync(() => new CurrentTask<E2>()),
     task => Fx.sync(() => dispose(task)),
     task => Fx.fx(function* () {
       const x = yield* forEach(fx, a => task.run(f(a)))

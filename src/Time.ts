@@ -1,6 +1,6 @@
 import * as Async from './Async'
 import { Effect } from './Effect'
-import { Fx, handle, ok } from './Fx'
+import { Fx, Handle, handle, ok } from './Fx'
 import { dispose } from './internal/disposable'
 import { Clock, RealClock } from './internal/time'
 
@@ -34,7 +34,7 @@ export const sleep = (millis: number) => new Sleep(millis)
 /**
  * Handle Now, Monotonic, and Schedule using the provided Clock
  */
-export const withClock = (c: Clock) => <E, A>(f: Fx<E, A>): Fx<Exclude<E, Now | Monotonic | Sleep> | SleepToAsync<E>, A> => f.pipe(
+export const withClock = (c: Clock) => <E, A>(f: Fx<E, A>): Fx<Handle<Handle<E, Sleep, Async.Async>, Now | Monotonic>, A> => f.pipe(
   handle(Now, () => ok(c.now)),
   handle(Monotonic, () => ok(c.monotonic)),
   handle(Sleep, ms => Async.run(signal => new Promise(resolve => {
@@ -45,16 +45,10 @@ export const withClock = (c: Clock) => <E, A>(f: Fx<E, A>): Fx<Exclude<E, Now | 
     const disposeOnAbort = () => dispose(d)
     signal.addEventListener('abort', disposeOnAbort, { once: true })
   })))
-) as Fx<Exclude<E, Now | Monotonic | Sleep> | SleepToAsync<E>, A>
+) as Fx<Handle<Handle<E, Sleep, Async.Async>, Now | Monotonic>, A>
 
 /**
  * Handle Now, Monotonic, and Schedule using standard APIs:
  * Date.now, performance.now, and setTimeout.
  */
 export const defaultTime = withClock(new RealClock())
-
-/**
- * Replace Sleep with Async
- * @deprecated use Fx.Handle once it is merged
- */
-type SleepToAsync<E> = E extends Sleep ? Async.Async : never

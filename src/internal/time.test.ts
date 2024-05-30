@@ -1,22 +1,22 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { fx, runAsync } from '../Fx'
+import { fx, runAsync, runSync } from '../Fx'
 import * as Time from '../Time'
 import { dispose } from './disposable'
 import { VirtualClock } from './time'
 
 describe('time', () => {
   describe('VirtualClock', () => {
-    it('now starts at specified origin', async () => {
+    it('now starts at specified origin', () => {
       const origin = BigInt(Date.now())
       const c = new VirtualClock(origin)
-      const r = await Time.now.pipe(Time.withClock(c), runAsync).promise
+      const r = Time.now.pipe(Time.withClock(c), runSync)
       assert.equal(r, origin)
     })
 
-    it('monotonic starts at 0', async () => {
+    it('monotonic starts at 0', () => {
       const c = new VirtualClock(BigInt(Date.now()))
-      const r = await Time.monotonic.pipe(Time.withClock(c), runAsync).promise
+      const r = Time.monotonic.pipe(Time.withClock(c), runSync)
       assert.equal(r, 0)
     })
 

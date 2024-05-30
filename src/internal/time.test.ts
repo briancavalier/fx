@@ -9,8 +9,8 @@ describe('time', () => {
   describe('VirtualClock', () => {
     it('now starts at specified origin', async () => {
       const origin = BigInt(Date.now())
-      const schedule = new VirtualClock(origin)
-      const r = await Time.now.pipe(Time.withClock(s), runAsync).promise
+      const c = new VirtualClock(origin)
+      const r = await Time.now.pipe(Time.withClock(c), runAsync).promise
       assert.equal(r, origin)
     })
 

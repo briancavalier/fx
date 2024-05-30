@@ -1,41 +1,41 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { fx, runAsync, runSync } from '../Fx'
-import * as Time from '../Time'
 import { dispose } from './disposable'
-import { VirtualClock } from './time'
+import { Clock, VirtualClock } from './time'
+
+const sleep = (c: Clock, ms: number) =>
+  new Promise<void>(resolve => c.schedule(ms, resolve))
 
 describe('time', () => {
   describe('VirtualClock', () => {
     it('now starts at specified origin', () => {
       const origin = BigInt(Date.now())
       const c = new VirtualClock(origin)
-      const r = Time.now.pipe(Time.withClock(c), runSync)
-      assert.equal(r, origin)
+      assert.equal(c.now, origin)
     })
 
     it('monotonic starts at 0', () => {
       const c = new VirtualClock(BigInt(Date.now()))
-      const r = Time.monotonic.pipe(Time.withClock(c), runSync)
-      assert.equal(r, 0)
+      assert.equal(c.monotonic, 0)
     })
 
     describe('step', () => {
       it('given duration >= 0, advances time by specified amount', async () => {
         const results: (readonly [number, bigint])[] = []
-        const test = fx(function* () {
-          yield* Time.sleep(1000)
-          results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Time.sleep(1000)
-          results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Time.sleep(1000)
-          results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Time.sleep(1000)
-          return [yield* Time.monotonic, yield* Time.now]
-        })
+
+        const test = async (c: Clock, progress: (readonly [number, bigint])[]) => {
+          await sleep(c, 1000)
+          progress.push([c.monotonic, c.now])
+          await sleep(c, 1000)
+          progress.push([c.monotonic, c.now])
+          await sleep(c, 1000)
+          progress.push([c.monotonic, c.now])
+          await sleep(c, 1000)
+          return [c.monotonic, c.now]
+        }
 
         const c = new VirtualClock(1n)
-        const p = test.pipe(Time.withClock(c), runAsync).promise
+        const p = test(c, results)
 
         await c.step(1000)
         assert.deepEqual(results, [[1000, 1001n]])
@@ -53,19 +53,20 @@ describe('time', () => {
 
       it('given duration >= 0, runs all ready tasks', async () => {
         const results: (readonly [number, bigint])[] = []
-        const test = fx(function* () {
-          yield* Time.sleep(1000)
-          results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Time.sleep(1000)
-          results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Time.sleep(1000)
-          results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Time.sleep(1000)
-          return [yield* Time.monotonic, yield* Time.now]
-        })
+
+        const test = async (c: Clock, progress: (readonly [number, bigint])[]) => {
+          await sleep(c, 1000)
+          progress.push([c.monotonic, c.now])
+          await sleep(c, 1000)
+          progress.push([c.monotonic, c.now])
+          await sleep(c, 1000)
+          progress.push([c.monotonic, c.now])
+          await sleep(c, 1000)
+          return [c.monotonic, c.now]
+        }
 
         const c = new VirtualClock(1n)
-        const p = test.pipe(Time.withClock(c), runAsync).promise
+        const p = test(c, results)
 
         await c.step(1000)
         assert.deepEqual(results, [[1000, 1001n]])
@@ -88,19 +89,20 @@ describe('time', () => {
     describe('waitAll', () => {
       it('runs all remaining tasks', async () => {
         const results: (readonly [number, bigint])[] = []
-        const test = fx(function* () {
-          yield* Time.sleep(1000)
-          results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Time.sleep(1000)
-          results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Time.sleep(1000)
-          results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Time.sleep(1000)
-          return [yield* Time.monotonic, yield* Time.now]
-        })
+
+        const test = async (c: Clock, progress: (readonly [number, bigint])[]) => {
+          await sleep(c, 1000)
+          progress.push([c.monotonic, c.now])
+          await sleep(c, 1000)
+          progress.push([c.monotonic, c.now])
+          await sleep(c, 1000)
+          progress.push([c.monotonic, c.now])
+          await sleep(c, 1000)
+          return [c.monotonic, c.now]
+        }
 
         const c = new VirtualClock(1n)
-        const p = test.pipe(Time.withClock(c), runAsync).promise
+        const p = test(c, results)
 
         await c.waitAll()
         assert.deepEqual(results, [[1000, 1001n], [2000, 2001n], [3000, 3001n]])
@@ -113,19 +115,20 @@ describe('time', () => {
     describe('[Symbol.dispose]', () => {
       it('drops all remaining tasks', async () => {
         const results: (readonly [number, bigint])[] = []
-        const test = fx(function* () {
-          yield* Time.sleep(1000)
-          results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Time.sleep(1000)
-          results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Time.sleep(1000)
-          results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Time.sleep(1000)
-          return [yield* Time.monotonic, yield* Time.now]
-        })
+
+        const test = async (c: Clock, progress: (readonly [number, bigint])[]) => {
+          await sleep(c, 1000)
+          progress.push([c.monotonic, c.now])
+          await sleep(c, 1000)
+          progress.push([c.monotonic, c.now])
+          await sleep(c, 1000)
+          progress.push([c.monotonic, c.now])
+          await sleep(c, 1000)
+          return [c.monotonic, c.now]
+        }
 
         const c = new VirtualClock(1n)
-        const p = test.pipe(Time.withClock(c), runAsync).promise
+        const p = test(c, results)
 
         await c.step(1000)
         assert.deepEqual(results, [[1000, 1001n]])

@@ -1,4 +1,4 @@
-import { Async, Fork, Task, Time, fx, runAsync } from '../../src'
+import { Fork, Task, Time, fx, runAsync } from '../../src'
 
 // Number of tasks to fork
 const tasks = 4
@@ -10,7 +10,7 @@ const concurrency = 2
 
 let count = 0
 const delay = fx(function* () {
-  yield* Async.sleep(1000)
+  yield* Time.sleep(1000)
   console.log(++count, new Date().toISOString())
 })
 

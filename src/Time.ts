@@ -1,6 +1,7 @@
+import * as Async from './Async'
 import { Effect } from './Effect'
 import { Fx, handle, ok } from './Fx'
-import { ScheduledTask, TimeStep, TimeoutDisposable } from './internal/time'
+import { SleepToAsync, TimeStep } from './internal/time'
 
 export class Now extends Effect('fx/Time/Now')<void, number> { }
 
@@ -19,22 +20,30 @@ export class Monotonic extends Effect('fx/Time/Monotonic')<void, number> { }
  */
 export const monotonic = new Monotonic()
 
-export class Schedule extends Effect('fx/Time/Schedule')<ScheduledTask, Disposable> { }
+export class Sleep extends Effect('fx/Time/Sleep')<number, void> { }
 
 /**
- * Schedule a task to run after a specified number of milliseconds.
+ * Delay the current fork by the specified number of milliseconds.
  */
-export const schedule = (t: ScheduledTask) => new Schedule(t)
+export const sleep = (millis: number) => new Sleep(millis)
 
 /**
  * Handle Now, Monotonic, and Schedule using standard platform APIs:
  * Date.now, performance.now, and setTimeout.
  */
-export const defaultTime = <E, A>(f: Fx<E, A>): Fx<Exclude<E, Now | Monotonic | Schedule>, A> => f.pipe(
+export const defaultTime = <E, A>(f: Fx<E, A>): Fx<Exclude<E, Now | Monotonic | Sleep> | SleepToAsync<E>, A> => f.pipe(
   handle(Now, () => ok(Date.now())),
   handle(Monotonic, () => ok(performance.now())),
-  handle(Schedule, ({ at, task }) => ok(new TimeoutDisposable(setTimeout(task, at))))
-) as Fx<Exclude<E, Now | Monotonic | Schedule>, A>
+  handle(Sleep, ms => Async.run(signal => {
+    let resolve: () => void
+    const p = new Promise<void>(r => resolve = r)
+      .finally(() => signal.removeEventListener('abort', abortTimeout))
+    const t = setTimeout(resolve!, ms)
+    const abortTimeout = () => clearTimeout(t)
+    signal.addEventListener('abort', abortTimeout, { once: true })
+    return p
+  }))
+) as Fx<Exclude<E, Now | Monotonic | Sleep> | SleepToAsync<E>, A>
 
 /**
  * Handle Now, Monotonic, and Schedule using a TimeStep instance that

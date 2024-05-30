@@ -1,10 +1,13 @@
+import * as Async from '../Async'
 import { Fx, handle, ok } from '../Fx'
-import { Monotonic, Now, Schedule } from '../Time'
+import { Monotonic, Now, Sleep } from '../Time'
 
 export interface ScheduledTask {
   readonly at: number
   readonly task: () => void
 }
+
+export type SleepToAsync<E> = E extends Sleep ? Async.Async : never
 
 export class TimeStep {
   private _monotonic = 0
@@ -47,22 +50,21 @@ export class TimeStep {
     return this.step(Infinity)
   }
 
-  handle = <E, A>(f: Fx<E, A>): Fx<Exclude<E, Now | Monotonic | Schedule>, A> => f.pipe(
+  handle = <E, A>(f: Fx<E, A>): Fx<Exclude<E, Now | Monotonic | Sleep> | SleepToAsync<E>, A> => f.pipe(
     handle(Now, () => ok(this.now)),
     handle(Monotonic, () => ok(this.monotonic)),
-    handle(Schedule, ({ at, task }) => {
-      const time = this._monotonic + Math.max(0, at)
-      const t = { at: time, task }
-      this._tasks.push(t)
-
-      return ok({
-        [Symbol.dispose]: () => {
+    handle(Sleep, ms => {
+      return Async.run(signal => new Promise<void>(resolve => {
+        const time = this._monotonic + Math.max(0, ms)
+        const t = { at: time, task: resolve }
+        this._tasks.push(t)
+        signal.addEventListener('abort', () => {
           const i = this._tasks.indexOf(t)
           if (i >= 0) this._tasks.splice(i, 1)
-        }
-      })
+        })
+      }))
     })
-  ) as Fx<Exclude<E, Now | Monotonic | Schedule>, A>
+  ) as Fx<Exclude<E, Now | Monotonic | Sleep> | SleepToAsync<E>, A>
 
   private clearTimeout() {
     if (this._timeout) {

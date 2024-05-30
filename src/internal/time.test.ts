@@ -25,13 +25,13 @@ describe('time', () => {
       it('advances time by specified amount', async () => {
         const results: (readonly [number, number])[] = []
         const test = fx(function* () {
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           return [yield* Time.monotonic, yield* Time.now]
         })
 
@@ -55,13 +55,13 @@ describe('time', () => {
       it('runs all ready tasks', async () => {
         const results: (readonly [number, number])[] = []
         const test = fx(function* () {
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           return [yield* Time.monotonic, yield* Time.now]
         })
 
@@ -83,13 +83,13 @@ describe('time', () => {
       it('runs all remaining tasks', async () => {
         const results: (readonly [number, number])[] = []
         const test = fx(function* () {
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           return [yield* Time.monotonic, yield* Time.now]
         })
 
@@ -108,13 +108,13 @@ describe('time', () => {
       it('drops all remaining tasks', async () => {
         const results: (readonly [number, number])[] = []
         const test = fx(function* () {
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           results.push([yield* Time.monotonic, yield* Time.now])
-          yield* Async.sleep(1000)
+          yield* Time.sleep(1000)
           return [yield* Time.monotonic, yield* Time.now]
         })
 

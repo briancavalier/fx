@@ -1,4 +1,4 @@
-import { Sink, Stream, flatMap, fx, ok, runSync } from '../src'
+import { Sink, Stream, flatMap, fx, ok, runSync } from '../../src'
 
 // From Effect-TS discord
 // https://discord.com/channels/795981131316985866/1125094089281511474/1245070996621365318

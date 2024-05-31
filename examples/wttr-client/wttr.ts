@@ -10,7 +10,7 @@ export type Weather = {
 
 export type Conditions = {
   readonly date: string,
-  readonly avgTempF: string
+  readonly avgtempF: string
 }
 
 export class GetWeather extends Effect('Wttr/GetWeather')<WeatherQuery, Weather> { }

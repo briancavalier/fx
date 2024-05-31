@@ -6,7 +6,7 @@ import { Clock, RealClock } from './internal/time'
 
 export { VirtualClock } from './internal/time'
 
-export class Now extends Effect('fx/Time/Now')<void, bigint> { }
+export class Now extends Effect('fx/Time/Now')<void, number> { }
 
 /**
  * Get the current system time as integer milliseconds since the unix epoch.
@@ -18,7 +18,7 @@ export const now = new Now()
 export class Monotonic extends Effect('fx/Time/Monotonic')<void, number> { }
 
 /**
- * Get the elapsed time in *decimal* milliseconds (i.e. with fractional microseconds)
+ * Get the elapsed time in *decimal* milliseconds with fractional microseconds
  * since some fixed point in the past. This is guaranteed to be monotonic: it cannot
  * decrease or be set/changed.
  */

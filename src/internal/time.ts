@@ -5,7 +5,7 @@ export interface ScheduledTask {
 }
 
 export interface Clock {
-  readonly now: bigint
+  readonly now: number
   readonly monotonic: number
   schedule(ms: number, task: () => void): Disposable
 }
@@ -14,8 +14,8 @@ export interface Clock {
  * Clock that uses Date.now, performance.now, and setTimeout.
  */
 export class RealClock implements Clock {
-  get now(): bigint {
-    return BigInt(Date.now())
+  get now(): number {
+    return Date.now()
   }
 
   get monotonic(): number {
@@ -23,7 +23,7 @@ export class RealClock implements Clock {
   }
 
   schedule(ms: number, task: () => void): Disposable {
-    return new TimeoutDisposable(setTimeout(task, Math.max(0, ms)))
+    return new TimeoutDisposable(setTimeout(task, ms))
   }
 }
 
@@ -47,21 +47,21 @@ export class RealClock implements Clock {
  *
  * // '1 second has passed'
  */
-export class VirtualClock {
+export class VirtualClock implements Clock {
   private _monotonic = 0
   private _target = 0
   private _tasks: ScheduledTask[] = []
   private _timeout: any
   private _disposed = false
 
-  constructor(public readonly nowOrigin = 0n) { }
+  constructor(public readonly nowOrigin = 0) { }
 
   get monotonic(): number {
     return this._monotonic
   }
 
-  get now(): bigint {
-    return this.nowOrigin + BigInt(Math.floor(this._monotonic))
+  get now(): number {
+    return this.nowOrigin + Math.floor(this._monotonic)
   }
 
   get target(): number {

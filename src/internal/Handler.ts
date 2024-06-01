@@ -1,7 +1,7 @@
 import { EffectType, isEffect } from '../Effect'
 import { Fork } from '../Fork'
 import { Fx } from '../Fx'
-import { Pipeable, pipe } from './pipe'
+import { Pipeable, pipeThis } from './pipe'
 
 export type Answer<E extends EffectType> = InstanceType<E>['R']
 export type Arg<E extends EffectType> = InstanceType<E>['arg']
@@ -10,14 +10,13 @@ const HandlerTypeId = Symbol('fx/Handler')
 
 export class Handler<E, A> implements Fx<E, A>, Pipeable {
   public readonly _fxTypeId = HandlerTypeId
+  public readonly pipe = pipeThis as Pipeable['pipe']
 
   constructor(
     public readonly fx: Fx<E, A>,
     public readonly handlers: ReadonlyMap<unknown, (e: unknown) => Fx<unknown, unknown>>,
     public readonly controls: ReadonlyMap<unknown, (resume: (a: any) => unknown, e: unknown) => Fx<unknown, unknown>>
   ) { }
-
-  pipe() { return pipe(this, arguments) }
 
   *[Symbol.iterator](): Iterator<E, A> {
     let done = true

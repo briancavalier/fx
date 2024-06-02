@@ -1,7 +1,7 @@
-import { Async, run } from './Async'
+import { Async, promise } from './Async'
 
 import { Fail, fail } from './Fail'
-import { Fx, fx, ok } from './Fx'
+import { Fx, flatMap, ok } from './Fx'
 
 export class Task<A, E> {
   private disposed = false
@@ -16,15 +16,14 @@ export class Task<A, E> {
   }
 }
 
-export const wait = <const A, const E>(t: Task<A, E>) => fx(function* () {
-  const r = yield* run<Fx<E | Fail<unknown>, A>>(
+export const toPromise = <A, E>(t: Task<A, E>): Promise<A> => t.promise
+
+export const wait = <const A, const E>(t: Task<A, E>): Fx<Extract<E, Fail<any>> | Async, A> =>
+  promise<Fx<Extract<E, Fail<any>>, A>>(
     s => new Promise(resolve => void t.promise.then(
       a => { s.aborted || resolve(ok(a)) },
-      e => { s.aborted || resolve(fail(e) as Fail<unknown>) }
-    )))
-
-  return yield* r
-}) as Fx<Extract<E, Fail<any>> | Async, A>
+      e => { s.aborted || resolve(fail(e) as any) }
+    ))).pipe(flatMap(r => r))
 
 type Result<P> = P extends Task<infer A, unknown> ? A : never
 type Errors<P> = P extends Task<unknown, infer E> ? E : never

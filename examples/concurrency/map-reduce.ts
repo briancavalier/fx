@@ -1,5 +1,5 @@
 import { setTimeout } from 'node:timers/promises'
-import { Async, Fork, Fx, Task, fx, ok, runAsync } from '../../src'
+import { Async, Fork, Fx, Task, fx, ok, runToTask } from '../../src'
 
 // Concurrent map-reduce
 // Splits the input in half and runs mapReduce on each half concurrently
@@ -20,7 +20,7 @@ const mapReduce = <A, B, EM, ER>(inputs: readonly A[], map: (a: A) => Fx<EM, B>,
 
 // Simulate a long running computation or network request
 // for the mapping operation
-const delay = <const A>(ms: number, a: A) => Async.run(
+const delay = <const A>(ms: number, a: A) => Async.promise(
   signal => setTimeout(ms, a, { signal })
 )
 
@@ -31,7 +31,7 @@ const inputs = Array.from({ length: 1000 }, (_, i) => i)
 // This should take a little over 1 second, not inputs.length seconds
 const start = performance.now()
 mapReduce(inputs, i => delay(1000, i + 1), (a, b) => ok(a + b), 0).pipe(
-  Fork.unbounded, runAsync
+  Fork.unbounded, runToTask
 ).promise.then(result =>
   console.log(`result: ${result}, elapsed: ${performance.now() - start}ms`)
 )

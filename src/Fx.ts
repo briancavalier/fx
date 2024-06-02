@@ -1,7 +1,8 @@
 import { Async } from './Async'
 import { EffectType } from './Effect'
 import { provideAll } from './Env'
-import { Task } from './Task'
+import { Fail } from './Fail'
+import { Task, toPromise } from './Task'
 import { Answer, Arg, Handler, empty, isHandler } from './internal/Handler'
 import * as generator from './internal/generator'
 import { Pipeable } from './internal/pipe'
@@ -24,6 +25,17 @@ export const ok = <const A>(a: A): Fx<never, A> => new generator.Ok(a)
 
 export const sync = <const A>(f: () => A): Fx<never, A> => new generator.Sync(f)
 
+export const trySync: {
+  <const A, const E>(f: () => A): Fx<Fail<unknown>, A>
+  <const A, const E>(f: () => A, catchError: (e: unknown) => E): Fx<Fail<E>, A>
+} = <const A, const E>(f: () => A, catchError?: (e: unknown) => E) => fx(function* () {
+  try {
+    return f()
+  } catch (e) {
+    return yield* new Fail(catchError ? catchError(e) : e)
+  }
+})
+
 export const unit = ok(undefined)
 
 export const map = <const A, const B>(f: (a: A) => B) =>
@@ -34,22 +46,30 @@ export const flatMap = <const A, const E2, const B>(f: (a: A) => Fx<E2, B>) =>
     return yield* f(yield* x)
   })
 
-export const runAsync = <const R>(f: Fx<Async, R>): Task<R, never> =>
+export const runToTask = <const R>(f: Fx<Async, R>): Task<R, never> =>
   runFork(f.pipe(provideAll({})), { name: 'Fx:runAsync' })
 
-export const runSync = <const R>(f: Fx<never, R>): R =>
+export const runToPromise = <const R>(f: Fx<Async, R>): Promise<R> =>
+  f.pipe(runToTask, toPromise)
+
+export const runToValue = <const R>(f: Fx<never, R>): R =>
   f.pipe(provideAll({}), getResult)
 
 const getResult = <const R>(f: Fx<never, R>): R => f[Symbol.iterator]().next().value
 
-export const bracket = <const IE, const FE, const E, const R, const A>(init: Fx<IE, R>, fin: (a: R) => Fx<FE, void>, f: (a: R) => Fx<E, A>) => fx(function* () {
-  const r = yield* init
-  try {
-    return yield* f(r)
-  } finally {
-    yield* fin(r)
-  }
-})
+export const bracket = <const IE, const FE, const E, const R, const A>(
+  initially: Fx<IE, R>,
+  andFinally: (a: R) => Fx<FE, void>,
+  f: (a: R) => Fx<E, A>
+): Fx<IE | FE | E, A> =>
+  fx(function* () {
+    const r = yield* initially
+    try {
+      return yield* f(r)
+    } finally {
+      yield* andFinally(r)
+    }
+  })
 
 export type Handle<E, A, B = never> = E extends A ? B : E
 

@@ -1,12 +1,12 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Effect } from './Effect'
-import { flatMap, handle, ok, runSync } from './Fx'
+import { flatMap, handle, ok, runToValue } from './Fx'
 
 describe('Fx', () => {
   describe('flatMap', () => {
     it('given mapping function, returns result', () => {
-      const r = ok(1).pipe(flatMap(x => ok(x + 1)), runSync)
+      const r = ok(1).pipe(flatMap(x => ok(x + 1)), runToValue)
       assert.equal(r, 2)
     })
 
@@ -18,7 +18,7 @@ describe('Fx', () => {
         flatMap(a => new E2(`${a}`)),
         handle(E1, ok),
         handle(E2, ok),
-        runSync
+        runToValue
       )
 
       assert.equal(r, '1')
@@ -26,15 +26,15 @@ describe('Fx', () => {
 
     it('has ok as left identity', () => {
       const x = Math.random()
-      const r1 = ok(x).pipe(flatMap(x => ok(x + 1)), runSync)
-      const r2 = ok(x).pipe(flatMap(ok), flatMap(x => ok(x + 1)), runSync)
+      const r1 = ok(x).pipe(flatMap(x => ok(x + 1)), runToValue)
+      const r2 = ok(x).pipe(flatMap(ok), flatMap(x => ok(x + 1)), runToValue)
       assert.equal(r1, r2)
     })
 
     it('has ok as right identity', () => {
       const x = Math.random()
-      const r1 = ok(x).pipe(flatMap(x => ok(x + 1)), runSync)
-      const r2 = ok(x).pipe(flatMap(x => ok(x + 1)), flatMap(ok), runSync)
+      const r1 = ok(x).pipe(flatMap(x => ok(x + 1)), runToValue)
+      const r2 = ok(x).pipe(flatMap(x => ok(x + 1)), flatMap(ok), runToValue)
       assert.equal(r1, r2)
     })
 
@@ -43,8 +43,8 @@ describe('Fx', () => {
       const f = (x: number) => ok(x + 1)
       const g = (x: number) => ok(x * 2)
 
-      const r1 = ok(x).pipe(flatMap(f), flatMap(g), runSync)
-      const r2 = ok(x).pipe(flatMap(x => f(x).pipe(flatMap(g))), runSync)
+      const r1 = ok(x).pipe(flatMap(f), flatMap(g), runToValue)
+      const r2 = ok(x).pipe(flatMap(x => f(x).pipe(flatMap(g))), runToValue)
       assert.equal(r1, r2)
     })
   })

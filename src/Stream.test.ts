@@ -16,7 +16,7 @@ describe('Stream', () => {
       _ => Stream.filter(_, a => a % 2 === 0),
       _ => Stream.map(_, a => a * 2),
       collectAll,
-      Fx.runSync
+      Fx.runToValue
     )
 
     assert.equal(r, 42)
@@ -35,7 +35,7 @@ describe('Stream', () => {
         })),
         collectAll,
         Fork.unbounded,
-        Fx.runAsync
+        Fx.runToTask
       ).promise
 
       assert.equal(r, 42)
@@ -52,7 +52,7 @@ describe('Stream', () => {
       enqueueAllAsync(queue, expected)
 
       const [r, events] = await Stream.fromDequeue(queue)
-        .pipe(collectAll, Fx.runAsync)
+        .pipe(collectAll, Fx.runToTask)
         .promise
 
       assert.equal(r, undefined)
@@ -74,7 +74,7 @@ describe('Stream', () => {
           [Symbol.dispose]: () => { disposed = true }
         }
       }, queue)
-        .pipe(collectAll, Fx.runAsync)
+        .pipe(collectAll, Fx.runToTask)
         .promise
 
       assert.equal(r, undefined)
@@ -94,7 +94,7 @@ describe('Stream', () => {
       }
 
       const [r, events] = Stream.fromIterable(makeIterable())
-        .pipe(collectAll, Fx.runSync)
+        .pipe(collectAll, Fx.runToValue)
 
       assert.equal(r, 42)
       assert.deepEqual(events, inputs)
@@ -112,7 +112,7 @@ describe('Stream', () => {
       }
 
       const [r, events] = await Stream.fromAsyncIterable(makeAsyncGenerator)
-        .pipe(collectAll, Fx.runAsync)
+        .pipe(collectAll, Fx.runToTask)
         .promise
 
       assert.equal(r, 42)
@@ -157,7 +157,7 @@ describe('Stream', () => {
         while (true) actual.push(yield* Sink.next<number>())
       })
 
-      const r = stream.pipe(_ => Stream.to(_, sink), Fx.runSync)
+      const r = stream.pipe(_ => Stream.to(_, sink), Fx.runToValue)
 
       assert.equal(r, undefined)
       assert.deepEqual(actual, expected)
@@ -176,7 +176,7 @@ describe('Stream', () => {
         return 'sink'
       })
 
-      const r = stream.pipe(_ => Stream.to(_, sink), Fx.runSync)
+      const r = stream.pipe(_ => Stream.to(_, sink), Fx.runToValue)
 
       assert.equal(r, 'sink')
       assert.deepEqual(actual, [1, 2, 3])
@@ -193,7 +193,7 @@ describe('Stream', () => {
         return 'sink'
       })
 
-      const r = stream.pipe(_ => Stream.to(_, sink), Fx.runSync)
+      const r = stream.pipe(_ => Stream.to(_, sink), Fx.runToValue)
 
       assert.equal(r, 'sink')
       assert.deepEqual(actual, expected)

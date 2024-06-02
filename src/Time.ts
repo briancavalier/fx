@@ -37,7 +37,7 @@ export const sleep = (millis: number) => new Sleep(millis)
 export const withClock = (c: Clock) => <E, A>(f: Fx<E, A>): Fx<Handle<Handle<E, Sleep, Async.Async>, Now | Monotonic>, A> => f.pipe(
   handle(Now, () => ok(c.now)),
   handle(Monotonic, () => ok(c.monotonic)),
-  handle(Sleep, ms => Async.run(signal => new Promise(resolve => {
+  handle(Sleep, ms => Async.promise(signal => new Promise(resolve => {
     const d = c.schedule(ms, () => {
       signal.removeEventListener('abort', disposeOnAbort)
       resolve()

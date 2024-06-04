@@ -13,7 +13,7 @@ type RunForkOptions = {
   readonly maxConcurrency?: number
 }
 
-export const runFork = <const E, const A>(f: Fx<E, A>, o: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
+export const runFork = <const E extends Async | Fork | Fail<unknown>, const A>(f: Fx<E, A>, o: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new DisposableSet()
 
   const promise = runForkInternal(f, new Semaphore(o.maxConcurrency ?? Infinity), disposables, o.name)

@@ -2,17 +2,19 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import * as Async from './Async'
 import { fork, unbounded } from './Fork'
-import { fx, runSync } from './Fx'
+import { fx, handle, ok, runSync } from './Fx'
 import * as Task from './Task'
+import { GetHandlerContext } from './internal/HandlerContext'
 
 const asyncValue = <A>(a: A) => Async.run(() => Promise.resolve(a))
+
+const emptyHandlerContext = handle(GetHandlerContext, () => ok([]))
 
 describe('Fork', () => {
   describe('unbounded', () => {
     it('given Fork, returns task', async () => {
       const x = Math.random()
-      const f = unbounded(fork(asyncValue(x)))
-      const t = runSync(f)
+      const t = asyncValue(x).pipe(fork, unbounded, emptyHandlerContext, runSync)
       const r = await t.promise
       assert.equal(r, x)
     })
@@ -24,7 +26,7 @@ describe('Fork', () => {
         return t
       }))
 
-      const t = runSync(f)
+      const t = f.pipe(emptyHandlerContext, runSync)
       const r = await t.promise
       assert.equal(r, x)
     })
@@ -38,7 +40,7 @@ describe('Fork', () => {
         return [t1, t2]
       }))
 
-      const t = runSync(f)
+      const t = f.pipe(emptyHandlerContext, runSync)
       const r = await Promise.all(t.map(t => t.promise))
       assert.deepEqual(r, [x1, x2])
     })
@@ -50,7 +52,7 @@ describe('Fork', () => {
         return yield* Task.wait(t1)
       })
 
-      const t = runSync(unbounded(fork(f)))
+      const t = f.pipe(fork, unbounded, emptyHandlerContext, runSync)
       const r = await t.promise
       assert.deepEqual(r, x)
     })

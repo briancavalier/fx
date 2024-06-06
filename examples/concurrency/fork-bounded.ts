@@ -23,7 +23,7 @@ const main = fx(function* () {
 })
 
 main.pipe(
-  Time.defaultTime,
   Fork.bounded(concurrency),
+  Time.defaultTime,
   runAsync
 ).promise.catch(console.error)

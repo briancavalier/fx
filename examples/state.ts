@@ -1,7 +1,6 @@
-import { setTimeout } from 'timers/promises'
 import { inspect } from 'util'
 
-import { Async, Effect, Fork, Fx, Task, fx, handle, map, ok, runAsync } from '../src'
+import { Effect, Fork, Fx, Task, Time, fx, handle, map, ok, runAsync } from '../src'
 
 // The usual state monad, as an effect
 class Get<A> extends Effect('State/Set')<void, A> { }
@@ -29,17 +28,13 @@ type State<E> = U2I<StateOf<E>>
 type StateOf<E> = E extends Get<infer S> | Set<infer S> ? S : never
 type U2I<U> = (U extends any ? (k: U) => void : never) extends ((k: infer I) => void) ? I : never
 
-const delay = (ms: number) => Async.run(
-  signal => setTimeout(ms, undefined, { signal })
-)
-
 const f = fx(function* () {
   const x0 = yield* get<number>()
   yield* set(x0 + 1)
-  yield* delay(1)
+  yield* Time.sleep(1)
   const x1 = yield* get<number>()
   yield* set(x1 + 1)
-  yield* delay(1)
+  yield* Time.sleep(1)
   const x2 = yield* get<number>()
   return [x0, x1, x2]
 })
@@ -65,4 +60,4 @@ const main = fx(function* () {
   }
 })
 
-const r = main.pipe(Fork.unbounded, runAsync).promise.then(x => console.log(inspect(x, false, Infinity)))
+const r = main.pipe(Time.defaultTime, Fork.unbounded, runAsync).promise.then(x => console.log(inspect(x, false, Infinity)))

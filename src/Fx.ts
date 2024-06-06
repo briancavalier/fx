@@ -3,6 +3,7 @@ import { EffectType } from './Effect'
 import { provideAll } from './Env'
 import { Task } from './Task'
 import { Answer, Arg, Handler, empty, isHandler } from './internal/Handler'
+import { GetHandlerContext } from './internal/HandlerContext'
 import * as generator from './internal/generator'
 import { Pipeable } from './internal/pipe'
 import { runFork } from './internal/runFork'
@@ -34,7 +35,7 @@ export const flatMap = <const A, const E2, const B>(f: (a: A) => Fx<E2, B>) =>
     return yield* f(yield* x)
   })
 
-export const runAsync = <const R>(f: Fx<Async, R>): Task<R, never> =>
+export const runAsync = <const R>(f: Fx<Async | GetHandlerContext, R>): Task<R, never> =>
   runFork(f.pipe(provideAll({})), { name: 'Fx:runAsync' })
 
 export const runSync = <const R>(f: Fx<never, R>): R =>

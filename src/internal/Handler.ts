@@ -1,6 +1,7 @@
 import { EffectType, isEffect } from '../Effect'
 import { Fork } from '../Fork'
 import { Fx } from '../Fx'
+import { GetHandlerContext, HandlerContext } from './HandlerContext'
 import { Pipeable, pipeThis } from './pipe'
 
 export type Answer<E extends EffectType> = InstanceType<E>['R']
@@ -8,7 +9,7 @@ export type Arg<E extends EffectType> = InstanceType<E>['arg']
 
 const HandlerTypeId = Symbol('fx/Handler')
 
-export class Handler<E, A> implements Fx<E, A>, Pipeable {
+export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
   public readonly _fxTypeId = HandlerTypeId
   public readonly pipe = pipeThis as Pipeable['pipe']
 
@@ -44,6 +45,8 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable {
               ir = i.next(hr)
             } else if (Fork.is(ir.value)) {
               ir = i.next(yield new Fork({ ...ir.value.arg, context: [...ir.value.arg.context, this] }) as any)
+            } else if (GetHandlerContext.is(ir.value)) {
+              ir = i.next([this, ...(yield ir.value) as any])
             } else {
               ir = i.next(yield ir.value as any)
             }

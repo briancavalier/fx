@@ -1,9 +1,9 @@
 import { Async } from './Async'
 import { Effect } from './Effect'
 import { Fail } from './Fail'
-import { Fx, fx, handle, ok } from './Fx'
+import { Fx, control, fx, ok } from './Fx'
 import * as Task from './Task'
-import { HandlerContext } from './internal/HandlerContext'
+import { HandlerContext, getHandlerContext } from './internal/HandlerContext'
 import { Semaphore } from './internal/Semaphore'
 import { acquireAndRunFork } from './internal/runFork'
 
@@ -36,11 +36,13 @@ export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs
   return Task.race(ps)
 }) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | Fork, Task.Task<ResultOf<Fxs[number]>, ErrorsOf<EffectsOf<Fxs[number]>>>>
 
-export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>) => {
+export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>) => fx(function* () {
+  // The HandlerContext for this bounded concurrency scope won't change, so we can cache it
+  const c = yield* getHandlerContext
   const s = new Semaphore(maxConcurrency)
-  return f.pipe(
-    handle(Fork, f => ok(acquireAndRunFork(f, s)))
+  return yield* f.pipe(
+    control(Fork, (resume, f) => ok(resume(acquireAndRunFork(f, s, c))))
   )
-}
+})
 
 export const unbounded = bounded(Infinity)

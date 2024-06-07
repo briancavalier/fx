@@ -1,5 +1,5 @@
 import { setTimeout } from 'node:timers/promises'
-import { Fork, Task, Time, flatMap, fx, runAsync } from '../src'
+import { Fork, Task, Time, flatMap, fx, runAsync } from '../../src'
 
 const randomWait = () => Math.floor(Math.random() * 100)
 

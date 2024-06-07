@@ -6,7 +6,7 @@ import { Task } from '../Task'
 import { Handler, } from './Handler'
 import { GetHandlerContext, HandlerContext } from './HandlerContext'
 import { Semaphore } from './Semaphore'
-import { DisposableSet } from './disposable'
+import { DisposableSet, dispose } from './disposable'
 
 type RunForkOptions = {
   readonly name?: string
@@ -17,7 +17,7 @@ export const runFork = <const E extends Async | Fork | Fail<unknown> | GetHandle
   const disposables = new DisposableSet()
 
   const promise = runForkInternal(f, [], new Semaphore(o.maxConcurrency ?? Infinity), disposables, o.name)
-    .finally(() => disposables[Symbol.dispose]())
+    .finally(() => dispose(disposables))
 
   return new Task(promise, disposables)
 }
@@ -27,7 +27,7 @@ export const acquireAndRunFork = (f: ForkContext, s: Semaphore, context: readonl
 
   const promise = acquire(s, disposables,
     () => runForkInternal(withContext([...f.context, ...context], f.fx), context, s, disposables, f.name)
-      .finally(() => disposables[Symbol.dispose]()))
+      .finally(() => dispose(disposables)))
 
   return new Task(promise, disposables)
 }
@@ -79,14 +79,17 @@ class TaskError extends Error {
   }
 }
 
-const acquire = <A>(s: Semaphore, scope: DisposableSet, f: () => Promise<A>) => {
+const acquire = async <A>(s: Semaphore, scope: DisposableSet, f: () => Promise<A>) => {
   const a = s.acquire()
-  scope.add(a)
 
-  return a.promise.then(() => {
+  try {
+    scope.add(a)
+    await a.promise
     scope.remove(a)
-    return f()
-  }).finally(() => s.release())
+    return await f()
+  } finally {
+    s.release()
+  }
 }
 
 const runTask = <A>(run: (s: AbortSignal) => Promise<A>) => {

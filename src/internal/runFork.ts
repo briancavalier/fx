@@ -26,15 +26,21 @@ export const acquireAndRunFork = (f: ForkContext, s: Semaphore, context: readonl
   const disposables = new DisposableSet()
 
   const promise = acquire(s, disposables,
-    () => runForkInternal(f.fx, [...f.context, ...context], s, disposables, f.name)
+    () => runForkInternal(withContext([...f.context, ...context], f.fx), context, s, disposables, f.name)
       .finally(() => disposables[Symbol.dispose]()))
 
   return new Task(promise, disposables)
 }
 
-const runForkInternal = <const E, const A>(f: Fx<E, A>, c: readonly HandlerContext[], s: Semaphore, disposables: DisposableSet, name?: string): Promise<A> =>
+const runForkInternal = <const E, const A>(
+  f: Fx<E, A>,
+  context: readonly HandlerContext[],
+  semaphore: Semaphore,
+  disposables: DisposableSet,
+  name?: string
+): Promise<A> =>
   new Promise<A>(async (resolve, reject) => {
-    const i = withContext(c, f)[Symbol.iterator]()
+    const i = f[Symbol.iterator]()
     disposables.add(new IteratorDisposable(i))
     let ir = i.next()
 
@@ -49,14 +55,14 @@ const runForkInternal = <const E, const A>(f: Fx<E, A>, c: readonly HandlerConte
         if (disposables.disposed) return
         ir = i.next(a)
       } else if (Fork.is(ir.value)) {
-        const t = acquireAndRunFork(ir.value.arg, s, c)
+        const t = acquireAndRunFork(ir.value.arg, semaphore, context)
         disposables.add(t)
         t.promise
           .finally(() => disposables.remove(t))
           .catch(reject) // subtask errors should already be wrapped in TaskError
         ir = i.next(t)
       } else if (GetHandlerContext.is(ir.value)) {
-        ir = i.next(c)
+        ir = i.next(context)
       } else if (Fail.is(ir.value))
         return reject(ir.value.arg instanceof TaskError
           ? ir.value.arg

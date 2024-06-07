@@ -1,5 +1,4 @@
 import { EffectType, isEffect } from '../Effect'
-import { Fork } from '../Fork'
 import { Fx } from '../Fx'
 import { GetHandlerContext, HandlerContext } from './HandlerContext'
 import { Pipeable, pipeThis } from './pipe'
@@ -43,8 +42,6 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
               if (done) return hr
               done = true
               ir = i.next(hr)
-            } else if (Fork.is(ir.value)) {
-              ir = i.next(yield new Fork({ ...ir.value.arg, context: [...ir.value.arg.context, this] }) as any)
             } else if (GetHandlerContext.is(ir.value)) {
               ir = i.next([this, ...(yield ir.value) as any])
             } else {
@@ -56,7 +53,7 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
 
       return ir.value
     } finally {
-      if (i.return) i.return()
+      i.return?.()
     }
   }
 }

@@ -3,14 +3,16 @@ import { Effect } from './Effect'
 import { Fail } from './Fail'
 import { Fx, control, fx, ok } from './Fx'
 import * as Task from './Task'
-import { HandlerContext, getHandlerContext } from './internal/HandlerContext'
+import { GetHandlerContext, HandlerContext, getHandlerContext } from './internal/HandlerContext'
 import { Semaphore } from './internal/Semaphore'
 import { acquireAndRunFork } from './internal/runFork'
 
 export class Fork extends Effect('fx/Fork')<ForkContext, Task.Task<unknown, unknown>> { }
 
-export const fork = <const E, const A>(fx: Fx<E, A>, name = 'anonymous') =>
-  new Fork({ fx, context: [], name }) as Fx<Exclude<E, Async | Fail<any>> | Fork, Task.Task<A, ErrorsOf<E>>>
+export const fork = <const E, const A>(f: Fx<E, A>, name = 'anonymous'): Fx<Exclude<E, Async | Fail<any>> | Fork | GetHandlerContext, Task.Task<A, ErrorsOf<E>>> => fx(function* () {
+  const context = yield* getHandlerContext
+  return (yield new Fork({ fx: f, context, name })) as Task.Task<A, ErrorsOf<E>>
+})
 
 export type ForkContext = Readonly<{
   name: string
@@ -41,7 +43,8 @@ export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A
   const c = yield* getHandlerContext
   const s = new Semaphore(maxConcurrency)
   return yield* f.pipe(
-    control(Fork, (resume, f) => ok(resume(acquireAndRunFork(f, s, c))))
+    control(Fork, (resume, f) => ok(resume(acquireAndRunFork(f, s, c)))),
+    control(GetHandlerContext, resume => ok(resume([])))
   )
 })
 

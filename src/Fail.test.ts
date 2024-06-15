@@ -27,7 +27,6 @@ describe('Fail', () => {
       assert.notEqual(result, unexpected)
     })
 
-
     it('given matching failure, returns failure', () => {
       const result = Math.random()
       const expected = 1 + result

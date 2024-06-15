@@ -1,5 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import * as Abort from './Abort'
 import * as Fork from './Fork'
 import * as Fx from './Fx'
 import * as Sink from './Sink'
@@ -8,7 +9,7 @@ import { Enqueue, UnboundedQueue } from './internal/Queue'
 import { dispose } from './internal/disposable'
 
 describe('Stream', () => {
-  it('allows emitting events and observing those events', async () => {
+  it('allows emitting events and observing those events', () => {
     const [r, events] = Fx.fx(function* () {
       for (let i = 0; i < 25; i++) yield* Stream.emit(i)
       return 42
@@ -21,6 +22,56 @@ describe('Stream', () => {
 
     assert.equal(r, 42)
     assert.deepEqual(events, [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48])
+  })
+
+  describe('repeat', () => {
+    it('given effectful computation, forces it repeatedly', () => {
+      const x = Math.random()
+      const n = Math.floor(Math.random() * 100)
+      const [r, events] = Stream.repeat(Fx.ok(x)).pipe(
+        Stream.take(n),
+        Abort.orReturn(n),
+        collectAll,
+        Fx.runSync
+      )
+
+      assert.equal(r, n)
+      assert.deepEqual(events, Array.from({ length: n }, () => x))
+    })
+  })
+
+  describe('take', () => {
+    it('given stream with proportion > n, takes n values', () => {
+      const n = 10
+      const [r, events] = Fx.fx(function* () {
+        for (let i = 0; i < n; i++) yield* Stream.emit(i)
+        return 'done'
+      }).pipe(
+        Stream.take(n - 1),
+        Abort.orReturn('aborted'),
+        collectAll,
+        Fx.runSync
+      )
+
+      assert.equal(r, 'aborted')
+      assert.deepEqual(events, [0, 1, 2, 3, 4, 5, 6, 7, 8])
+    })
+
+    it('given stream with proportion <= n, takes all values', () => {
+      const n = 10
+      const [r, events] = Fx.fx(function* () {
+        for (let i = 0; i < n; i++) yield* Stream.emit(i)
+        return 'done'
+      }).pipe(
+        Stream.take(n),
+        Abort.orReturn('aborted'),
+        collectAll,
+        Fx.runSync
+      )
+
+      assert.equal(r, 'done')
+      assert.deepEqual(events, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    })
   })
 
   describe('switchMap', () => {
@@ -145,7 +196,6 @@ describe('Stream', () => {
       assert.deepEqual(result.value, 42)
     })
   })
-
 
   describe('to', () => {
     it('given stream < sink, has stream proportion and prefers sink return value', () => {

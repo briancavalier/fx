@@ -1,6 +1,7 @@
 export * from './Effect'
 export * from './Fx'
 
+export * as Abort from './Abort'
 export * as Async from './Async'
 export * as Env from './Env'
 export * as Fail from './Fail'

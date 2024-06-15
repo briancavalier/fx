@@ -23,9 +23,4 @@ export const catchFail = <const E, const A>(f: Fx<E, A>) =>
     control(Fail, (_, e) => ok(new Fail(e)))
   ) as Fx<Exclude<E, Fail<any>>, A | Extract<E, Fail<any>>>
 
-export const orElse = <const B>(b: B) => <const E, const A>(f: Fx<E, A>) =>
-  f.pipe(
-    control(Fail, _ => ok(b))
-  ) as Fx<Exclude<E, Fail<any>>, A | B>
-
 type UnwrapFail<F> = F extends Fail<infer E> ? E : never

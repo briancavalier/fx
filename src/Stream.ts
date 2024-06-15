@@ -11,7 +11,7 @@ import { dispose } from './internal/disposable'
 import { IfAny } from './internal/type'
 
 /**
- * The Stream effect represents computations that may emit zero or move values of
+ * The Stream effect represents computations that may emit zero or more values of
  * a particular type before returning a final result.
  */
 export class Stream<A> extends Effect.Effect('fx/Stream')<A, void> { }

@@ -29,9 +29,7 @@ export const emit = <const A>(a: A) => new Stream(a)
  * Repeat the provided effectful computation forever, and emit each result
  */
 export const repeat = <const E, const A>(fx: Fx.Fx<E, A>): Fx.Fx<E | Stream<A>, void> => Fx.fx(function* () {
-  while (true) {
-    yield* emit(yield* fx)
-  }
+  while (true) yield* emit(yield* fx)
 })
 
 /**

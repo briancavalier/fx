@@ -1,4 +1,4 @@
-import { Document, Id, Todo } from './domain'
+import { Id, Todo } from './domain'
 
 export type Command = {
   readonly tag: 'add-todo'
@@ -12,13 +12,13 @@ export type Command = {
 } |
 {
   readonly tag: 'update-todo-complete'
-  readonly id: Id<Document>
+  readonly id: Id<'todos/Documment'>
   readonly todoId: Id<'todos/Todo'>
   readonly complete: boolean
 } |
 {
   readonly tag: 'update-todo-text'
-  readonly id: Id<Document>
+  readonly id: Id<'todos/Documment'>
   readonly todoId: Id<'todos/Todo'>
   readonly text: string
 }
@@ -30,7 +30,7 @@ export type Event = {
 } |
 {
   readonly tag: 'todo-removed'
-  readonly id: Id<Document>
+  readonly id: Id<'todos/Documment'>
   readonly todoId: Id<'todos/Todo'>
 } |
 {

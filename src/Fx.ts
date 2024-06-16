@@ -2,7 +2,7 @@ import { Async } from './Async'
 import { EffectType } from './Effect'
 import { provideAll } from './Env'
 import { Task } from './Task'
-import { Answer, Arg, Handler, empty, isHandler } from './internal/Handler'
+import { Answer, Arg, Handler, empty } from './internal/Handler'
 import { GetHandlerContext } from './internal/HandlerContext'
 import * as generator from './internal/generator'
 import { Pipeable } from './internal/pipe'
@@ -54,14 +54,12 @@ export const bracket = <const IE, const FE, const E, const R, const A>(init: Fx<
 
 export type Handle<E, A, B = never> = E extends A ? B : E
 
+export type HandleReturn<E, A, R> = E extends A ? R : E
+
 export const handle = <T extends EffectType, HandlerEffects>(e: T, f: (e: Arg<T>) => Fx<HandlerEffects, Answer<T>>) =>
   <const E, const A>(fx: Fx<E, A>): Handler<Handle<E, InstanceType<T>, HandlerEffects>, A> =>
-    (isHandler(fx)
-      ? new Handler(fx, new Map(fx.handlers).set(e._fxEffectId, f), fx.controls)
-      : new Handler(fx, new Map().set(e._fxEffectId, f), empty)) as Handler<Handle<E, InstanceType<T>, HandlerEffects>, A>
+    new Handler(fx, new Map().set(e._fxEffectId, f), empty) as Handler<Handle<E, InstanceType<T>, HandlerEffects>, A>
 
 export const control = <T extends EffectType, HandlerEffects, R = never>(e: T, f: <A>(resume: (a: Answer<T>) => A, e: Arg<T>) => Fx<HandlerEffects, R>) =>
-  <const E, const A>(fx: Fx<E, A>): Handler<Exclude<E, InstanceType<T>> | HandlerEffects, A> =>
-    (isHandler(fx)
-      ? new Handler(fx, fx.handlers, new Map(fx.controls).set(e._fxEffectId, f as any))
-      : new Handler(fx, empty, new Map().set(e._fxEffectId, f))) as Handler<Exclude<E, InstanceType<T>> | HandlerEffects, A>
+  <const E, const A>(fx: Fx<E, A>): Handler<Handle<E, InstanceType<T>, HandlerEffects>, HandleReturn<E, InstanceType<T>, R> | A> =>
+    new Handler(fx, empty, new Map().set(e._fxEffectId, f)) as Handler<Handle<E, InstanceType<T>, HandlerEffects>, HandleReturn<E, InstanceType<T>, R> | A>

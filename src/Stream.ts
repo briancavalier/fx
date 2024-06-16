@@ -1,3 +1,4 @@
+import { Abort, abort } from './Abort'
 import * as Async from './Async'
 import * as Effect from './Effect'
 import * as Fail from './Fail'
@@ -9,6 +10,10 @@ import * as Queue from './internal/Queue'
 import { dispose } from './internal/disposable'
 import { IfAny } from './internal/type'
 
+/**
+ * The Stream effect represents computations that may emit zero or more values of
+ * a particular type before returning a final result.
+ */
 export class Stream<A> extends Effect.Effect('fx/Stream')<A, void> { }
 
 export type Event<T> = T extends Stream<infer A> ? A : never
@@ -16,15 +21,37 @@ export type Event<T> = T extends Stream<infer A> ? A : never
 export type ExcludeStream<E, E2 = never> = Fx.Handle<E, Stream<any>, E2>
 
 /**
- * Emit a value
+ * Emit a single value
  */
 export const emit = <const A>(a: A) => new Stream(a)
+
+/**
+ * Repeat the provided effectful computation forever, and emit each result
+ */
+export const repeat = <const E, const A>(fx: Fx.Fx<E, A>): Fx.Fx<E | Stream<A>, void> => Fx.fx(function* () {
+  while (true) yield* emit(yield* fx)
+})
 
 /**
  * Apply an effectul function to each value in a stream
  */
 export const forEach = <E, R, E2>(fx: Fx.Fx<E, R>, f: (a: Event<E>) => Fx.Fx<E2, void>): Fx.Fx<ExcludeStream<E, E2>, R> =>
   fx.pipe(Fx.handle(Stream, a => f(a as Event<E>)))
+
+/**
+ * Take the first n values from a stream
+ */
+export const take = (n: number) => {
+  let i = 0
+  return Fx.control(Stream, (resume, a) => Fx.fx(function* () {
+    if (i < n) {
+      i++
+      return resume(yield* emit(a))
+    } else {
+      return yield* abort
+    }
+  })) as <E, A>(fx: Fx.Fx<E, A>) => Fx.Fx<E | Abort, A>
+}
 
 /**
  * Transform each value in a stream

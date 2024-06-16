@@ -1,15 +1,13 @@
-export type DocumentId = string & { readonly type: Document }
-
 export type Document = {
-  readonly id: DocumentId
+  readonly id: Id<'todos/Document'>
   readonly title: string
   readonly todos: readonly Todo[]
 }
 
-export type TodoId = string & { readonly type: Todo }
-
 export type Todo = {
-  readonly id: TodoId
+  readonly id: Id<'todos/Todo'>
   readonly text: string
   readonly complete: boolean
 }
+
+export type Id<A> = string & { readonly tag: A }

@@ -41,16 +41,16 @@ export const forEach = <E, R, E2>(fx: Fx.Fx<E, R>, f: (a: Event<E>) => Fx.Fx<E2,
 /**
  * Take the first n values from a stream
  */
-export const take = (n: number) => {
-  let i = 0
-  return Fx.control(Stream, (resume, a) => Fx.fx(function* () {
-    if (i < n) {
-      i++
+export const take = (n: number) => <const E, const A, const R>(fx: Fx.Fx<E | Stream<A>, R>) => {
+  let i = n
+  return fx.pipe(Fx.control(Stream, (resume, a) => Fx.fx(function* () {
+    if (i > 0) {
+      --i
       return resume(yield* emit(a))
     } else {
       return yield* abort
     }
-  })) as <E, A>(fx: Fx.Fx<E, A>) => Fx.Fx<E | Abort, A>
+  }))) as Fx.Fx<Fx.Handle<E, Stream<A>, Stream<A> | Abort>, A>
 }
 
 /**

@@ -43,8 +43,9 @@ describe('Stream', () => {
   describe('take', () => {
     it('given stream with proportion > n, takes n values', () => {
       const n = 10
+      const a = Array.from({ length: n }, (_, i) => i)
       const [r, events] = Fx.fx(function* () {
-        for (let i = 0; i < n; i++) yield* Stream.emit(i)
+        for (const x of a) yield* Stream.emit(x)
         return 'done'
       }).pipe(
         Stream.take(n - 1),
@@ -54,13 +55,14 @@ describe('Stream', () => {
       )
 
       assert.equal(r, 'aborted')
-      assert.deepEqual(events, [0, 1, 2, 3, 4, 5, 6, 7, 8])
+      assert.deepEqual(events, a.slice(0, n - 1))
     })
 
     it('given stream with proportion <= n, takes all values', () => {
       const n = 10
+      const a = Array.from({ length: n }, (_, i) => i)
       const [r, events] = Fx.fx(function* () {
-        for (let i = 0; i < n; i++) yield* Stream.emit(i)
+        for (const x of a) yield* Stream.emit(x)
         return 'done'
       }).pipe(
         Stream.take(n),
@@ -70,7 +72,7 @@ describe('Stream', () => {
       )
 
       assert.equal(r, 'done')
-      assert.deepEqual(events, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+      assert.deepEqual(events, a)
     })
   })
 

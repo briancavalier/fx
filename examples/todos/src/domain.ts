@@ -1,11 +1,15 @@
+export type DocumentId = string & { readonly type: Document }
+
 export type Document = {
-  readonly id: string
-  readonly name: string
+  readonly id: DocumentId
+  readonly title: string
   readonly todos: readonly Todo[]
 }
 
+export type TodoId = string & { readonly type: Todo }
+
 export type Todo = {
-  readonly id: string
+  readonly id: TodoId
   readonly text: string
-  readonly completed: boolean
+  readonly complete: boolean
 }

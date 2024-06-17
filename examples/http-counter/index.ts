@@ -1,30 +1,31 @@
-import { Env, Fork, Log, fx, runAsync } from '../../src'
+import { Env, Fork, Fx, Log } from "../../src";
 
-import { Request, runServer } from './HttpServer'
-import { next } from './counter'
-import { mapCounter } from './counter-map'
+import { Request, runServer } from "./HttpServer";
+import { next } from "./counter";
+import { mapCounter } from "./counter-map";
 //import { keyvCounter } from './counter-keyv'
 
 // ----------------------------------------------------------------------
 // Define the handler for requests
 
-const myHandler = (r: Request) => fx(function* () {
-  const key = r.url ?? ''
-  const value = yield* next(key)
+const myHandler = (r: Request) =>
+  Fx.fx(function* () {
+    const key = r.url ?? "";
+    const value = yield* next(key);
 
-  yield* Log.info('Incremented', { key, value })
+    yield* Log.info("Incremented", { key, value });
 
-  return {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key, value })
-  }
-})
+    return {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, value }),
+    };
+  });
 
 // ----------------------------------------------------------------------
 // #region Run the server
 
-const { port = 3000 } = process.env
+const { port = 3000 } = process.env;
 
 runServer(myHandler).pipe(
   Log.console,
@@ -32,7 +33,7 @@ runServer(myHandler).pipe(
   mapCounter,
   // keyvCounter,
   Fork.unbounded,
-  runAsync
-)
+  Fx.runAsync
+);
 
 //#endregion

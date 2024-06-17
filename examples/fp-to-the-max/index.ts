@@ -3,26 +3,35 @@
 // The type system will prevent running the game until implementations
 // of all capabilities have been provided.
 
-import { createInterface } from 'node:readline/promises'
+import { createInterface } from 'node:readline/promises';
 
-import { Async, Env, Fx, Random, bracket, fx, handle, ok, runAsync, sync } from '../../src'
+import { Async, Env, Fx, Random } from '../../src';
 
-import { GenerateSecret, Print, Read, main } from './main'
+import { GenerateSecret, Print, Read, main } from './main';
 
-const handlePrint = handle(Print, s => ok(console.log(s)))
+const handlePrint = Fx.handle(Print, s => Fx.ok(console.log(s)));
 
-const handleRead = <E, A>(f: Fx<E, A>) => bracket(
-  sync(() => createInterface({ input: process.stdin, output: process.stdout })),
-  readline => ok(readline.close()),
-  readline => f.pipe(
-    handle(Read, prompt => Async.run(signal => readline.question(prompt, { signal })))
-  ))
+const handleRead = <E, A>(f: Fx.Fx<E, A>) =>
+  Fx.bracket(
+    Fx.sync(() =>
+      createInterface({ input: process.stdin, output: process.stdout })
+    ),
+    readline => Fx.ok(readline.close()),
+    readline =>
+      f.pipe(
+        Fx.handle(Read, prompt =>
+          Async.run(signal => readline.question(prompt, { signal }))
+        )
+      )
+  );
 
-const handleGenerateSecret = handle(GenerateSecret, max => fx(function* () {
-  return 1 + (yield* Random.int(max))
-}))
+const handleGenerateSecret = Fx.handle(GenerateSecret, max =>
+  Fx.fx(function* () {
+    return 1 + (yield* Random.int(max));
+  })
+);
 
-const { max = 10 } = process.env
+const { max = 10 } = process.env;
 
 main.pipe(
   Env.provide({ max: +max }),
@@ -30,5 +39,5 @@ main.pipe(
   Random.defaultRandom(),
   handlePrint,
   handleRead,
-  runAsync
-)
+  Fx.runAsync
+);

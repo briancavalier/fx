@@ -1,8 +1,10 @@
-import { Async, handle } from '../../src'
-import * as wttr from './wttr'
+import { Async, Fx } from '../../src';
+import * as wttr from './wttr';
 
-export const wttrFetch = handle(wttr.GetWeather, ({ location }) =>
+export const wttrFetch = Fx.handle(wttr.GetWeather, ({ location }) =>
   Async.run(signal =>
-    fetch(`https://wttr.in/${encodeURIComponent(location ?? '')}?format=j1`, { signal })
-      .then(res => res.json() as Promise<wttr.Weather>)
-  ))
+    fetch(`https://wttr.in/${encodeURIComponent(location ?? '')}?format=j1`, {
+      signal,
+    }).then(res => res.json() as Promise<wttr.Weather>)
+  )
+);

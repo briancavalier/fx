@@ -26,11 +26,13 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/quotes': ['error', 'single', { avoidEscape: true }],
-      'arrow-parens': ['error', 'as-needed', { 'requireForBlockBody': false }],
+      'arrow-parens': ['error', 'as-needed', { requireForBlockBody: false }],
       'no-async-promise-executor': 'off',
+      'no-unsafe-finally': 'off',
       'prefer-rest-params': 'off',
+      // quotes: ['error', 'single', { avoidEscape: true }],
       'require-yield': 'off',
     },
-    files: ['src/**/*.ts'],
-  },
+    files: ['src/**/*.ts', 'examples/**/*.ts'],
+  }
 );

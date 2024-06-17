@@ -1,4 +1,4 @@
-import { Sink, Stream, flatMap, fx, ok, runSync } from '../../src'
+import { Fx, Sink, Stream } from '../../src';
 
 // From Effect-TS discord
 // https://discord.com/channels/795981131316985866/1125094089281511474/1245070996621365318
@@ -31,28 +31,28 @@ import { Sink, Stream, flatMap, fx, ok, runSync } from '../../src'
 // Consumes numbers and emits number[] by grouping them
 // when a number is divisible by 7. Note that this is not the
 // same as splitting into groups of size 7
-const groupDivBy7 = fx(function* () {
-  let group: number[] = []
+const groupDivBy7 = Fx.fx(function* () {
+  let group: number[] = [];
   try {
     while (true) {
-      const n = yield* Sink.next<number>()
-      group.push(n)
-      if ((n % 7) === 0) {
-        yield* Stream.emit(group)
-        group = []
+      const n = yield* Sink.next<number>();
+      group.push(n);
+      if (n % 7 === 0) {
+        yield* Stream.emit(group);
+        group = [];
       }
     }
   } finally {
-    return group // return trailing numbers
+    return group; // return trailing numbers
   }
-})
+});
 
 // [1, 2, 3, ... 50]
-const numbers = Array.from({ length: 50 }, (_, i) => i + 1)
+const numbers = Array.from({ length: 50 }, (_, i) => i + 1);
 
 Stream.fromIterable(numbers).pipe(
   _ => Stream.to(_, groupDivBy7),
-  flatMap(Stream.emit), // emit trailing numbers
-  _ => Stream.forEach(_, numbers => ok(console.log(numbers))),
-  runSync
-)
+  Fx.flatMap(Stream.emit), // emit trailing numbers
+  _ => Stream.forEach(_, numbers => Fx.ok(console.log(numbers))),
+  Fx.runSync
+);

@@ -1,11 +1,8 @@
-export type Document = {
-  readonly id: Id<'todos/Document'>
-  readonly title: string
-  readonly todos: readonly Todo[]
-}
+export type DocumentId = Id<'todos/Document'>
+export type TodoId = Id<'todos/Todo'>
 
 export type Todo = {
-  readonly id: Id<'todos/Todo'>
+  readonly id: TodoId
   readonly text: string
   readonly complete: boolean
 }

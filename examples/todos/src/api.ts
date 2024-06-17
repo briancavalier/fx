@@ -1,45 +1,45 @@
-import { Id, Todo } from './domain'
+import { DocumentId, Todo, TodoId } from './domain'
 
 export type Command = {
   readonly tag: 'add-todo'
-  readonly id: Id<'todos/Documment'>
+  readonly id: DocumentId
   readonly text: string
 } |
 {
   readonly tag: 'remove-todo'
-  readonly id: Id<'todos/Documment'>
-  readonly todoId: Id<'todos/Todo'>
+  readonly id: DocumentId
+  readonly todoId: TodoId
 } |
 {
   readonly tag: 'update-todo-complete'
-  readonly id: Id<'todos/Documment'>
-  readonly todoId: Id<'todos/Todo'>
+  readonly id: DocumentId
+  readonly todoId: TodoId
   readonly complete: boolean
 } |
 {
   readonly tag: 'update-todo-text'
-  readonly id: Id<'todos/Documment'>
-  readonly todoId: Id<'todos/Todo'>
+  readonly id: DocumentId
+  readonly todoId: TodoId
   readonly text: string
 }
 
 export type Event = {
   readonly tag: 'todo-added'
-  readonly id: Id<'todos/Documment'>
+  readonly id: DocumentId
   readonly todo: Todo
 } |
 {
   readonly tag: 'todo-removed'
-  readonly id: Id<'todos/Documment'>
-  readonly todoId: Id<'todos/Todo'>
+  readonly id: DocumentId
+  readonly todoId: TodoId
 } |
 {
   readonly tag: 'todo-text-updated'
-  readonly id: Id<'todos/Documment'>
+  readonly id: DocumentId
   readonly todo: Todo
 } |
 {
   readonly tag: 'todo-complete-updated'
-  readonly id: Id<'todos/Documment'>
+  readonly id: DocumentId
   readonly todo: Todo
 }

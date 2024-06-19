@@ -1,17 +1,33 @@
+/**
+ * A Clock provides the current system time, monotonic time, and the ability
+ * to schedule future tasks.
+ */
+export interface Clock {
+  /**
+   * Current system time in milliseconds
+   */
+  readonly now: number
+  /**
+   * Elapsed time in *decimal* milliseconds with fractional microseconds
+   * since some arbitrary fixed point in the past. This is guaranteed to be monotonic:
+   * it cannot decrease or be set/changed.
+   */
+  readonly monotonic: number
 
-export interface ScheduledTask {
+  /**
+   * Schedule a task to run after the specified number of milliseconds.
+   */
+  schedule(ms: number, task: () => void): Disposable
+}
+
+interface ScheduledTask {
   readonly at: number
   readonly task: () => void
 }
 
-export interface Clock {
-  readonly now: number
-  readonly monotonic: number
-  schedule(ms: number, task: () => void): Disposable
-}
-
 /**
  * Clock that uses Date.now, performance.now, and setTimeout.
+ * Timeouts longer than JS max timeout 2147483647 are supported.
  */
 export class RealClock implements Clock {
   get now(): number {
@@ -23,9 +39,24 @@ export class RealClock implements Clock {
   }
 
   schedule(ms: number, task: () => void): Disposable {
-    return new TimeoutDisposable(setTimeout(task, ms))
+    const d = new TimeoutDisposable()
+    this._schedule(ms, task, d)
+    return d
+  }
+
+  _schedule(ms: number, task: () => void, d: TimeoutDisposable): void {
+    d._timeout = ms <= MAX_SET_TIMEOUT
+      ? setTimeout(task, ms)
+      : setTimeout(() => this._schedule(ms - MAX_SET_TIMEOUT, task, d))
   }
 }
+
+/**
+ * Max JS setTimeout delay value. Timeouts larger than this will overflow to negative
+ * and run immediately. Compensate by chaining timeouts.
+ * @see https://developer.mozilla.org/en-US/docs/Web/API/setTimeout#maximum_delay_value
+ */
+const MAX_SET_TIMEOUT = 2147483647
 
 /**
  * Virtual Clock implementation that allows time to be controlled manually.
@@ -129,11 +160,11 @@ export class VirtualClock implements Clock {
   }
 }
 
-export class TimeoutDisposable implements Disposable {
-  constructor(private readonly timeout: any) { }
+class TimeoutDisposable implements Disposable {
+  public _timeout: any
 
   [Symbol.dispose]() {
-    clearTimeout(this.timeout)
+    clearTimeout(this._timeout)
   }
 }
 

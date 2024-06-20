@@ -1,4 +1,4 @@
-import { Fork, Task, Time, fx, runAsync } from '../../src'
+import { Fork, Task, Time, fx, unsafeRunPromise } from '../../src'
 
 // Number of tasks to fork
 const tasks = 4
@@ -25,5 +25,5 @@ const main = fx(function* () {
 main.pipe(
   Fork.bounded(concurrency),
   Time.defaultTime,
-  runAsync
-).promise.catch(console.error)
+  unsafeRunPromise
+).catch(console.error)

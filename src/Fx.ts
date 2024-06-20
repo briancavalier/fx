@@ -35,10 +35,23 @@ export const flatMap = <const A, const E2, const B>(f: (a: A) => Fx<E2, B>) =>
     return yield* f(yield* x)
   })
 
-export const runAsync = <const R>(f: Fx<Async | GetHandlerContext, R>): Task<R, never> =>
-  runFork(f.pipe(provideAll({})), { name: 'Fx:runAsync' })
+/**
+ * Execute all the effects of the provided Fx, and return a {@link Task} for its result.
+ */
+export const unsafeRunTask = <const R>(f: Fx<Async | GetHandlerContext, R>): Task<R, never> =>
+  runFork(f.pipe(provideAll({})), { name: 'Fx:unsafeRunTask' })
 
-export const runSync = <const R>(f: Fx<never, R>): R =>
+/**
+ * Execute all the effects of the provided Fx, and return a Promise for its result,
+ * discarding the ability to cancel the computation.
+ */
+export const unsafeRunPromise = <const R>(f: Fx<Async | GetHandlerContext, R>): Promise<R> =>
+  unsafeRunTask(f).promise
+
+/**
+ * Execute all the effects of the provided Fx, and return its result.
+ */
+export const unsafeRun = <const R>(f: Fx<never, R>): R =>
   f.pipe(provideAll({}), getResult)
 
 const getResult = <const R>(f: Fx<never, R>): R => f[Symbol.iterator]().next().value

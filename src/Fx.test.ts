@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Effect } from './Effect'
-import { flatMap, fx, handle, ok, runSync } from './Fx'
+import { flatMap, fx, handle, ok, unsafeRun } from './Fx'
 
 describe('Fx', () => {
   describe('fx', () => {
@@ -9,7 +9,7 @@ describe('Fx', () => {
       const expected = { foo: 'bar' }
       const actual = fx(expected, function* () {
         return this
-      }).pipe(runSync)
+      }).pipe(unsafeRun)
 
       assert.equal(actual, expected)
     })
@@ -18,7 +18,7 @@ describe('Fx', () => {
       const actual = fx(function* () {
         // @ts-expect-error `this` is not set
         return this
-      }).pipe(runSync)
+      }).pipe(unsafeRun)
 
       assert.equal(actual, undefined)
     })
@@ -26,7 +26,7 @@ describe('Fx', () => {
 
   describe('flatMap', () => {
     it('given mapping function, returns result', () => {
-      const r = ok(1).pipe(flatMap(x => ok(x + 1)), runSync)
+      const r = ok(1).pipe(flatMap(x => ok(x + 1)), unsafeRun)
       assert.equal(r, 2)
     })
 
@@ -38,7 +38,7 @@ describe('Fx', () => {
         flatMap(a => new E2(`${a}`)),
         handle(E1, ok),
         handle(E2, ok),
-        runSync
+        unsafeRun
       )
 
       assert.equal(r, '1')
@@ -46,15 +46,15 @@ describe('Fx', () => {
 
     it('has ok as left identity', () => {
       const x = Math.random()
-      const r1 = ok(x).pipe(flatMap(x => ok(x + 1)), runSync)
-      const r2 = ok(x).pipe(flatMap(ok), flatMap(x => ok(x + 1)), runSync)
+      const r1 = ok(x).pipe(flatMap(x => ok(x + 1)), unsafeRun)
+      const r2 = ok(x).pipe(flatMap(ok), flatMap(x => ok(x + 1)), unsafeRun)
       assert.equal(r1, r2)
     })
 
     it('has ok as right identity', () => {
       const x = Math.random()
-      const r1 = ok(x).pipe(flatMap(x => ok(x + 1)), runSync)
-      const r2 = ok(x).pipe(flatMap(x => ok(x + 1)), flatMap(ok), runSync)
+      const r1 = ok(x).pipe(flatMap(x => ok(x + 1)), unsafeRun)
+      const r2 = ok(x).pipe(flatMap(x => ok(x + 1)), flatMap(ok), unsafeRun)
       assert.equal(r1, r2)
     })
 
@@ -63,8 +63,8 @@ describe('Fx', () => {
       const f = (x: number) => ok(x + 1)
       const g = (x: number) => ok(x * 2)
 
-      const r1 = ok(x).pipe(flatMap(f), flatMap(g), runSync)
-      const r2 = ok(x).pipe(flatMap(x => f(x).pipe(flatMap(g))), runSync)
+      const r1 = ok(x).pipe(flatMap(f), flatMap(g), unsafeRun)
+      const r2 = ok(x).pipe(flatMap(x => f(x).pipe(flatMap(g))), unsafeRun)
       assert.equal(r1, r2)
     })
   })

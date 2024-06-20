@@ -5,7 +5,7 @@
 
 import { createInterface } from 'node:readline/promises'
 
-import { Async, Env, Fx, Random, bracket, fx, handle, ok, runAsync, sync } from '../../src'
+import { Async, Env, Fx, Random, bracket, fx, handle, ok, sync, unsafeRunPromise } from '../../src'
 
 import { GenerateSecret, Print, Read, main } from './main'
 
@@ -30,5 +30,5 @@ main.pipe(
   Random.defaultRandom(),
   handlePrint,
   handleRead,
-  runAsync
+  unsafeRunPromise
 )

@@ -1,4 +1,4 @@
-import { Sink, Stream, flatMap, fx, ok, runSync } from '../../src'
+import { Sink, Stream, flatMap, fx, ok, unsafeRun } from '../../src'
 
 // From Effect-TS discord
 // https://discord.com/channels/795981131316985866/1125094089281511474/1245070996621365318
@@ -54,5 +54,5 @@ Stream.fromIterable(numbers).pipe(
   _ => Stream.to(_, groupDivBy7),
   flatMap(Stream.emit), // emit trailing numbers
   _ => Stream.forEach(_, numbers => ok(console.log(numbers))),
-  runSync
+  unsafeRun
 )

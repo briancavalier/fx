@@ -1,9 +1,29 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Effect } from './Effect'
-import { flatMap, handle, ok, runSync } from './Fx'
+import { flatMap, fx, handle, ok, runSync } from './Fx'
 
 describe('Fx', () => {
+  describe('fx', () => {
+    it('given this arg, executes generator with it', () => {
+      const expected = { foo: 'bar' }
+      const actual = fx(expected, function* () {
+        return this
+      }).pipe(runSync)
+
+      assert.equal(actual, expected)
+    })
+
+    it('given no this arg, executes generator with undefined', () => {
+      const actual = fx(function* () {
+        // @ts-expect-error `this` is not set
+        return this
+      }).pipe(runSync)
+
+      assert.equal(actual, undefined)
+    })
+  })
+
   describe('flatMap', () => {
     it('given mapping function, returns result', () => {
       const r = ok(1).pipe(flatMap(x => ok(x + 1)), runSync)

@@ -15,10 +15,10 @@ export interface Fx<E, A> extends Pipeable {
 export const fx: {
   <const E, const A>(f: () => Generator<E, A>): Fx<E, A>
   <const T, const E, const A>(self: T, f: (this: T) => Generator<E, A>): Fx<E, A>
-} = function (...args: any[]) {
+} = function () {
   return arguments.length === 1
-    ? new generator.Gen(arguments[0])
-    : new generator.Gen(arguments[1].bind(arguments[0]))
+    ? new generator.Gen(undefined, arguments[0])
+    : new generator.Gen(arguments[0], arguments[1])
 }
 
 export const ok = <const A>(a: A): Fx<never, A> => new generator.Ok(a)

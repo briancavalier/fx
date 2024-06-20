@@ -6,10 +6,10 @@ import { Pipeable, pipe } from './pipe'
 export class Once<Y, R> implements Generator<Y, R>, Pipeable {
   private called = false
 
-  constructor(public readonly value: Y) {}
+  constructor(public readonly value: Y) { }
 
   next(r: R): IteratorResult<Y, R> {
-    if(this.called) return { done: true, value: r }
+    if (this.called) return { done: true, value: r }
     this.called = true
     return { done: false, value: this.value }
   }
@@ -33,7 +33,7 @@ export class Once<Y, R> implements Generator<Y, R>, Pipeable {
  * Always return the provided value.
  */
 export class Ok<R> implements Generator<never, R>, Pipeable {
-  constructor(public readonly value: R) {}
+  constructor(public readonly value: R) { }
 
   next(): IteratorResult<never, R> {
     return { done: true, value: this.value }
@@ -58,7 +58,7 @@ export class Ok<R> implements Generator<never, R>, Pipeable {
  * Always return the result of the provided function.
  */
 export class Sync<R> implements Generator<never, R>, Pipeable {
-  constructor(public readonly f: () => R) {}
+  constructor(public readonly f: () => R) { }
 
   next(): IteratorResult<never, R> {
     return { done: true, value: this.f() }
@@ -83,10 +83,10 @@ export class Sync<R> implements Generator<never, R>, Pipeable {
  * Map the yield values of the provided generator.
  */
 export class Map<Y, A, B, N = unknown> implements Pipeable {
-    constructor(
+  constructor(
     private readonly f: (a: A) => B,
     private readonly i: Generator<Y, A, N>
-  ) {}
+  ) { }
 
   [Symbol.iterator]() {
     return new MapIterator<Y, A, B, unknown>(this.f, this.i[Symbol.iterator]())
@@ -99,7 +99,7 @@ class MapIterator<Y, A, B, N> {
   constructor(
     private readonly f: (a: A) => B,
     private readonly i: Generator<Y, A, N>
-  ) {}
+  ) { }
 
   next(n: N): IteratorResult<Y, B> {
     const r = this.i.next(n)
@@ -120,10 +120,12 @@ class MapIterator<Y, A, B, N> {
 /**
  * Wrap a generator to make it safe to yield* multiple times.
  */
-export class Gen<E, A> {
-  constructor(public readonly f: () => Generator<E, A>) { }
+export class Gen<T, E, A> {
+  constructor(public readonly thisArg: T, public readonly f: () => Generator<E, A>) { }
 
-  [Symbol.iterator](): Iterator<E, A> { return this.f() }
+  [Symbol.iterator](): Iterator<E, A> {
+    return this.f.call(this.thisArg)
+  }
 
   pipe() { return pipe(this, arguments) }
 }

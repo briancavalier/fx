@@ -1,6 +1,7 @@
 import { Async } from './Async'
 import { EffectType } from './Effect'
 import { provideAll } from './Env'
+import { Fail, fail } from './Fail'
 import { Task } from './Task'
 import { Answer, Arg, Handler, empty } from './internal/Handler'
 import { GetHandlerContext } from './internal/HandlerContext'
@@ -23,7 +24,15 @@ export const fx: {
 
 export const ok = <const A>(a: A): Fx<never, A> => new generator.Ok(a)
 
-export const sync = <const A>(f: () => A): Fx<never, A> => new generator.Sync(f)
+export const assertSync = <const A>(f: () => A): Fx<never, A> => new generator.Sync(f)
+
+export const trySync = <const A>(f: () => A): Fx<Fail<unknown>, A> => fx(function* () {
+  try {
+    return f()
+  } catch (e) {
+    return yield* fail(e)
+  }
+})
 
 export const unit = ok(undefined)
 
@@ -35,10 +44,28 @@ export const flatMap = <const A, const E2, const B>(f: (a: A) => Fx<E2, B>) =>
     return yield* f(yield* x)
   })
 
-export const runAsync = <const R>(f: Fx<Async | GetHandlerContext, R>): Task<R, never> =>
-  runFork(f.pipe(provideAll({})), { name: 'Fx:runAsync' })
+export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E1 | E2, A> =>
+  fx(function* () {
+    return yield* (yield* x)
+  })
 
-export const runSync = <const R>(f: Fx<never, R>): R =>
+/**
+ * Execute all the effects of the provided Fx, and return a {@link Task} for its result.
+ */
+export const runTask = <const R>(f: Fx<Async | GetHandlerContext, R>): Task<R, never> =>
+  runFork(f.pipe(provideAll({})), { name: 'Fx:toTask' })
+
+/**
+ * Execute all the effects of the provided Fx, and return a Promise for its result,
+ * discarding the ability to cancel the computation.
+ */
+export const runPromise = <const R>(f: Fx<Async | GetHandlerContext, R>): Promise<R> =>
+  runTask(f).promise
+
+/**
+ * Execute all the effects of the provided Fx, and return its result.
+ */
+export const run = <const R>(f: Fx<never, R>): R =>
   f.pipe(provideAll({}), getResult)
 
 const getResult = <const R>(f: Fx<never, R>): R => f[Symbol.iterator]().next().value
@@ -54,12 +81,12 @@ export const bracket = <const IE, const FE, const E, const R, const A>(init: Fx<
 
 export type Handle<E, A, B = never> = E extends A ? B : E
 
-export type HandleReturn<E, A, R> = E extends A ? R : E
+export type HandleReturn<E, A, R> = E extends A ? R : never
 
 export const handle = <T extends EffectType, HandlerEffects>(e: T, f: (e: Arg<T>) => Fx<HandlerEffects, Answer<T>>) =>
-  <const E, const A>(fx: Fx<E, A>): Handler<Handle<E, InstanceType<T>, HandlerEffects>, A> =>
-    new Handler(fx, new Map().set(e._fxEffectId, f), empty) as Handler<Handle<E, InstanceType<T>, HandlerEffects>, A>
+  <const E, const A>(fx: Fx<E, A>): Fx<Handle<E, InstanceType<T>, HandlerEffects>, A> =>
+    new Handler(fx, new Map().set(e._fxEffectId, f), empty) as Fx<Handle<E, InstanceType<T>, HandlerEffects>, A>
 
 export const control = <T extends EffectType, HandlerEffects, R = never>(e: T, f: <A>(resume: (a: Answer<T>) => A, e: Arg<T>) => Fx<HandlerEffects, R>) =>
-  <const E, const A>(fx: Fx<E, A>): Handler<Handle<E, InstanceType<T>, HandlerEffects>, HandleReturn<E, InstanceType<T>, R> | A> =>
-    new Handler(fx, empty, new Map().set(e._fxEffectId, f)) as Handler<Handle<E, InstanceType<T>, HandlerEffects>, HandleReturn<E, InstanceType<T>, R> | A>
+  <const E, const A>(fx: Fx<E, A>): Fx<Handle<E, InstanceType<T>, HandlerEffects>, HandleReturn<E, InstanceType<T>, R> | A> =>
+    new Handler(fx, empty, new Map().set(e._fxEffectId, f)) as Fx<Handle<E, InstanceType<T>, HandlerEffects>, HandleReturn<E, InstanceType<T>, R> | A>

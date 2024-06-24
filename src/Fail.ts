@@ -1,5 +1,5 @@
 import { Effect } from './Effect'
-import { Fx, control, fx, ok } from './Fx'
+import { Fx, Handle, control, fx, ok } from './Fx'
 
 export class Fail<const E> extends Effect('fx/Fail')<E, never> { }
 
@@ -27,5 +27,20 @@ export const orElse = <const B>(b: B) => <const E, const A>(f: Fx<E, A>) =>
   f.pipe(
     control(Fail, _ => ok(b))
   ) as Fx<Exclude<E, Fail<any>>, A | B>
+
+export const map = <const E, const E1>(map: (e: UnwrapFail<E>) => E1) =>
+  <const A>(f: Fx<E, A>) =>
+    f.pipe(
+      control(Fail, (_, e) => fail(map(e as UnwrapFail<E>)))
+    ) as Fx<Handle<E, Fail<UnwrapFail<E>>, Fail<E1>>, A>
+
+export const refine = <const E, const E1 extends UnwrapFail<E>>(refine: (e: UnwrapFail<E>) => e is E1) =>
+  <const A>(f: Fx<E, A>) =>
+    f.pipe(
+      control(Fail, (_, e) => {
+        if (refine(e as UnwrapFail<E>)) return fail(e as UnwrapFail<E>)
+        throw e
+      })
+    ) as Fx<Handle<E, Fail<UnwrapFail<E>>, Fail<E1>>, A>
 
 type UnwrapFail<F> = F extends Fail<infer E> ? E : never

@@ -1,7 +1,8 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Effect } from './Effect'
-import { flatMap, fx, handle, ok, runSync } from './Fx'
+import { Fail, catchFail } from './Fail'
+import { assertSync, flatMap, fx, handle, ok, run, trySync } from './Fx'
 
 describe('Fx', () => {
   describe('fx', () => {
@@ -9,7 +10,7 @@ describe('Fx', () => {
       const expected = { foo: 'bar' }
       const actual = fx(expected, function* () {
         return this
-      }).pipe(runSync)
+      }).pipe(run)
 
       assert.equal(actual, expected)
     })
@@ -18,7 +19,7 @@ describe('Fx', () => {
       const actual = fx(function* () {
         // @ts-expect-error `this` is not set
         return this
-      }).pipe(runSync)
+      }).pipe(run)
 
       assert.equal(actual, undefined)
     })
@@ -26,7 +27,7 @@ describe('Fx', () => {
 
   describe('flatMap', () => {
     it('given mapping function, returns result', () => {
-      const r = ok(1).pipe(flatMap(x => ok(x + 1)), runSync)
+      const r = ok(1).pipe(flatMap(x => ok(x + 1)), run)
       assert.equal(r, 2)
     })
 
@@ -38,7 +39,7 @@ describe('Fx', () => {
         flatMap(a => new E2(`${a}`)),
         handle(E1, ok),
         handle(E2, ok),
-        runSync
+        run
       )
 
       assert.equal(r, '1')
@@ -46,15 +47,15 @@ describe('Fx', () => {
 
     it('has ok as left identity', () => {
       const x = Math.random()
-      const r1 = ok(x).pipe(flatMap(x => ok(x + 1)), runSync)
-      const r2 = ok(x).pipe(flatMap(ok), flatMap(x => ok(x + 1)), runSync)
+      const r1 = ok(x).pipe(flatMap(x => ok(x + 1)), run)
+      const r2 = ok(x).pipe(flatMap(ok), flatMap(x => ok(x + 1)), run)
       assert.equal(r1, r2)
     })
 
     it('has ok as right identity', () => {
       const x = Math.random()
-      const r1 = ok(x).pipe(flatMap(x => ok(x + 1)), runSync)
-      const r2 = ok(x).pipe(flatMap(x => ok(x + 1)), flatMap(ok), runSync)
+      const r1 = ok(x).pipe(flatMap(x => ok(x + 1)), run)
+      const r2 = ok(x).pipe(flatMap(x => ok(x + 1)), flatMap(ok), run)
       assert.equal(r1, r2)
     })
 
@@ -63,9 +64,37 @@ describe('Fx', () => {
       const f = (x: number) => ok(x + 1)
       const g = (x: number) => ok(x * 2)
 
-      const r1 = ok(x).pipe(flatMap(f), flatMap(g), runSync)
-      const r2 = ok(x).pipe(flatMap(x => f(x).pipe(flatMap(g))), runSync)
+      const r1 = ok(x).pipe(flatMap(f), flatMap(g), run)
+      const r2 = ok(x).pipe(flatMap(x => f(x).pipe(flatMap(g))), run)
       assert.equal(r1, r2)
+    })
+  })
+
+  describe('sync', () => {
+    it('given thunk, returns result', () => {
+      const x = Math.random()
+      const r = assertSync(() => x).pipe(run)
+      assert.equal(r, x)
+    })
+
+    it('given thunk throws, throws', () => {
+      const e = new Error()
+      assert.throws(() => assertSync(() => { throw e }).pipe(run), e)
+    })
+  })
+
+  describe('trySync', () => {
+    it('given thunk, returns result', () => {
+      const x = Math.random()
+      const r = trySync(() => x).pipe(catchFail, run)
+      assert.equal(r, x)
+    })
+
+    it('given thunk throws, produces Fail', () => {
+      const e = new Error()
+      const r = trySync(() => { throw e }).pipe(catchFail, run)
+      assert.ok(Fail.is(r))
+      assert.equal(r.arg, e)
     })
   })
 })

@@ -139,7 +139,7 @@ export class FlatMap<Y, Y2, A, B, N = unknown> implements Pipeable {
 }
 
 class FlatMapIterator<Y, Y2, A, B, N> {
-  private innerDone = false
+  private outerDone = false
 
   constructor(
     private readonly f: (a: A) => HasIterator<Y2, B>,
@@ -149,10 +149,10 @@ class FlatMapIterator<Y, Y2, A, B, N> {
   next(n?: N): IteratorResult<Y | Y2, B> {
     const r = this.i.next(n)
     if (r.done) {
-      if (this.innerDone) {
+      if (this.outerDone) {
         return r
       } else {
-        this.innerDone = true
+        this.outerDone = true
         this.i = this.f(r.value)[Symbol.iterator]()
         return this.i.next()
       }

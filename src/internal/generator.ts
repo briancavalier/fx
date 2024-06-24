@@ -80,7 +80,7 @@ export class Sync<R> implements Generator<never, R>, Pipeable {
 }
 
 /**
- * Map the yield values of the provided generator.
+ * Map the return value of the provided generator.
  */
 export class Map<Y, A, B, N = unknown> implements Pipeable {
   constructor(
@@ -114,6 +114,60 @@ class MapIterator<Y, A, B, N> {
   throw(e: unknown): IteratorResult<Y, B> {
     const r = this.i.throw(e)
     return r.done ? { done: true, value: this.f(r.value) } : r
+  }
+}
+
+export interface HasIterator<E, A> {
+  [Symbol.iterator](): Iterator<E, A, unknown>
+}
+
+/**
+ * Map the return value of the provided generator.
+ */
+export class FlatMap<Y, Y2, A, B, N = unknown> implements Pipeable {
+  constructor(
+    private readonly f: (a: A) => HasIterator<Y2, B>,
+    private readonly i: Generator<Y, A, N>
+  ) { }
+
+  [Symbol.iterator]() {
+    return new FlatMapIterator<Y, Y2, A, B, unknown>(this.f, this.i[Symbol.iterator]())
+  }
+
+  pipe() { return pipe(this, arguments) }
+}
+
+class FlatMapIterator<Y, Y2, A, B, N> {
+  private innerDone = false
+
+  constructor(
+    private readonly f: (a: A) => HasIterator<Y2, B>,
+    private i: Iterator<any, any, any>
+  ) { }
+
+  next(n?: N): IteratorResult<Y | Y2, B> {
+    const r = this.i.next(n)
+    if (r.done) {
+      if (this.innerDone) {
+        return r
+      } else {
+        this.innerDone = true
+        const i2 = this.f(r.value)
+        if (i2 instanceof Ok) return { done: true, value: i2.value }
+        this.i = this.f(r.value)[Symbol.iterator]()
+        return this.next()
+      }
+    }
+    return r
+  }
+
+  return(a: A): IteratorResult<Y | Y2, B> {
+    return this.i.return?.(a) ?? { done: true, value: undefined }
+  }
+
+  throw(e: unknown): IteratorResult<Y | Y2, B> {
+    if (this.i.throw) return this.i.throw(e)
+    throw e
   }
 }
 

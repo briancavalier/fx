@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { fx, unsafeRun } from './Fx'
+import { fx, run } from './Fx'
 import { defaultRandom, float, int, split, xoroshiro128plus } from './Random'
 
 describe('Random', () => {
@@ -12,8 +12,8 @@ describe('Random', () => {
       })
 
       const seed = 42
-      const r1 = f.pipe(defaultRandom(seed), unsafeRun)
-      const r2 = f.pipe(defaultRandom(seed), unsafeRun)
+      const r1 = f.pipe(defaultRandom(seed), run)
+      const r2 = f.pipe(defaultRandom(seed), run)
 
       assert.deepEqual(r1, r2)
     })
@@ -23,8 +23,8 @@ describe('Random', () => {
         return [yield* int(10), yield* int(10), yield* int(10)]
       })
 
-      const r1 = f.pipe(defaultRandom(), unsafeRun)
-      const r2 = f.pipe(defaultRandom(), unsafeRun)
+      const r1 = f.pipe(defaultRandom(), run)
+      const r2 = f.pipe(defaultRandom(), run)
 
       assert.notDeepEqual(r1, r2)
     })
@@ -41,16 +41,16 @@ describe('Random', () => {
 
       it('given same seed, generates same sequence', () => {
         const seed = 42
-        const r1 = ints.pipe(xoroshiro128plus(seed), unsafeRun)
-        const r2 = ints.pipe(xoroshiro128plus(seed), unsafeRun)
+        const r1 = ints.pipe(xoroshiro128plus(seed), run)
+        const r2 = ints.pipe(xoroshiro128plus(seed), run)
 
         assert.deepEqual(r1, r2)
       })
 
       it('given different seed, generates different sequence', () => {
         const seed = 42
-        const r1 = ints.pipe(xoroshiro128plus(seed), unsafeRun)
-        const r2 = ints.pipe(xoroshiro128plus(seed + 1), unsafeRun)
+        const r1 = ints.pipe(xoroshiro128plus(seed), run)
+        const r2 = ints.pipe(xoroshiro128plus(seed + 1), run)
 
         assert.notDeepEqual(r1, r2)
       })
@@ -66,16 +66,16 @@ describe('Random', () => {
 
       it('given same seed, generates same sequence', () => {
         const seed = 42
-        const r1 = floats.pipe(xoroshiro128plus(seed), unsafeRun)
-        const r2 = floats.pipe(xoroshiro128plus(seed), unsafeRun)
+        const r1 = floats.pipe(xoroshiro128plus(seed), run)
+        const r2 = floats.pipe(xoroshiro128plus(seed), run)
 
         assert.deepEqual(r1, r2)
       })
 
       it('given different seed, generates different sequence', () => {
         const seed = 42
-        const r1 = floats.pipe(xoroshiro128plus(seed), unsafeRun)
-        const r2 = floats.pipe(xoroshiro128plus(seed + 1), unsafeRun)
+        const r1 = floats.pipe(xoroshiro128plus(seed), run)
+        const r2 = floats.pipe(xoroshiro128plus(seed + 1), run)
 
         assert.notDeepEqual(r1, r2)
       })
@@ -88,8 +88,8 @@ describe('Random', () => {
         })
 
         const seed = 42
-        const r1 = f.pipe(xoroshiro128plus(seed), unsafeRun)
-        const r2 = split(f).pipe(xoroshiro128plus(seed), unsafeRun)
+        const r1 = f.pipe(xoroshiro128plus(seed), run)
+        const r2 = split(f).pipe(xoroshiro128plus(seed), run)
 
         assert.notDeepEqual(r1, r2)
       })

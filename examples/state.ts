@@ -1,6 +1,6 @@
 import { inspect } from 'util'
 
-import { Effect, Fork, Fx, Task, Time, fx, handle, map, ok, unsafeRunPromise } from '../src'
+import { Effect, Fork, Fx, Task, Time, fx, handle, map, ok, runPromise } from '../src'
 
 // The usual state monad, as an effect
 class Get<A> extends Effect('State/Set')<void, A> { }
@@ -60,4 +60,4 @@ const main = fx(function* () {
   }
 })
 
-const r = main.pipe(Time.defaultTime, Fork.unbounded, unsafeRunPromise).then(x => console.log(inspect(x, false, Infinity)))
+const r = main.pipe(Time.defaultTime, Fork.unbounded, runPromise).then(x => console.log(inspect(x, false, Infinity)))

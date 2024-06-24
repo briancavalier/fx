@@ -1,4 +1,4 @@
-import { Env, Fork, Log, fx, unsafeRunPromise } from '../../src'
+import { Env, Fork, Log, fx, runPromise } from '../../src'
 
 import { Request, runServer } from './HttpServer'
 import { next } from './counter'
@@ -32,7 +32,7 @@ runServer(myHandler).pipe(
   mapCounter,
   // keyvCounter,
   Fork.unbounded,
-  unsafeRunPromise
+  runPromise
 )
 
 //#endregion

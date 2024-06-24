@@ -1,4 +1,4 @@
-import { Env, Log, fx, unsafeRunPromise } from '../../src'
+import { Env, Log, fx, runPromise } from '../../src'
 import * as wttr from './wttr'
 import { wttrFetch } from './wttr-fetch'
 
@@ -14,5 +14,5 @@ main.pipe(
   wttrFetch,
   Log.console,
   Env.provide({ location: process.env.location }),
-  unsafeRunPromise
+  runPromise
 )

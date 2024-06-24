@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { fx, unsafeRun, unsafeRunPromise } from './Fx'
+import { fx, run, runPromise } from './Fx'
 import * as Time from './Time'
 import { VirtualClock } from './internal/time'
 
@@ -9,7 +9,7 @@ describe('Time', () => {
     it('starts at origin', () => {
       const origin = Date.now()
       const c = new VirtualClock(origin)
-      const r = Time.now.pipe(Time.withClock(c), unsafeRun)
+      const r = Time.now.pipe(Time.withClock(c), run)
       assert.equal(r, origin)
     })
 
@@ -20,7 +20,7 @@ describe('Time', () => {
       const step = 10000 * Math.random()
       await c.step(step)
 
-      const r = Time.now.pipe(Time.withClock(c), unsafeRun)
+      const r = Time.now.pipe(Time.withClock(c), run)
       assert.equal(r, origin + Math.floor(step))
     })
   })
@@ -28,7 +28,7 @@ describe('Time', () => {
   describe('monotonic', () => {
     it('starts at 0', () => {
       const c = new VirtualClock(Date.now())
-      const r = Time.monotonic.pipe(Time.withClock(c), unsafeRun)
+      const r = Time.monotonic.pipe(Time.withClock(c), run)
       assert.equal(r, 0)
     })
 
@@ -39,7 +39,7 @@ describe('Time', () => {
       const step = 10000 * Math.random()
       await c.step(step)
 
-      const r = Time.monotonic.pipe(Time.withClock(c), unsafeRun)
+      const r = Time.monotonic.pipe(Time.withClock(c), run)
       assert.equal(r, step)
     })
   })
@@ -60,7 +60,7 @@ describe('Time', () => {
       })
 
       const c = new VirtualClock(1)
-      const p = test.pipe(Time.withClock(c), unsafeRunPromise)
+      const p = test.pipe(Time.withClock(c), runPromise)
 
       await c.step(1000)
       assert.deepEqual(results, [[1000, 1001]])

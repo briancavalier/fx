@@ -70,8 +70,8 @@ export const filter: {
 
 export const switchMap = <E, X, E2>(fx: Fx.Fx<E, X>, f: (a: Event<E>) => Fx.Fx<E2, unknown>): Fx.Fx<ExcludeStream<E, Fork.Fork | Async.Async | E2>, X> =>
   Fx.bracket(
-    Fx.sync(() => new CurrentTask<E2>()),
-    task => Fx.sync(() => dispose(task)),
+    Fx.assertSync(() => new CurrentTask<E2>()),
+    task => Fx.assertSync(() => dispose(task)),
     task => Fx.fx(function* () {
       const x = yield* forEach(fx, a => task.run(f(a)))
 
@@ -100,7 +100,7 @@ export const withEnqueue = <A>(
   f: (o: Queue.Enqueue<A>) => Disposable,
   q: Queue.Queue<A> = new Queue.UnboundedQueue()
 ): Fx.Fx<Async.Async | Stream<A>, void> => Fx.bracket(
-  Fx.sync(() => f(q)),
+  Fx.assertSync(() => f(q)),
   disposable => Fx.ok(dispose(disposable)),
   _ => fromDequeue(q)
 )
@@ -113,7 +113,7 @@ export interface IterableWithReturn<Y, R> {
  * Create a stream that emits all values from an Iterable
  */
 export const fromIterable = <A, R>(i: IterableWithReturn<A, R>): Fx.Fx<Stream<A>, IfAny<R, void>> => Fx.bracket(
-  Fx.sync(() => i[Symbol.iterator]()),
+  Fx.assertSync(() => i[Symbol.iterator]()),
   iterator => Fx.ok(void iterator.return?.()),
   iterator => Fx.fx(function* () {
     let result = iterator.next()
@@ -133,10 +133,10 @@ export interface AsyncIterableWithReturn<Y, R> {
  * Create a stream that emits all values from an AsyncIterable
  */
 export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>): Fx.Fx<Async.Async | Stream<A>, R> => Fx.bracket(
-  Fx.sync(() => f()[Symbol.asyncIterator]()),
-  iterator => Async.run(() => iterator.return?.().then(() => { }) ?? Promise.resolve()),
+  Fx.assertSync(() => f()[Symbol.asyncIterator]()),
+  iterator => Async.assertPromise(() => iterator.return?.().then(() => { }) ?? Promise.resolve()),
   iterator => Fx.fx(function* () {
-    const next = Async.run(() => iterator.next())
+    const next = Async.assertPromise(() => iterator.next())
     let result = yield* next
     while (!result.done) {
       yield* emit(result.value)

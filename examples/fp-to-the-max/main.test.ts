@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { Env, Fx, handle, map, ok, unsafeRun } from '../../src'
+import { Env, Fx, handle, map, ok, run } from '../../src'
 
 import { GenerateSecret, Print, Read, checkAnswer, main } from './main'
 
@@ -56,7 +56,7 @@ describe('main', () => {
       handleRead(['Brian', '1', 'y', '2', 'y', '3', 'y', '1', 'n']),
       handlePrint,
       Env.provide(range),
-      unsafeRun
+      run
     )
 
     assert.deepEqual(result, [

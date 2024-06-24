@@ -122,7 +122,8 @@ export interface HasIterator<E, A> {
 }
 
 /**
- * Map the return value of the provided generator.
+ * Map the return value of the provided generator to a new generator,
+ * yield all its values, and then return its result.
  */
 export class FlatMap<Y, Y2, A, B, N = unknown> implements Pipeable {
   constructor(
@@ -152,10 +153,8 @@ class FlatMapIterator<Y, Y2, A, B, N> {
         return r
       } else {
         this.innerDone = true
-        const i2 = this.f(r.value)
-        if (i2 instanceof Ok) return { done: true, value: i2.value }
         this.i = this.f(r.value)[Symbol.iterator]()
-        return this.next()
+        return this.i.next()
       }
     }
     return r

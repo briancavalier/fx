@@ -70,7 +70,7 @@ describe('Fx', () => {
     })
   })
 
-  describe('sync', () => {
+  describe('assertSync', () => {
     it('given thunk, returns result', () => {
       const x = Math.random()
       const r = assertSync(() => x).pipe(run)

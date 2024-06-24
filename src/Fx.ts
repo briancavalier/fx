@@ -9,10 +9,17 @@ import * as generator from './internal/generator'
 import { Pipeable } from './internal/pipe'
 import { runFork } from './internal/runFork'
 
+/**
+ * A computation that produces a value of type `A`, and may produce effects of
+ * type `E`.
+ */
 export interface Fx<E, A> extends Pipeable {
   [Symbol.iterator](): Iterator<E, A, unknown>
 }
 
+/**
+ * Construct an Fx from a generator that uses `yield*` to produce effects.
+ */
 export const fx: {
   <const E, const A>(f: () => Generator<E, A>): Fx<E, A>
   <const T, const E, const A>(self: T, f: (this: T) => Generator<E, A>): Fx<E, A>
@@ -22,10 +29,17 @@ export const fx: {
     : new generator.Gen(arguments[0], arguments[1])
 }
 
+/**
+ * Construct an Fx from a pure value. The returned Fx will produce no effects.
+ */
 export const ok = <const A>(a: A): Fx<never, A> => new generator.Ok(a)
 
-export const assertSync = <const A>(f: () => A): Fx<never, A> => new generator.Sync(f)
+export const unit = ok(undefined)
 
+/**
+ * Convert an synchronous side-effect function into an Fx. If the function throws,
+ * the error will be propagated as a {@link Fail} effect.
+ */
 export const trySync = <const A>(f: () => A): Fx<Fail<unknown>, A> => fx(function* () {
   try {
     return f()
@@ -34,7 +48,12 @@ export const trySync = <const A>(f: () => A): Fx<Fail<unknown>, A> => fx(functio
   }
 })
 
-export const unit = ok(undefined)
+/**
+ * Convert an synchronous side-effect function into an Fx, asserting that it
+ * does not throw. Use {@link trySync} instead, if the function might throw.
+ * Thrown errors will not be caught by the Fx runtime, and will crash the process.
+ */
+export const assertSync = <const A>(f: () => A): Fx<never, A> => new generator.Sync(f)
 
 export const map = <const A, const B>(f: (a: A) => B) =>
   <const E>(x: Fx<E, A>): Fx<E, B> => new generator.Map<E, A, B>(f, x as any) as Fx<E, B>
@@ -87,6 +106,6 @@ export const handle = <T extends EffectType, HandlerEffects>(e: T, f: (e: Arg<T>
   <const E, const A>(fx: Fx<E, A>): Fx<Handle<E, InstanceType<T>, HandlerEffects>, A> =>
     new Handler(fx, new Map().set(e._fxEffectId, f), empty) as Fx<Handle<E, InstanceType<T>, HandlerEffects>, A>
 
-export const control = <T extends EffectType, HandlerEffects, R = never>(e: T, f: <A>(resume: (a: Answer<T>) => A, e: Arg<T>) => Fx<HandlerEffects, R>) =>
+export const control = <T extends EffectType, HandlerEffects = never, R = never>(e: T, f: <A>(resume: (a: Answer<T>) => A, e: Arg<T>) => Fx<HandlerEffects, R>) =>
   <const E, const A>(fx: Fx<E, A>): Fx<Handle<E, InstanceType<T>, HandlerEffects>, HandleReturn<E, InstanceType<T>, R> | A> =>
     new Handler(fx, empty, new Map().set(e._fxEffectId, f)) as Fx<Handle<E, InstanceType<T>, HandlerEffects>, HandleReturn<E, InstanceType<T>, R> | A>

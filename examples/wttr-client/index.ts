@@ -1,4 +1,4 @@
-import { Env, Log, fx, runPromise } from '../../src'
+import { Env, Fail, Log, fx, runPromise } from '../../src'
 import * as wttr from './wttr'
 import { wttrFetch } from './wttr-fetch'
 
@@ -12,6 +12,7 @@ const main = fx(function* () {
 
 main.pipe(
   wttrFetch,
+  Fail.assert,
   Log.console,
   Env.provide({ location: process.env.location }),
   runPromise

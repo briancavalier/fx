@@ -1,6 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import * as Abort from './Abort'
+import * as Fail from './Fail'
 import * as Fork from './Fork'
 import * as Fx from './Fx'
 import * as Sink from './Sink'
@@ -163,7 +164,7 @@ describe('Stream', () => {
       }
 
       const [r, events] = await Stream.fromAsyncIterable(makeAsyncGenerator)
-        .pipe(collectAll, Fx.runPromise)
+        .pipe(collectAll, Fail.assert, Fx.runPromise)
 
       assert.equal(r, 42)
       assert.deepEqual(events, inputs)

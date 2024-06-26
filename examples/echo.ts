@@ -1,7 +1,7 @@
 
 import { createInterface } from 'node:readline/promises'
 
-import { Async, Effect, Fx, assertSync, bracket, fx, handle, ok, runPromise } from '../src'
+import { Async, Effect, Fail, Fx, bracket, fx, handle, ok, runPromise, trySync } from '../src'
 
 class Print extends Effect('Print')<string, void> { }
 
@@ -22,10 +22,10 @@ const main = fx(function* () {
 const handlePrint = handle(Print, s => ok(console.log(s)))
 
 const handleRead = <E, A>(f: Fx<E, A>) => bracket(
-  assertSync(() => createInterface({ input: process.stdin, output: process.stdout })),
+  trySync(() => createInterface({ input: process.stdin, output: process.stdout })).pipe(Fail.assert),
   readline => ok(readline.close()),
   readline => f.pipe(
-    handle(Read, prompt => Async.assertPromise(signal => readline.question(prompt, { signal })))
+    handle(Read, prompt => Async.tryPromise(signal => readline.question(prompt, { signal })).pipe(Fail.assert))
   ))
 
 // Run with "real" Read and Print effects

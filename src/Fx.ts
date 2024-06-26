@@ -48,13 +48,6 @@ export const trySync = <const A>(f: () => A): Fx<Fail<unknown>, A> => fx(functio
   }
 })
 
-/**
- * Convert an synchronous side-effect function into an Fx, asserting that it
- * does not throw. Use {@link trySync} instead, if the function might throw.
- * Thrown errors will not be caught by the Fx runtime, and will crash the process.
- */
-export const assertSync = <const A>(f: () => A): Fx<never, A> => new generator.Sync(f)
-
 export const map = <const A, const B>(f: (a: A) => B) =>
   <const E>(x: Fx<E, A>): Fx<E, B> => new generator.Map<E, A, B>(f, x as any) as Fx<E, B>
 

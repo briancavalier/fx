@@ -43,4 +43,9 @@ export const refine = <const E, const E1 extends UnwrapFail<E>>(refine: (e: Unwr
       })
     ) as Fx<Handle<E, Fail<UnwrapFail<E>>, Fail<E1>>, A>
 
+export const assert = <const E, const A>(f: Fx<E, A>) =>
+  f.pipe(
+    control(Fail, (_, e) => { throw e })
+  ) as Fx<Exclude<E, Fail<any>>, A>
+
 type UnwrapFail<F> = F extends Fail<infer E> ? E : never

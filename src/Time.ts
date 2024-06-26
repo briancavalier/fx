@@ -1,5 +1,6 @@
 import * as Async from './Async'
 import { Effect } from './Effect'
+import * as Fail from './Fail'
 import { Fx, Handle, handle, ok } from './Fx'
 import { dispose } from './internal/disposable'
 import { Clock, RealClock } from './internal/time'
@@ -37,14 +38,14 @@ export const sleep = (millis: number) => new Sleep(millis)
 export const withClock = (c: Clock) => <E, A>(f: Fx<E, A>): Fx<Handle<Handle<E, Sleep, Async.Async>, Now | Monotonic>, A> => f.pipe(
   handle(Now, () => ok(c.now)),
   handle(Monotonic, () => ok(c.monotonic)),
-  handle(Sleep, ms => Async.assertPromise(signal => new Promise(resolve => {
+  handle(Sleep, ms => Async.tryPromise(signal => new Promise<void>(resolve => {
     const d = c.schedule(ms, () => {
       signal.removeEventListener('abort', disposeOnAbort)
       resolve()
     })
     const disposeOnAbort = () => dispose(d)
     signal.addEventListener('abort', disposeOnAbort, { once: true })
-  })))
+  })).pipe(Fail.assert))
 ) as Fx<Handle<Handle<E, Sleep, Async.Async>, Now | Monotonic>, A>
 
 /**

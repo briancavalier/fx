@@ -1,6 +1,6 @@
 import { Effect } from './Effect'
 import { Fail, fail } from './Fail'
-import { Fx, flatten, ok } from './Fx'
+import { flatten, Fx, ok } from './Fx'
 
 type Run<A> = (abort: AbortSignal) => Promise<A>
 
@@ -11,11 +11,6 @@ export class Async extends Effect('fx/Async')<Run<any>> { }
  * be propagated as a {@link Fail} effect.
  */
 export const tryPromise = <const A>(f: Run<A>): Fx<Async | Fail<unknown>, A> =>
-  flatten(assertPromise(signal => f(signal).then(ok, fail)))
-
-/**
- * Convert an async function into an Fx, asserting that it does not throw or reject.
- * Use {@link tryPromise} instead, if the function might throw or reject. Thrown
- * errors will not be caught by the Fx runtime, and will crash the process.
- */
-export const assertPromise = <const A>(run: Run<A>) => new Async(run).returning<A>()
+  new Async(signal => f(signal).then(ok, fail))
+    .returning<Fx<never, A> | Fx<Fail<any>, never>>()
+    .pipe(flatten)

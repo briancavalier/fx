@@ -1,12 +1,13 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import * as Async from './Async'
+import * as Fail from './Fail'
 import { fork, unbounded } from './Fork'
 import { fx, handle, ok, run } from './Fx'
 import * as Task from './Task'
 import { GetHandlerContext } from './internal/HandlerContext'
 
-const asyncValue = <A>(a: A) => Async.assertPromise(() => Promise.resolve(a))
+const asyncValue = <A>(a: A) => Async.tryPromise(() => Promise.resolve(a)).pipe(Fail.assert)
 
 const emptyHandlerContext = handle(GetHandlerContext, () => ok([]))
 

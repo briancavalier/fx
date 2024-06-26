@@ -2,7 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Effect } from './Effect'
 import { Fail, catchFail } from './Fail'
-import { assertSync, flatMap, fx, handle, ok, run, trySync } from './Fx'
+import { flatMap, fx, handle, ok, run, trySync } from './Fx'
 
 describe('Fx', () => {
   describe('fx', () => {
@@ -67,19 +67,6 @@ describe('Fx', () => {
       const r1 = ok(x).pipe(flatMap(f), flatMap(g), run)
       const r2 = ok(x).pipe(flatMap(x => f(x).pipe(flatMap(g))), run)
       assert.equal(r1, r2)
-    })
-  })
-
-  describe('assertSync', () => {
-    it('given thunk, returns result', () => {
-      const x = Math.random()
-      const r = assertSync(() => x).pipe(run)
-      assert.equal(r, x)
-    })
-
-    it('given thunk throws, throws', () => {
-      const e = new Error()
-      assert.throws(() => assertSync(() => { throw e }).pipe(run), e)
     })
   })
 

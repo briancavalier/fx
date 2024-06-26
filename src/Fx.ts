@@ -52,14 +52,10 @@ export const map = <const A, const B>(f: (a: A) => B) =>
   <const E>(x: Fx<E, A>): Fx<E, B> => new generator.Map<E, A, B>(f, x as any) as Fx<E, B>
 
 export const flatMap = <const A, const E2, const B>(f: (a: A) => Fx<E2, B>) =>
-  <const E1>(x: Fx<E1, A>): Fx<E1 | E2, B> => fx(function* () {
-    return yield* f(yield* x)
-  })
+  <const E1>(x: Fx<E1, A>): Fx<E1 | E2, B> => new generator.FlatMap(f, x as any) as Fx<E1 | E2, B>
 
 export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E1 | E2, A> =>
-  fx(function* () {
-    return yield* (yield* x)
-  })
+  x.pipe(flatMap(x => x))
 
 /**
  * Execute all the effects of the provided Fx, and return a {@link Task} for its result.

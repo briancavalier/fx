@@ -10,6 +10,8 @@ export class Ref<A> {
   }
 }
 
+export const of = <A>(value: A): Ref<A> => new Ref(value)
+
 export const compareAndSet = <const A>(ref: Ref<A>, expectedCurrentValue: A, newValue: A): boolean => {
   if (ref.compare(ref.get(), expectedCurrentValue)) {
     ref.unsafeSet(newValue)

@@ -20,7 +20,7 @@ const main = (r: Ref.Ref<number>) => fx(function* () {
   return r3
 })
 
-const ref = new Ref.Ref(1)
+const ref = Ref.of(1)
 
 const r = main(ref)
   .pipe(

@@ -1,5 +1,13 @@
-import { inspect } from 'node:util'
-import { Fork, Fx, fx, Ref, runPromise, Task, Time } from '../../src'
+import { flatMap, Fork, Fx, fx, map, Random, Ref, runPromise, Task, Time } from '../../src'
+
+const randomSleep = Random.int(100).pipe(flatMap(Time.sleep))
+
+// TODO: Consider moving to Ref module
+const atomically = <E, A>(f: (a: A) => Fx<E, A>) => (r: Ref.Ref<A>): Fx<E, A> => fx(function* () {
+  const a = r.get()
+  const b = yield* f(a)
+  return Ref.compareAndSet(r, a, b) ? a : yield* atomically(f)(r)
+})
 
 const f = (r: Ref.Ref<number>) => fx(function* () {
   const x0 = yield* increment(r)
@@ -8,11 +16,7 @@ const f = (r: Ref.Ref<number>) => fx(function* () {
   return [x0, x1, x2]
 })
 
-const increment = (r: Ref.Ref<number>): Fx<Time.Sleep, number> => fx(function* () {
-  const a = r.get()
-  yield* Time.sleep(10)
-  return Ref.compareAndSet(r, a, a + 1) ? a : yield* increment(r)
-})
+const increment = atomically((n: number) => randomSleep.pipe(map(_ => n + 1)))
 
 const main = (r: Ref.Ref<number>) => fx(function* () {
   const r1 = yield* Fork.all([f(r), f(r)])
@@ -25,6 +29,7 @@ const ref = Ref.of(1)
 const r = main(ref)
   .pipe(
     Time.defaultTime,
+    Random.defaultRandom(),
     Fork.unbounded,
     runPromise
-  ).then(x => console.log(inspect(x, false, Infinity)))
+  ).then(console.log)

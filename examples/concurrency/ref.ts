@@ -1,4 +1,4 @@
-import { flatMap, Fork, fx, map, Random, Ref, runPromise, Task, Time } from '../../src'
+import { flatMap, Fork, Fx, fx, Random, Ref, runPromise, Task, Time } from '../../src'
 
 const randomSleep = Random.int(100).pipe(flatMap(Time.sleep))
 
@@ -9,7 +9,11 @@ const f = (r: Ref.Ref<number>) => fx(function* () {
   return [x0, x1, x2]
 })
 
-const increment = Ref.atomically((n: number) => randomSleep.pipe(map(_ => [n + 1, n])))
+const increment = (r: Ref.Ref<number>): Fx<Time.Sleep | Random.Int, number> => fx(function* () {
+  const x = r.get()
+  yield* randomSleep
+  return Ref.compareAndSet(r, x, x + 1) ? x : yield* increment(r)
+})
 
 const main = (r: Ref.Ref<number>) => fx(function* () {
   const r1 = yield* Fork.all([f(r), f(r)])
@@ -17,9 +21,7 @@ const main = (r: Ref.Ref<number>) => fx(function* () {
   return r3
 })
 
-const ref = Ref.of(1)
-
-const r = main(ref)
+main(Ref.of(1))
   .pipe(
     Time.defaultTime,
     Random.defaultRandom(),

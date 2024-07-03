@@ -22,11 +22,12 @@ const main = fx(function* () {
 const handlePrint = handle(Print, s => ok(console.log(s)))
 
 const handleRead = <E, A>(f: Fx<E, A>) => bracket(
-  trySync(() => createInterface({ input: process.stdin, output: process.stdout })).pipe(Fail.assert),
+  trySync(() => createInterface({ input: process.stdin, output: process.stdout })),
   readline => ok(readline.close()),
   readline => f.pipe(
-    handle(Read, prompt => Async.tryPromise(signal => readline.question(prompt, { signal })).pipe(Fail.assert))
-  ))
+    handle(Read, prompt => Async.tryPromise(signal => readline.question(prompt, { signal })))
+  )
+).pipe(Fail.assert)
 
 // Run with "real" Read and Print effects
 main.pipe(handleRead, handlePrint, runPromise)

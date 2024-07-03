@@ -15,14 +15,11 @@ const increment = (r: Ref.Ref<number>): Fx<Time.Sleep | Random.Int, number> => f
   return Ref.compareAndSet(r, x, x + 1) ? x : yield* increment(r)
 })
 
-const main = (r: Ref.Ref<number>) => fx(function* () {
-  const r1 = yield* Fork.all([f(r), f(r)])
-  const r3 = yield* Task.wait(r1)
-  return r3
-})
+const r = Ref.of(1)
 
-main(Ref.of(1))
+Fork.all([f(r), f(r)])
   .pipe(
+    flatMap(Task.wait),
     Time.defaultTime,
     Random.defaultRandom(),
     Fork.unbounded,

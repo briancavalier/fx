@@ -1,4 +1,5 @@
 import * as Async from '../Async'
+import * as Fail from '../Fail'
 import { Fx } from '../Fx'
 import { Variant } from './Variant'
 
@@ -19,7 +20,7 @@ export interface Queue<A> extends Disposable {
 export type Enqueue<A> = Pick<Queue<A>, 'enqueue' | 'disposed' | keyof Disposable>
 export type Dequeue<A> = Pick<Queue<A>, 'dequeue' | 'disposed' | keyof Disposable>
 
-export const dequeue = <A>(q: Dequeue<A>): Fx<Async.Async, Dequeued<A> | Disposed> => Async.assertPromise(() => q.dequeue())
+export const dequeue = <A>(q: Dequeue<A>): Fx<Async.Async, Dequeued<A> | Disposed> => Async.tryPromise(() => q.dequeue()).pipe(Fail.assert)
 
 export class UnboundedQueue<A> implements Queue<A> {
   private readonly items: A[] = []

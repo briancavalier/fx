@@ -1,4 +1,4 @@
-import { Async, assertPromise } from './Async'
+import { Async, tryPromise } from './Async'
 
 import { Fail, fail } from './Fail'
 import { Fx, fx, ok } from './Fx'
@@ -17,7 +17,7 @@ export class Task<A, E> {
 }
 
 export const wait = <const A, const E>(t: Task<A, E>) => fx(function* () {
-  const r = yield* assertPromise<Fx<E | Fail<unknown>, A>>(
+  const r = yield* tryPromise<Fx<E | Fail<unknown>, A>>(
     s => new Promise(resolve => void t.promise.then(
       a => { s.aborted || resolve(ok(a)) },
       e => { s.aborted || resolve(fail(e) as Fail<unknown>) }

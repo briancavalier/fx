@@ -29,8 +29,9 @@ const { port = 3000 } = process.env
 runServer(myHandler).pipe(
   Log.console,
   Env.provide({ port: +port }),
-  mapCounter,
-  // keyvCounter,
+  mapCounter, // Use an in-memory Map for the counters
+  // keyvCounter, // uncomment to use keyvCounter with durable storage
+  // Fail.assert, // keyvCounter uses a database, so has additional failure modes
   Fork.unbounded,
   runPromise
 )

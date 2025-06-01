@@ -7,7 +7,7 @@
     "module": "ESNext",
     "moduleResolution": "node",
     "lib": [
-      "ESNext"
+      "ES2024"
     ],
     "checkJs": false,
     "allowJs": false,

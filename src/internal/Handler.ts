@@ -19,9 +19,9 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
   ) { }
 
   *[Symbol.iterator](): Iterator<E, A> {
-    let done = true
+    let done = 0
     const k = (x: any) => {
-      done = false
+      done += 1
       return x
     }
 
@@ -39,8 +39,9 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
             const control = controls.get(ir.value._fxEffectId)
             if (control) {
               const hr = yield* control(k, ir.value.arg) as any
-              if (done) return hr
-              done = true
+              if (done > 1) throw new Error(`Handler resumed ${done} times`)
+              if (done === 0) return hr
+              done = 0
               ir = i.next(hr)
             } else if (GetHandlerContext.is(ir.value)) {
               ir = i.next([this, ...(yield ir.value) as any])

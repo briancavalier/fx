@@ -1,5 +1,5 @@
 import { setTimeout } from 'node:timers/promises'
-import { Fork, Task, Time, flatMap, fx, runPromise } from '../../src'
+import { Fork, Random, Task, Time, flatMap, fx, runPromise } from '../../src'
 
 const randomWait = () => Math.floor(Math.random() * 100)
 
@@ -17,7 +17,7 @@ Promise.race([
 ]).then(_ => console.log('Promise done'), console.error)
 
 const delayFx = (message: string) => fx(function* () {
-  yield* Time.sleep(randomWait())
+  yield* Random.int(100).pipe(flatMap(Time.sleep))
   console.log(message)
 })
 
@@ -29,6 +29,7 @@ Fork.race([
 ]).pipe(
   flatMap(Task.wait),
   Time.defaultTime,
+  Random.defaultRandom(),
   Fork.unbounded,
   runPromise
 ).then(_ => console.log('Fx done'), console.error)

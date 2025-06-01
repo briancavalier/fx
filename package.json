@@ -13,8 +13,8 @@
   ],
   "scripts": {
     "build": "tsc --project ./tsconfig.build.json",
-    "lint": "eslint",
-    "test": "find src -name '*.test.ts' | xargs node --import tsx --test",
+    "lint": "npx oxlint@latest",
+    "test": "node --import tsx --test 'src/**/*.test.ts'",
     "test:watch": "node --import tsx --test --test-reporter=dot --watch './src/**/*.test.ts'",
     "typecheck": "tsc --noEmit"
   },
@@ -22,11 +22,8 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@eslint/js": "^9.9.1",
     "@types/node": "^22.15.29",
-    "eslint": "^8.57.0",
     "tsx": "^4.19.4",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.3.0"
+    "typescript": "^5.8.3"
   }
 }

@@ -60,4 +60,4 @@ const main = fx(function* () {
   }
 })
 
-const r = main.pipe(Time.defaultTime, Fork.unbounded, runPromise).then(x => console.log(inspect(x, false, Infinity)))
+main.pipe(Time.defaultTime, Fork.unbounded, runPromise).then(x => console.log(inspect(x, false, Infinity)))

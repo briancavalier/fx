@@ -11,7 +11,7 @@ describe('Fail', () => {
       const expected = Math.random()
       const f = ok(expected)
 
-      const actual = run(f.pipe(catchOnly((x): x is unknown => true)))
+      const actual = run(f.pipe(catchOnly((_): _ is unknown => true)))
       assert.equal(actual, expected)
     })
 

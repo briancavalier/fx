@@ -149,7 +149,6 @@ export class VirtualClock implements Clock {
         return resolve()
       }
 
-      const start = this._monotonic
       if (this._tasks[0].at <= this._target) {
         const t = this._tasks.shift()!
         this._monotonic = t.at

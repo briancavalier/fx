@@ -33,7 +33,7 @@ export const repeat = <const E, const A>(fx: Fx.Fx<E, A>): Fx.Fx<E | Stream<A>, 
 })
 
 /**
- * Apply an effectul function to each value in a stream
+ * Apply an effectful function to each value in a stream
  */
 export const forEach = <E, R, E2>(fx: Fx.Fx<E, R>, f: (a: Event<E>) => Fx.Fx<E2, void>): Fx.Fx<ExcludeStream<E, E2>, R> =>
   fx.pipe(Fx.handle(Stream, a => f(a as Event<E>)))

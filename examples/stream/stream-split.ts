@@ -43,6 +43,7 @@ const groupDivBy7 = fx(function* () {
       }
     }
   } finally {
+    // eslint-disable-next-line no-unsafe-finally
     return group // return trailing numbers
   }
 })

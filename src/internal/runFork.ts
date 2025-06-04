@@ -50,7 +50,7 @@ const runForkInternal = <const E, const A>(
         disposables.add(t)
         const a = await t.promise
           .finally(() => disposables.remove(t))
-          .catch(e => reject(new TaskError('Awaited Async effect failed', e, name)))
+          .catch(e => reject(new TaskError('Awaited Async effect failed', name, { cause: e })))
         // stop if the scope was disposed while we were waiting
         if (disposables.disposed) return
         ir = i.next(a)
@@ -66,16 +66,16 @@ const runForkInternal = <const E, const A>(
       } else if (Fail.is(ir.value))
         return reject(ir.value.arg instanceof TaskError
           ? ir.value.arg
-          : new TaskError('Unhandled failure in forked task', ir.value.arg, name))
+          : new TaskError('Unhandled failure in forked task', name, { cause: ir.value.arg }))
       else
-        return reject(new TaskError('Unexpected effect in forked task', ir.value, name))
+        return reject(new TaskError('Unexpected effect in forked task', name, { cause: ir.value }))
     }
     resolve(ir.value as A)
   })
 
 class TaskError extends Error {
-  constructor(message: string, cause: unknown, public readonly task?: string) {
-    super(task ? `[${task}] ${message}` : message, { cause })
+  constructor(message: string, public readonly task?: string, o?: ErrorOptions) {
+    super(task ? `[${task}] ${message}` : message, o)
   }
 }
 

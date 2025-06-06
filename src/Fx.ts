@@ -76,6 +76,22 @@ export const flatMap = <const A, const E2, const B>(f: (a: A) => Fx<E2, B>) =>
 export const andThen = <const E2, const B>(f: Fx<E2, B>) => flatMap(() => f)
 
 /**
+ * Discard the result of the Fx and return the provided value.
+ */
+export const andReturn = <const B>(b: B) => map(() => b)
+
+/**
+ * Perform side effects and return the original value.
+ * @example
+ *  // Logs "Hello" and returns "Hello"
+ *  ok("Hello").pipe(tap(Log.info))
+ */
+export const tap = <const A, const E2>(f: (a: A) => Fx<E2, void>) =>
+  <const E1>(fa: Fx<E1, A>): Fx<E1 | E2, A> => fa.pipe(
+    flatMap(a => f(a).pipe(andReturn(a)))
+  )
+
+/**
  * Flatten a nested Fx.
  */
 export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E1 | E2, A> =>

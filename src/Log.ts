@@ -5,6 +5,11 @@ export class Log extends Effect('fx/Log')<LogMessage, void> { }
 
 export const log = (m: LogMessage) => new Log(m)
 
+export const debug = (msg: string, data?: Record<string, unknown>) => log({ level: Level.debug, msg, data })
+export const info = (msg: string, data?: Record<string, unknown>) => log({ level: Level.info, msg, data })
+export const warn = (msg: string, data?: Record<string, unknown>) => log({ level: Level.warn, msg, data })
+export const error = (msg: string, data?: Record<string, unknown>) => log({ level: Level.error, msg, data })
+
 export enum Level {
   debug = 1,
   info,
@@ -22,11 +27,12 @@ export interface LogMessage {
 
 export const console = handle(Log, ({ level, msg, data, context }) => fx(function* () {
   const c = globalThis.console
+  const args = data || context ? [msg, { ...context, ...data }] : [msg]
   switch (level) {
-    case Level.debug: return c.debug(msg, { ...context, ...data })
-    case Level.warn: return c.warn(msg, { ...context, ...data })
-    case Level.error: return c.error(msg, { ...context, ...data })
-    default: return c.info(msg, { ...context, ...data })
+    case Level.debug: return c.debug(...args)
+    case Level.info: return c.info(...args)
+    case Level.warn: return c.warn(...args)
+    case Level.error: return c.error(...args)
   }
 }))
 
@@ -46,7 +52,3 @@ export const context = (context: Record<string, unknown>) =>
   handle(Log, message =>
     log({ ...message, context: { ...message.context, ...context } }))
 
-export const debug = (msg: string, data?: Record<string, unknown>) => log({ level: Level.debug, msg, data })
-export const info = (msg: string, data?: Record<string, unknown>) => log({ level: Level.info, msg, data })
-export const warn = (msg: string, data?: Record<string, unknown>) => log({ level: Level.warn, msg, data })
-export const error = (msg: string, data?: Record<string, unknown>) => log({ level: Level.error, msg, data })

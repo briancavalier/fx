@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise, tryPromise } from './Async'
-import { catchFail } from './Fail'
+import { returnFail } from './Fail'
 import { runPromise } from './Fx'
 
 describe('Async', () => {
@@ -29,7 +29,7 @@ describe('Async', () => {
 
       const actual = await tryPromise(() => Promise.resolve(expected))
         .pipe(
-          catchFail,
+          returnFail,
           runPromise
         )
 
@@ -41,7 +41,7 @@ describe('Async', () => {
 
       const actual = await tryPromise(() => Promise.reject(expected))
         .pipe(
-          catchFail,
+          returnFail,
           runPromise
         )
 

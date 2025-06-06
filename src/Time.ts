@@ -29,7 +29,7 @@ export class Sleep extends Effect('fx/Time/Sleep')<number, void> { }
 /**
  * Delay the current fork by the specified number of milliseconds.
  */
-export const sleep = (millis: number) => new Sleep(millis)
+export const sleep = (ms: number) => new Sleep(ms)
 
 /**
  * Handle Now, Monotonic, and Schedule using the provided Clock

@@ -13,5 +13,10 @@
   "dependencies": {
     "@keyv/sqlite": "^3.6.7",
     "keyv": "^4.5.4"
+  },
+  "overrides": {
+    "keyv": {
+      "sqlite3": "^5.1.6"
+    }
   }
 }

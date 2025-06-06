@@ -174,10 +174,10 @@ class FlatMapIterator<Y, Y2, A, B, N> {
  * Wrap a generator to make it safe to yield* multiple times.
  */
 export class Gen<T, E, A> {
-  constructor(public readonly thisArg: T, public readonly f: () => Generator<E, A>) { }
+  constructor(public readonly self: T, public readonly f: () => Generator<E, A>) { }
 
   [Symbol.iterator](): Iterator<E, A> {
-    return this.f.call(this.thisArg)
+    return this.f.call(this.self)
   }
 
   pipe() { return pipe(this, arguments) }

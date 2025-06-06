@@ -61,6 +61,8 @@ export const map = <const A, const B>(f: (a: A) => B) =>
 export const flatMap = <const A, const E2, const B>(f: (a: A) => Fx<E2, B>) =>
   <const E1>(x: Fx<E1, A>): Fx<E1 | E2, B> => new generator.FlatMap(f, x as any) as Fx<E1 | E2, B>
 
+export const andThen = <const E2, const B>(f: Fx<E2, B>) => flatMap(() => f)
+
 export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E1 | E2, A> =>
   x.pipe(flatMap(x => x))
 
@@ -81,16 +83,24 @@ export const runPromise = <const R>(f: Fx<Async | GetHandlerContext, R>): Promis
  * Execute all the effects of the provided Fx, and return its result.
  */
 export const run = <const R>(f: Fx<never, R>): R =>
-  f.pipe(provideAll({}), getResult)
+  f.pipe(provideAll({}), f => f[Symbol.iterator]().next().value)
 
-const getResult = <const R>(f: Fx<never, R>): R => f[Symbol.iterator]().next().value
-
-export const bracket = <const IE, const FE, const E, const R, const A>(init: Fx<IE, R>, fin: (a: R) => Fx<FE, void>, f: (a: R) => Fx<E, A>) => fx(function* () {
-  const r = yield* init
+/**
+ * Ensures that a resource is acquired, used, and then released,
+ * even if an error occurs. Runs the `initially` effect to acquire a resource,
+ * passes it to `f`, and guarantees that `andFinally` is run with the
+ * resource after `f` returns or throws.
+ */
+export const bracket = <const IE, const FE, const E, const R, const A>(
+  initially: Fx<IE, R>,
+  andFinally: (a: R) => Fx<FE, void>,
+  f: (a: R) => Fx<E, A>
+) => fx(function* () {
+  const r = yield* initially
   try {
     return yield* f(r)
   } finally {
-    yield* fin(r)
+    yield* andFinally(r)
   }
 })
 

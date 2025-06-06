@@ -34,6 +34,9 @@ export const fx: {
  */
 export const ok = <const A>(a: A): Fx<never, A> => new generator.Ok(a)
 
+/**
+ * Construct an Fx that produces no effects and returns `undefined`.
+ */
 export const unit = ok(undefined)
 
 /**
@@ -55,14 +58,26 @@ export const trySync = <const A>(f: () => A): Fx<Fail<unknown>, A> => fx(functio
  */
 export const assertSync = <const A>(f: () => A): Fx<never, A> => new generator.Sync(f)
 
+/**
+ * Transform the result of an Fx
+ */
 export const map = <const A, const B>(f: (a: A) => B) =>
   <const E>(x: Fx<E, A>): Fx<E, B> => new generator.Map<E, A, B>(f, x as any) as Fx<E, B>
 
+/**
+ * Sequence Fx: the result of the first is used to produce the next.
+ */
 export const flatMap = <const A, const E2, const B>(f: (a: A) => Fx<E2, B>) =>
-  <const E1>(x: Fx<E1, A>): Fx<E1 | E2, B> => new generator.FlatMap(f, x as any) as Fx<E1 | E2, B>
+  <const E1>(fa: Fx<E1, A>): Fx<E1 | E2, B> => new generator.FlatMap(f, fa as any) as Fx<E1 | E2, B>
 
+/**
+ * Sequence Fx: discard the result of the first and return the result of the second.
+ */
 export const andThen = <const E2, const B>(f: Fx<E2, B>) => flatMap(() => f)
 
+/**
+ * Flatten a nested Fx.
+ */
 export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E1 | E2, A> =>
   x.pipe(flatMap(x => x))
 

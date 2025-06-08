@@ -1,7 +1,7 @@
 import { Async, assertPromise } from './Async'
 
 import { Fail, fail } from './Fail'
-import { Fx, fx, ok } from './Fx'
+import { Fx, flatten, ok } from './Fx'
 
 export class Task<A, E> {
   private disposed = false
@@ -16,15 +16,17 @@ export class Task<A, E> {
   }
 }
 
-export const wait = <const A, const E>(t: Task<A, E>) => fx(function* () {
-  const r = yield* assertPromise<Fx<E | Fail<unknown>, A>>(
-    s => new Promise(resolve => void t.promise.then(
-      a => { s.aborted || resolve(ok(a)) },
-      e => { s.aborted || resolve(fail(e) as Fail<unknown>) }
-    )))
-
-  return yield* r
-}) as Fx<Extract<E, Fail<any>> | Async, A>
+export const wait = <const A, const E>(t: Task<A, E>) =>
+  flatten(assertPromise<Fx<E | Fail<unknown>, A>>(
+    s => new Promise(resolve => {
+      const dispose = () => t[Symbol.dispose]()
+      s.addEventListener('abort', dispose)
+      t.promise.then(
+        a => s.aborted || resolve(ok(a)),
+        e => s.aborted || resolve(fail(e))
+      ).finally(() => s.removeEventListener('abort', dispose))
+    }))
+  ) as Fx<Extract<E, Fail<any>> | Async, A>
 
 type Result<P> = P extends Task<infer A, unknown> ? A : never
 type Errors<P> = P extends Task<unknown, infer E> ? E : never

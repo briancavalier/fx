@@ -10,7 +10,6 @@ const get = <const A>() => new Get<A>()
 const set = <const A>(a: A) => new Set(a)
 
 const runState = <const E, const A>(s: State<E>, f: Fx<E, A>) => withState(s, f).pipe(map(([a]) => a))
-// const getState = <const E, const A>(s: State<E>, f: Fx<E, A>) => withState(s, f).pipe(map(([, s]) => s))
 
 const withState = <const E, const A, const S = State<E>>(s: S, f: Fx<E, A>) => {
   let state = s

@@ -1,9 +1,11 @@
 import { Effect } from './Effect'
-import { Fx, fx, handle, ok } from './Fx'
+import { Fx, flatten, handle, ok } from './Fx'
 import { XoroShiro128Plus, generateSeed, uniformFloat, uniformIntMax } from './internal/random'
 
 // Random Effect
 // Non-cryptographically secure random number generator
+
+type Random = Int | Float | Split
 
 /**
  * The next 32-bit integer in [0, max)
@@ -37,12 +39,8 @@ export class Split extends Effect('fx/Random/Split')<Fx<unknown, unknown>, Fx<un
 /**
  * Split the random number generator into two independent generators.
  */
-export const split = <const E, const A>(f: Fx<E, A>): Fx<E | Split, A> => fx(function* () {
-  const f2 = yield* new Split(f).returning<Fx<E | Split, A>>()
-  return yield* f2
-})
-
-type Random = Int | Float | Split
+export const split = <const E, const A>(f: Fx<E, A>): Fx<E | Split, A> =>
+  new Split(f).returning<Fx<E | Split, A>>().pipe(flatten)
 
 /**
  * Random handler using the xoroshiro128+ algorithm.

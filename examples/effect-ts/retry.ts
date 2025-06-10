@@ -1,4 +1,4 @@
-import { Async, Effect, Fail, Fork, Fx, Log, handle, runTask, tap } from "../../src"
+import { Async, Effect, Fail, Fork, Fx, Log, handle, runPromise, tap } from "../../src"
 
 // fx doesn't have a built-in HTTP client, but we can create
 // a simple GetJson effect
@@ -32,5 +32,5 @@ main.pipe(
   Fail.catchAll(error => Log.error(`Error fetching user`, { error })),
   Log.console,
   Fork.unbounded,
-  runTask
+  runPromise
 )

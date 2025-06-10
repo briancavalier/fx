@@ -62,7 +62,7 @@ export const returnIf = <const E1, const E extends ExtractFail<E1>>(match: (x: E
 /**
  * Catch failures that are instances of the given constructor and return the caught error.
  * @example
- *   const resultOrError = computation.pipe(returnOnly(NotFoundError))
+ *   const resultOrNotFoundError = computation.pipe(returnOnly(NotFoundError))
  */
 export const returnOnly = <const E1, const C extends AnyConstructor>(c: C) =>
   <const A>(f: Fx<E1, A>) => f.pipe(catchOnly(c, ok))
@@ -80,9 +80,7 @@ export const returnAll = <const E, const A>(f: Fx<E, A>) => f.pipe(catchAll(ok))
  *   const resultOrFail = computation.pipe(returnFail)
  */
 export const returnFail = <const E, const A>(f: Fx<E, A>) =>
-  f.pipe(
-    control(Fail, (_, e) => ok(new Fail(e)))
-  ) as Fx<Exclude<E, Fail<any>>, A | Extract<E, Fail<any>>>
+  f.pipe(catchAll(e => ok(new Fail(e)))) as Fx<Exclude<E, Fail<any>>, A | Fail<Extract<E, Fail<any>>>>
 
 type UnwrapFail<F> = F extends Fail<infer E> ? E : never
 type ExtractFail<F> = UnwrapFail<Extract<F, Fail<any>>>

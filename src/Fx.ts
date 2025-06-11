@@ -5,9 +5,10 @@ import { Fail, fail } from './Fail'
 import { Task } from './Task'
 import { Answer, Arg, Handler, empty } from './internal/Handler'
 import { GetHandlerContext } from './internal/HandlerContext'
+import { label } from './internal/Location'
 import * as generator from './internal/generator'
 import { Pipeable } from './internal/pipe'
-import { runFork } from './internal/runFork'
+import { RunForkOptions, runFork } from './internal/runFork'
 
 /**
  * A computation that produces a value of type `A`, and may produce effects of
@@ -100,15 +101,15 @@ export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E
 /**
  * Execute all the effects of the provided Fx, and return a {@link Task} for its result.
  */
-export const runTask = <const R>(f: Fx<Async | GetHandlerContext, R>): Task<R, never> =>
-  runFork(f.pipe(provideAll({})), { name: 'fx/Fx/runTask' })
+export const runTask = <const R>(f: Fx<Async | GetHandlerContext, R>, options?: RunForkOptions): Task<R, never> =>
+  runFork(f.pipe(provideAll({})), { origin: options?.origin ?? label('fx/Fx/runTask'), ...options })
 
 /**
  * Execute all the effects of the provided Fx, and return a Promise for its result,
  * discarding the ability to cancel the computation.
  */
-export const runPromise = <const R>(f: Fx<Async | GetHandlerContext, R>): Promise<R> =>
-  runTask(f).promise
+export const runPromise = <const R>(f: Fx<Async | GetHandlerContext, R>, options?: RunForkOptions): Promise<R> =>
+  runFork(f.pipe(provideAll({})), { origin: options?.origin ?? label('fx/Fx/runPromise'), ...options }).promise
 
 /**
  * Execute all the effects of the provided Fx, and return its result.

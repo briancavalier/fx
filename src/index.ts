@@ -3,6 +3,7 @@ export * from './Fx'
 
 export * as Abort from './Abort'
 export * as Async from './Async'
+export * as Breadcrumb from './Breadcrumb'
 export * as Console from './Console'
 export * as Env from './Env'
 export * as Fail from './Fail'

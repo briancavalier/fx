@@ -22,8 +22,8 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^22.15.29",
-    "tsx": "^4.19.4",
+    "@types/node": "^24.0.3",
+    "tsx": "^4.20.3",
     "typescript": "^5.8.3"
   }
 }

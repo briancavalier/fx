@@ -7,7 +7,7 @@ import { Answer, Arg, Handler, empty } from './internal/Handler'
 import { GetHandlerContext } from './internal/HandlerContext'
 import * as generator from './internal/generator'
 import { Pipeable } from './internal/pipe'
-import { runFork } from './internal/runFork'
+import { RunForkOptions, runFork } from './internal/runFork'
 
 /**
  * A computation that produces a value of type `A`, and may produce effects of
@@ -34,6 +34,9 @@ export const fx: {
  */
 export const ok = <const A>(a: A): Fx<never, A> => new generator.Ok(a)
 
+/**
+ * Construct an Fx that produces no effects and returns `undefined`.
+ */
 export const unit = ok(undefined)
 
 /**
@@ -55,42 +58,80 @@ export const trySync = <const A>(f: () => A): Fx<Fail<unknown>, A> => fx(functio
  */
 export const assertSync = <const A>(f: () => A): Fx<never, A> => new generator.Sync(f)
 
+/**
+ * Transform the result of an Fx
+ */
 export const map = <const A, const B>(f: (a: A) => B) =>
   <const E>(x: Fx<E, A>): Fx<E, B> => new generator.Map<E, A, B>(f, x as any) as Fx<E, B>
 
+/**
+ * Sequence Fx: the result of the first is used to produce the next.
+ */
 export const flatMap = <const A, const E2, const B>(f: (a: A) => Fx<E2, B>) =>
-  <const E1>(x: Fx<E1, A>): Fx<E1 | E2, B> => new generator.FlatMap(f, x as any) as Fx<E1 | E2, B>
+  <const E1>(fa: Fx<E1, A>): Fx<E1 | E2, B> => new generator.FlatMap(f, fa as any) as Fx<E1 | E2, B>
 
+/**
+ * Sequence Fx: discard the result of the first and return the result of the second.
+ */
+export const andThen = <const E2, const B>(f: Fx<E2, B>) => flatMap(() => f)
+
+/**
+ * Discard the result of the Fx and return the provided value.
+ */
+export const andReturn = <const B>(b: B) => map(() => b)
+
+/**
+ * Perform side effects and return the original value.
+ * @example
+ *  // Logs "Hello" and returns "Hello"
+ *  ok("Hello").pipe(tap(Log.info))
+ */
+export const tap = <const A, const E2>(f: (a: A) => Fx<E2, void>) =>
+  <const E1>(fa: Fx<E1, A>): Fx<E1 | E2, A> => fa.pipe(
+    flatMap(a => f(a).pipe(andReturn(a)))
+  )
+
+/**
+ * Flatten a nested Fx.
+ */
 export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E1 | E2, A> =>
   x.pipe(flatMap(x => x))
 
 /**
  * Execute all the effects of the provided Fx, and return a {@link Task} for its result.
  */
-export const runTask = <const R>(f: Fx<Async | GetHandlerContext, R>): Task<R, never> =>
-  runFork(f.pipe(provideAll({})), { name: 'Fx:toTask' })
+export const runTask = <const R>(f: Fx<Async | GetHandlerContext, R>, { origin = 'fx/runTask', maxConcurrency }: RunForkOptions = {}): Task<R, never> =>
+  runFork(f.pipe(provideAll({})), { origin, maxConcurrency })
 
 /**
  * Execute all the effects of the provided Fx, and return a Promise for its result,
  * discarding the ability to cancel the computation.
  */
-export const runPromise = <const R>(f: Fx<Async | GetHandlerContext, R>): Promise<R> =>
-  runTask(f).promise
+export const runPromise = <const R>(f: Fx<Async | GetHandlerContext, R>, { origin = 'fx/runPromise', maxConcurrency }: RunForkOptions = {}): Promise<R> =>
+  runTask(f, { origin, maxConcurrency }).promise
 
 /**
  * Execute all the effects of the provided Fx, and return its result.
  */
 export const run = <const R>(f: Fx<never, R>): R =>
-  f.pipe(provideAll({}), getResult)
+  f.pipe(provideAll({}), f => f[Symbol.iterator]().next().value)
 
-const getResult = <const R>(f: Fx<never, R>): R => f[Symbol.iterator]().next().value
-
-export const bracket = <const IE, const FE, const E, const R, const A>(init: Fx<IE, R>, fin: (a: R) => Fx<FE, void>, f: (a: R) => Fx<E, A>) => fx(function* () {
-  const r = yield* init
+/**
+ * Ensures that a resource is acquired, used, and then released,
+ * even if an error occurs. Runs the `initially` effect to acquire a resource,
+ * passes it to `f`, and guarantees that `andFinally` is run with the
+ * resource after `f` returns or throws.
+ */
+export const bracket = <const IE, const FE, const E, const R, const A>(
+  initially: Fx<IE, R>,
+  andFinally: (a: R) => Fx<FE, void>,
+  f: (a: R) => Fx<E, A>
+) => fx(function* () {
+  const r = yield* initially
   try {
     return yield* f(r)
   } finally {
-    yield* fin(r)
+    yield* andFinally(r)
   }
 })
 

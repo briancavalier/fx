@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Effect } from './Effect'
-import { Fail, catchFail } from './Fail'
+import { Fail, returnFail } from './Fail'
 import { assertSync, flatMap, fx, handle, ok, run, trySync } from './Fx'
 
 describe('Fx', () => {
@@ -86,13 +86,13 @@ describe('Fx', () => {
   describe('trySync', () => {
     it('given thunk, returns result', () => {
       const x = Math.random()
-      const r = trySync(() => x).pipe(catchFail, run)
+      const r = trySync(() => x).pipe(returnFail, run)
       assert.equal(r, x)
     })
 
     it('given thunk throws, produces Fail', () => {
       const e = new Error()
-      const r = trySync(() => { throw e }).pipe(catchFail, run)
+      const r = trySync(() => { throw e }).pipe(returnFail, run)
       assert.ok(Fail.is(r))
       assert.equal(r.arg, e)
     })

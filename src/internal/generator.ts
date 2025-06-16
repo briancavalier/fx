@@ -15,7 +15,7 @@ export class Once<Y, R> implements Generator<Y, R>, Pipeable {
   }
 
   return(a: R): IteratorResult<Y, R> {
-    return { value: a, done: true }
+    return { done: true, value: a}
   }
 
   throw(e: unknown): IteratorResult<Y, R> {
@@ -24,6 +24,10 @@ export class Once<Y, R> implements Generator<Y, R>, Pipeable {
 
   [Symbol.iterator](): Generator<Y, R> {
     return new Once<Y, R>(this.value)
+  }
+
+  [Symbol.dispose]() {
+    this.called = true
   }
 
   pipe() { return pipe(this, arguments) }
@@ -51,6 +55,8 @@ export class Ok<R> implements Generator<never, R>, Pipeable {
     return this
   }
 
+  [Symbol.dispose]() { }
+
   pipe() { return pipe(this, arguments) }
 }
 
@@ -58,14 +64,18 @@ export class Ok<R> implements Generator<never, R>, Pipeable {
  * Always return the result of the provided function.
  */
 export class Sync<R> implements Generator<never, R>, Pipeable {
+  private called = false
+
   constructor(public readonly f: () => R) { }
 
-  next(): IteratorResult<never, R> {
+  next(r: R): IteratorResult<never, R> {
+    if (this.called) return { done: true, value: r }
+    this.called = true
     return { done: true, value: this.f() }
   }
 
   return(a: R): IteratorResult<never, R> {
-    return { value: a, done: true }
+    return { done: true, value: a }
   }
 
   throw(e: unknown): IteratorResult<never, R> {
@@ -73,8 +83,13 @@ export class Sync<R> implements Generator<never, R>, Pipeable {
   }
 
   [Symbol.iterator](): Generator<never, R> {
-    return this
+    return new Sync<R>(this.f)
   }
+
+  [Symbol.dispose]() {
+    this.called = true
+  }
+
 
   pipe() { return pipe(this, arguments) }
 }
@@ -106,14 +121,12 @@ class MapIterator<Y, A, B, N> {
     return r.done ? { done: true, value: this.f(r.value) } : r
   }
 
-  return(a: A): IteratorResult<Y, B> {
-    const r = this.i.return(a)
-    return r.done ? { done: true, value: this.f(r.value) } : r
+  return(a: A): IteratorResult<Y, A> {
+    return this.i.return(a)
   }
 
-  throw(e: unknown): IteratorResult<Y, B> {
-    const r = this.i.throw(e)
-    return r.done ? { done: true, value: this.f(r.value) } : r
+  throw(e: unknown): IteratorResult<Y, unknown> {
+    return this.i.throw(e)
   }
 }
 
@@ -174,10 +187,10 @@ class FlatMapIterator<Y, Y2, A, B, N> {
  * Wrap a generator to make it safe to yield* multiple times.
  */
 export class Gen<T, E, A> {
-  constructor(public readonly thisArg: T, public readonly f: () => Generator<E, A>) { }
+  constructor(public readonly self: T, public readonly f: () => Generator<E, A>) { }
 
   [Symbol.iterator](): Iterator<E, A> {
-    return this.f.call(this.thisArg)
+    return this.f.call(this.self)
   }
 
   pipe() { return pipe(this, arguments) }

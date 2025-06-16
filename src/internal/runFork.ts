@@ -1,4 +1,5 @@
 import { Async } from '../Async'
+import { Breadcrumb, at } from '../Breadcrumb'
 import { Fail } from '../Fail'
 import { Fork, ForkContext } from '../Fork'
 import { Fx } from '../Fx'
@@ -8,15 +9,15 @@ import { GetHandlerContext, HandlerContext } from './HandlerContext'
 import { Semaphore } from './Semaphore'
 import { DisposableSet, dispose } from './disposable'
 
-type RunForkOptions = {
-  readonly name?: string
+export type RunForkOptions = {
+  readonly origin?: Breadcrumb | string
   readonly maxConcurrency?: number
 }
 
-export const runFork = <const E extends Async | Fork | Fail<unknown> | GetHandlerContext, const A>(f: Fx<E, A>, o: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
+export const runFork = <const E extends Async | Fork | Fail<unknown> | GetHandlerContext, const A>(f: Fx<E, A>, { origin = 'fx/runFork', maxConcurrency = Infinity }: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new DisposableSet()
 
-  const promise = runForkInternal(f, [], new Semaphore(o.maxConcurrency ?? Infinity), disposables, o.name)
+  const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, at(origin))
     .finally(() => dispose(disposables))
 
   return new Task(promise, disposables)
@@ -26,7 +27,7 @@ export const acquireAndRunFork = (f: ForkContext, s: Semaphore, context: readonl
   const disposables = new DisposableSet()
 
   const promise = acquire(s, disposables,
-    () => runForkInternal(withContext([...f.context, ...context], f.fx), context, s, disposables, f.name)
+    () => runForkInternal(withContext([...f.context, ...context], f.fx), context, s, disposables, f.origin)
       .finally(() => dispose(disposables)))
 
   return new Task(promise, disposables)
@@ -37,7 +38,7 @@ const runForkInternal = <const E, const A>(
   context: readonly HandlerContext[],
   semaphore: Semaphore,
   disposables: DisposableSet,
-  name?: string
+  origin: Breadcrumb
 ): Promise<A> =>
   new Promise<A>(async (resolve, reject) => {
     const i = f[Symbol.iterator]()
@@ -50,7 +51,7 @@ const runForkInternal = <const E, const A>(
         disposables.add(t)
         const a = await t.promise
           .finally(() => disposables.remove(t))
-          .catch(e => reject(new TaskError('Awaited Async effect failed', e, name)))
+          .catch(e => reject(new ForkError(`Awaited Async task failed`, origin, { cause: e })))
         // stop if the scope was disposed while we were waiting
         if (disposables.disposed) return
         ir = i.next(a)
@@ -59,23 +60,23 @@ const runForkInternal = <const E, const A>(
         disposables.add(t)
         t.promise
           .finally(() => disposables.remove(t))
-          .catch(reject) // subtask errors should already be wrapped in TaskError
+          .catch(e => reject(new ForkError(`Unhandled failure in forked task`, origin, { cause: e })))
         ir = i.next(t)
       } else if (GetHandlerContext.is(ir.value)) {
         ir = i.next(context)
       } else if (Fail.is(ir.value))
-        return reject(ir.value.arg instanceof TaskError
-          ? ir.value.arg
-          : new TaskError('Unhandled failure in forked task', ir.value.arg, name))
+        return reject(
+          new ForkError(`Unhandled failure in forked task`, origin, { cause: ir.value.arg }))
       else
-        return reject(new TaskError('Unexpected effect in forked task', ir.value, name))
+        return reject(new ForkError(`Unhandled failure in forked task`, origin, { cause: ir.value }))
     }
     resolve(ir.value as A)
   })
 
-class TaskError extends Error {
-  constructor(message: string, cause: unknown, public readonly task?: string) {
-    super(task ? `[${task}] ${message}` : message, { cause })
+class ForkError extends Error {
+  constructor(message: string, origin: Breadcrumb, options?: ErrorOptions) {
+    super(message, options)
+    Object.defineProperty(this, 'stack', { get: () => origin.stack })
   }
 }
 

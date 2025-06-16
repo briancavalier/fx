@@ -1,4 +1,4 @@
-import { Sink, Stream, flatMap, fx, ok, run } from '../../src'
+import { Console, Sink, Stream, flatMap, fx, run } from '../../src'
 
 // From Effect-TS discord
 // https://discord.com/channels/795981131316985866/1125094089281511474/1245070996621365318
@@ -54,6 +54,7 @@ const numbers = Array.from({ length: 50 }, (_, i) => i + 1)
 Stream.fromIterable(numbers).pipe(
   _ => Stream.to(_, groupDivBy7),
   flatMap(Stream.emit), // emit trailing numbers
-  _ => Stream.forEach(_, numbers => ok(console.log(numbers))),
+  _ => Stream.forEach(_, Console.log),
+  Console.defaultConsole,
   run
 )

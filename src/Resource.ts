@@ -1,15 +1,15 @@
 import { Effect } from './Effect'
 import { Fx, fx, handle, unit } from './Fx'
 
-import { Fail, catchFail, fail } from './Fail'
+import { Fail, fail, returnFail } from './Fail'
 
 // ----------------------------------------------------------------------
 // Resource effect to acquire and release resources within a scope
 
-export type Resource<E1, E2, R> = Readonly<{
-  acquire: Fx<E1, R>
-  release: (r: R) => Fx<E2, void>
-}>
+export interface Resource<E1, E2, R> {
+  readonly acquire: Fx<E1, R>
+  readonly release: (r: R) => Fx<E2, void>
+}
 
 export class Acquire<E> extends Effect('fx/Resource')<Resource<E, E, any>> { }
 
@@ -25,7 +25,7 @@ export const scope = <const E, const A>(f: Fx<E, A>) => fx(function* () {
   try {
     return yield* f.pipe(
       handle(Acquire, ({ acquire, release }) => fx(function* () {
-        const a = yield* catchFail(acquire)
+        const a = yield* returnFail(acquire)
 
         if (Fail.is(a)) {
           const failures = yield* releaseSafely(resources)
@@ -45,7 +45,7 @@ export const scope = <const E, const A>(f: Fx<E, A>) => fx(function* () {
 const releaseSafely = (resources: readonly Fx<unknown, unknown>[]) => fx(function* () {
   const failures = [] as unknown[]
   for (const release of resources) {
-    const r = yield* catchFail(release)
+    const r = yield* returnFail(release)
     if (Fail.is(r)) failures.push(r.arg)
   }
   return failures

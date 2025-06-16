@@ -1,23 +1,23 @@
 import { Async } from '../Async'
+import { Breadcrumb, at } from '../Breadcrumb'
 import { Fail } from '../Fail'
 import { Fork, ForkContext } from '../Fork'
 import { Fx } from '../Fx'
 import { Task } from '../Task'
 import { Handler, } from './Handler'
 import { GetHandlerContext, HandlerContext } from './HandlerContext'
-import { Location } from './Location'
 import { Semaphore } from './Semaphore'
 import { DisposableSet, dispose } from './disposable'
 
 export type RunForkOptions = {
-  readonly origin?: Location
+  readonly origin?: Breadcrumb | string
   readonly maxConcurrency?: number
 }
 
-export const runFork = <const E extends Async | Fork | Fail<unknown> | GetHandlerContext, const A>(f: Fx<E, A>, { origin = { label: 'fx/runFork' }, maxConcurrency = Infinity }: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
+export const runFork = <const E extends Async | Fork | Fail<unknown> | GetHandlerContext, const A>(f: Fx<E, A>, { origin = 'fx/runFork', maxConcurrency = Infinity }: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new DisposableSet()
 
-  const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, origin)
+  const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, at(origin))
     .finally(() => dispose(disposables))
 
   return new Task(promise, disposables)
@@ -38,7 +38,7 @@ const runForkInternal = <const E, const A>(
   context: readonly HandlerContext[],
   semaphore: Semaphore,
   disposables: DisposableSet,
-  origin: Location
+  origin: Breadcrumb
 ): Promise<A> =>
   new Promise<A>(async (resolve, reject) => {
     const i = f[Symbol.iterator]()
@@ -74,7 +74,7 @@ const runForkInternal = <const E, const A>(
   })
 
 class ForkError extends Error {
-  constructor(message: string, origin: Location, options?: ErrorOptions) {
+  constructor(message: string, origin: Breadcrumb, options?: ErrorOptions) {
     super(message, options)
     Object.defineProperty(this, 'stack', { get: () => origin.stack })
   }

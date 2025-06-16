@@ -1,18 +1,18 @@
-import { Env, Log, fx, runPromise } from '../../src'
-import * as wttr from './wttr'
+import { Console, Env, fx, runPromise } from '../../src'
+import { WeatherQuery, getWeather } from './wttr'
 import { wttrFetch } from './wttr-fetch'
 
 const main = fx(function* () {
-  const request = yield* Env.get<wttr.WeatherQuery>()
+  const query = yield* Env.get<WeatherQuery>()
 
-  const response = yield* wttr.getWeather(request)
+  const response = yield* getWeather(query)
 
-  yield* Log.info(`Weather: `, response)
+  yield* Console.log(`Weather: `, response)
 })
 
 main.pipe(
   wttrFetch,
-  Log.console,
+  Console.defaultConsole,
   Env.provide({ location: process.env.location }),
   runPromise
 )

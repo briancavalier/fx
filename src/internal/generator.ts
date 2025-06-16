@@ -106,14 +106,12 @@ class MapIterator<Y, A, B, N> {
     return r.done ? { done: true, value: this.f(r.value) } : r
   }
 
-  return(a: A): IteratorResult<Y, B> {
-    const r = this.i.return(a)
-    return r.done ? { done: true, value: this.f(r.value) } : r
+  return(a: A): IteratorResult<Y, A> {
+    return this.i.return(a)
   }
 
-  throw(e: unknown): IteratorResult<Y, B> {
-    const r = this.i.throw(e)
-    return r.done ? { done: true, value: this.f(r.value) } : r
+  throw(e: unknown): IteratorResult<Y, unknown> {
+    return this.i.throw(e)
   }
 }
 

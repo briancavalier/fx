@@ -1,9 +1,11 @@
-import { Fork, Log, Time, andThen, runPromise } from "../../src"
+import { Console, Fork, Time, andThen, runPromise } from "../../src"
 
-const main = Time.sleep(1000).pipe(andThen(Log.info('Hello, World!')))
+const main = Time.sleep(1000).pipe(
+  andThen(Console.log('Hello, World!'))
+)
 
 main.pipe(
-  Log.console,
+  Console.defaultConsole,
   Time.defaultTime,
   Fork.unbounded,
   runPromise

@@ -1,4 +1,4 @@
-import { Async, Effect, Fail, Fork, Fx, Log, handle, runPromise, tap } from "../../src"
+import { Async, Console, Effect, Fail, Fx, handle, runPromise, tap } from "../../src"
 
 // fx doesn't have a built-in HTTP client, but we can create
 // a simple GetJson effect
@@ -22,15 +22,14 @@ const retry = (tries: number) => <E, A>(fa: Fx<E, A>): Fx<E, A> =>
 // Define findUserById using the new GetJson effect
 const findUserById = (id: string) => new GetJson(`/users/${id}`)
 
-const main = findUserById('123').pipe(
+const main = findUserById('1').pipe(
   withFetchGetJson,
   retry(3)
 )
 
 main.pipe(
-  tap(user => Log.info('Got user', { user })),
-  Fail.catchAll(error => Log.error(`Error fetching user`, { error })),
-  Log.console,
-  Fork.unbounded,
+  tap(user => Console.log('Got user', user)),
+  Fail.catchAll(error => Console.error(`Error fetching user`, { error })),
+  Console.defaultConsole,
   runPromise
 )

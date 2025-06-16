@@ -12,14 +12,14 @@ const maybeFail = Random.float.pipe(
 )
 
 const main = maybeFail.pipe(
-  flatMap(value => Log.info(`Got value ${value}`)),
+  flatMap(value => Log.info(`Value is ${value}`)),
   Fail.catchOnly(CustomError, e =>
-    Log.error(`Oops! Got value ${e.value}`)
+    Log.error(`Oops! Got value`, e)
   ),
 )
 
-console.log(main.pipe(
+main.pipe(
   Log.console,
   Random.defaultRandom(),
   run
-))
+)

@@ -1,4 +1,4 @@
-import { Fork, Log, Task, Time, flatMap, fx, runPromise } from "../../src"
+import { Console, Fork, Task, Time, flatMap, fx, runPromise } from "../../src"
 
 const getUser = (id: number) => fx(function* () {
   yield* Time.sleep(1000) // Simulate a delay
@@ -13,12 +13,12 @@ const ids = Array.from(
 const main2 = Fork.all(ids.map(getUser))
   .pipe(
     flatMap(Task.wait),
-    flatMap(users => Log.info("Got users", { users }))
+    flatMap(users => Console.log("Got users", users))
   )
 
 main2.pipe(
   Time.defaultTime,
-  Log.console,
+  Console.defaultConsole,
   Fork.bounded(3),
   runPromise
 )

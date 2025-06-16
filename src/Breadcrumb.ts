@@ -14,4 +14,14 @@ export interface Breadcrumb {
  * Create an Annotation, optionally linked to another existing one.
  */
 export const at = (message: string, prev?: Breadcrumb): Breadcrumb =>
-  new Error(message, { cause: prev })
+  new BreadcrumbAt(message, { cause: prev })
+
+class BreadcrumbAt extends Error implements Breadcrumb {
+  constructor(
+    public readonly message: string,
+    options?: ErrorOptions
+  ) {
+    super(message, options)
+    if (Error.captureStackTrace) Error.captureStackTrace(this, at)
+  }
+}

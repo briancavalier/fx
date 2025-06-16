@@ -28,19 +28,19 @@ export type EffectsOf<F> = F extends Fx<infer E, unknown> ? E : never
 export type ResultOf<F> = F extends Fx<unknown, infer A> ? A : never
 export type ErrorsOf<E> = Extract<E, Fail<any>>
 
-export const forkEach = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs, origin: Breadcrumb | string = 'fx/Fork/forkEach') => fx(function* () {
+export const forkEach = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs, origin = 'fx/Fork/forkEach') => fx(function* () {
   const forkOrigin = typeof origin === 'string' ? at(origin) : origin
   const ps = [] as Task.Task<unknown, unknown>[]
-  for (let i = 0; i < fxs.length; i++) ps.push(yield* fork(fxs[i], at(`${i}`, forkOrigin)))
+  for (let i = 0; i < fxs.length; i++) ps.push(yield* fork(fxs[i], at(`${origin}[${i}]`, forkOrigin)))
   return ps
 }) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | Fork, {
   readonly [K in keyof Fxs]: Task.Task<ResultOf<Fxs[K]>, ErrorsOf<EffectsOf<Fxs[K]>>>
 }>
 
-export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs, origin: Breadcrumb | string = 'fx/Fork/all') =>
+export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs, origin = 'fx/Fork/all') =>
   forkEach(fxs, origin).pipe(map(Task.all))
 
-export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs, origin: Breadcrumb | string = 'fx/Fork/race') =>
+export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs, origin = 'fx/Fork/race') =>
   forkEach(fxs, origin).pipe(map(Task.race))
 
 export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>): Fx<Handle<E, Fork> | GetHandlerContext, A> => fx(function* () {

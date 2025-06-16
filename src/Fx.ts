@@ -1,5 +1,4 @@
 import { Async } from './Async'
-import { at } from './Breadcrumb'
 import { EffectType } from './Effect'
 import { provideAll } from './Env'
 import { Fail, fail } from './Fail'
@@ -102,14 +101,14 @@ export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E
  * Execute all the effects of the provided Fx, and return a {@link Task} for its result.
  */
 export const runTask = <const R>(f: Fx<Async | GetHandlerContext, R>, options?: RunForkOptions): Task<R, never> =>
-  runFork(f.pipe(provideAll({})), { origin: options?.origin ?? at('fx/Fx/runTask'), ...options })
+  runFork(f.pipe(provideAll({})), options)
 
 /**
  * Execute all the effects of the provided Fx, and return a Promise for its result,
  * discarding the ability to cancel the computation.
  */
 export const runPromise = <const R>(f: Fx<Async | GetHandlerContext, R>, options?: RunForkOptions): Promise<R> =>
-  runFork(f.pipe(provideAll({})), { origin: options?.origin ?? at('fx/Fx/runPromise'), ...options }).promise
+  runFork(f.pipe(provideAll({})), options).promise
 
 /**
  * Execute all the effects of the provided Fx, and return its result.

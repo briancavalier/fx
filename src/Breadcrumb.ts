@@ -13,15 +13,16 @@ export interface Breadcrumb {
 /**
  * Create a Breadcrumb, optionally linked to an existing one.
  */
-export const at = (message: string, prev?: Breadcrumb): Breadcrumb =>
-  new BreadcrumbAt(message, { cause: prev })
+export const at = (a: Breadcrumb | string): Breadcrumb =>
+  typeof a === 'string' ? new BreadcrumbAt(a, at) : a
 
 class BreadcrumbAt extends Error implements Breadcrumb {
   constructor(
     public readonly message: string,
+    f: Function,
     options?: ErrorOptions
   ) {
     super(message, options)
-    if (Error.captureStackTrace) Error.captureStackTrace(this, at)
+    if (Error.captureStackTrace) Error.captureStackTrace(this, f)
   }
 }

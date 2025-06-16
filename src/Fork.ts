@@ -15,7 +15,7 @@ export const fork = <const E, const A>(
   origin: Breadcrumb | string = at('fx/Fork/fork')
 ): Fx<Exclude<E, Async | Fail<any>> | Fork | GetHandlerContext, Task.Task<A, ErrorsOf<E>>> => fx(function* () {
   const context = yield* getHandlerContext
-  return (yield new Fork({ fx: f, context, origin: typeof origin === 'string' ? at(origin) : origin })) as Task.Task<A, ErrorsOf<E>>
+  return (yield new Fork({ fx: f, context, origin: at(origin) })) as Task.Task<A, ErrorsOf<E>>
 })
 
 export interface ForkContext {
@@ -29,9 +29,8 @@ export type ResultOf<F> = F extends Fx<unknown, infer A> ? A : never
 export type ErrorsOf<E> = Extract<E, Fail<any>>
 
 export const forkEach = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs, origin = 'fx/Fork/forkEach') => fx(function* () {
-  const forkOrigin = typeof origin === 'string' ? at(origin) : origin
   const ps = [] as Task.Task<unknown, unknown>[]
-  for (let i = 0; i < fxs.length; i++) ps.push(yield* fork(fxs[i], at(`${origin}[${i}]`, forkOrigin)))
+  for (let i = 0; i < fxs.length; i++) ps.push(yield* fork(fxs[i], `${origin}[${i}]`))
   return ps
 }) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | Fork, {
   readonly [K in keyof Fxs]: Task.Task<ResultOf<Fxs[K]>, ErrorsOf<EffectsOf<Fxs[K]>>>

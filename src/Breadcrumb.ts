@@ -1,8 +1,8 @@
 /**
  * A labeled annotation with an optional stack representing a
  * specific point in execution.
- * Annotation provides context for errors or logs, indicating where
- * an effect or operation is occurring. Annotations can be chained
+ * Breadcrumb provides context for errors or logs, indicating where
+ * an effect or operation is occurring. Breadcrumbs can be chained
  * to form a path through the code, including through async operations.
  */
 export interface Breadcrumb {
@@ -11,7 +11,7 @@ export interface Breadcrumb {
 }
 
 /**
- * Create an Annotation, optionally linked to another existing one.
+ * Create a Breadcrumb, optionally linked to an existing one.
  */
 export const at = (message: string, prev?: Breadcrumb): Breadcrumb =>
   new BreadcrumbAt(message, { cause: prev })

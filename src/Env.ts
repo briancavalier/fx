@@ -1,10 +1,10 @@
 import { Effect } from './Effect'
-import { Fx, fx, handle, ok } from './Fx'
+import { Fx, handle, map, ok } from './Fx'
 
 export class Get<E extends Record<PropertyKey, unknown>> extends Effect('fx/Env')<void, E> { }
 
 export const get = <const E extends Record<PropertyKey, unknown>>() =>
-  new Get<E>().returning<E>()
+  new Get<E>()
 
 type ExcludeEnv<E, S> =
   E extends Get<Record<PropertyKey, unknown>>
@@ -16,9 +16,7 @@ type ExcludeEnv<E, S> =
 
 export const provide = <const S extends Record<PropertyKey, unknown>>(s: S) => <const E, const A>(f: Fx<E, A>) =>
   f.pipe(
-    handle(Get, _ => fx(function* () {
-      return { ...(yield* get()), ...s }
-    }))
+    handle(Get, _ => get().pipe(map(e => ({ ...e, ...s }))))
   ) as Fx<ExcludeEnv<E, S>, A>
 
 export type EnvOf<E> = U2I<EachEnv<E>>

@@ -1,4 +1,4 @@
-import { Env, Fork, Log, fx, runPromise } from '../../src'
+import { Env, Fork, Log, Time, fx, runPromise } from '../../src'
 
 import { Request, runServer } from './HttpServer'
 import { next } from './counter'
@@ -28,6 +28,7 @@ const { port = 3000 } = process.env
 
 runServer(myHandler).pipe(
   Log.console,
+  Time.defaultTime,
   Env.provide({ port: +port }),
   mapCounter,
   // keyvCounter,

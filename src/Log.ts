@@ -1,5 +1,6 @@
 import { Effect } from './Effect'
 import { Fx, fx, handle, map, ok, unit } from './Fx'
+import { now } from './Time'
 
 export class Log<M> extends Effect('fx/Log')<M, void> { }
 
@@ -18,22 +19,29 @@ export enum Level {
   SILENT
 }
 
-export interface LogMessage {
-  level: Level,
-  msg: string,
-  data?: unknown,
-  context?: Record<string, unknown>
+export interface HasLevel {
+  readonly level: Level
 }
 
-export const console = handle(Log<{ readonly level: Level }>, ({ level, ...msg }) => fx(function* () {
+export interface HasContext {
+  readonly context?: Record<string, unknown>
+}
+
+export interface LogMessage extends HasLevel, HasContext {
+  readonly msg: string,
+  readonly data?: unknown
+}
+
+export const console = handle(Log<HasLevel>, ({ level, ...msg }) => fx(function* () {
   const c = globalThis.console
   const l = Level[level]
-  const t = new Date().toISOString()
+  const t = new Date(yield* now).toISOString()
+  const m = Object.values(msg).filter(v => v !== undefined)
   switch (level) {
-    case Level.DEBUG: return c.debug(l, t, msg)
-    case Level.INFO: return c.info(l, t, msg)
-    case Level.WARN: return c.warn(l, t, msg)
-    case Level.ERROR: return c.error(l, t, msg)
+    case Level.DEBUG: return c.debug(l, t, ...m)
+    case Level.INFO: return c.info(l, t, ...m)
+    case Level.WARN: return c.warn(l, t, ...m)
+    case Level.ERROR: return c.error(l, t, ...m)
   }
 }))
 
@@ -45,12 +53,12 @@ export const collect = <const M, const E, const A>(f: Fx<E | Log<M>, A>) => fx(f
   )
 })
 
-export const minLevel = <const M extends LogMessage>(min: Level) =>
+export const minLevel = <const M extends HasLevel>(min: Level) =>
   handle(Log<M>, m =>
     m.level >= min ? log(m) : unit
   )
 
-export const context = <const M extends LogMessage>(context: Record<string, unknown>) =>
+export const context = <const M extends HasContext>(context: Record<string, unknown>) =>
   handle(Log<M>, m =>
     log({ ...m, context: { ...m.context, ...context } }))
 

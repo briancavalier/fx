@@ -1,5 +1,6 @@
 import { Effect } from './Effect'
-import { control, ok } from './Fx'
+import { ok } from './Fx'
+import { control } from './Handler'
 
 /**
  * Abort a computation without returning a result. Abort represents partial functions,

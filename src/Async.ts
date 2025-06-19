@@ -18,4 +18,4 @@ export const tryPromise = <const A>(f: Run<A>): Fx<Async | Fail<unknown>, A> =>
  * Use {@link tryPromise} instead, if the function might throw or reject. Thrown
  * errors will not be caught by the Fx runtime, and will crash the process.
  */
-export const assertPromise = <const A>(run: Run<A>) => new Async(run).returning<A>()
+export const assertPromise = <const A>(run: Run<A>) => new Async(run) as Fx<Async, A>

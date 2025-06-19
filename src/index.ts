@@ -1,5 +1,6 @@
 export * from './Effect'
 export * from './Fx'
+export * from './Handler'
 
 export * as Abort from './Abort'
 export * as Async from './Async'

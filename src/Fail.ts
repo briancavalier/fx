@@ -1,5 +1,6 @@
 import { Effect } from './Effect'
-import { Fx, control, ok } from './Fx'
+import { Fx, ok } from './Fx'
+import { control } from './Handler'
 
 export class Fail<const E> extends Effect('fx/Fail')<E, never> { }
 
@@ -81,6 +82,13 @@ export const returnAll = <const E, const A>(f: Fx<E, A>) => f.pipe(catchAll(ok))
  */
 export const returnFail = <const E, const A>(f: Fx<E, A>) =>
   f.pipe(catchAll(e => ok(new Fail(e)))) as Fx<Exclude<E, Fail<any>>, A | Fail<Extract<E, Fail<any>>>>
+
+/**
+ * Assert that an Fx does not fail, throwing the error if it does.
+ * @example
+ *   const result = trySync(f).pipe(assert) // Crashes if f fails
+ */
+export const assert = control(Fail<any>, (_, e) => { throw e })
 
 type UnwrapFail<F> = F extends Fail<infer E> ? E : never
 type ExtractFail<F> = UnwrapFail<Extract<F, Fail<any>>>

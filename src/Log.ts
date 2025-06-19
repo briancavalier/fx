@@ -1,5 +1,6 @@
 import { Effect } from './Effect'
-import { Fx, fx, handle, map, ok, unit } from './Fx'
+import { Fx, fx, map, ok, unit } from './Fx'
+import { handle } from './Handler'
 import { now } from './Time'
 
 export class Log<M> extends Effect('fx/Log')<M, void> { }

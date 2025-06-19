@@ -4,6 +4,7 @@ import * as Effect from './Effect'
 import * as Fail from './Fail'
 import * as Fork from './Fork'
 import * as Fx from './Fx'
+import { Handle, control, handle } from './Handler'
 import * as Sink from './Sink'
 import * as Task from './Task'
 import * as Queue from './internal/Queue'
@@ -18,7 +19,7 @@ export class Stream<A> extends Effect.Effect('fx/Stream')<A, void> { }
 
 export type Event<T> = T extends Stream<infer A> ? A : never
 
-export type ExcludeStream<E, E2 = never> = Fx.Handle<E, Stream<any>, E2>
+export type ExcludeStream<E, E2 = never> = Handle<E, Stream<any>, E2>
 
 /**
  * Emit a single value
@@ -36,21 +37,21 @@ export const repeat = <const E, const A>(fx: Fx.Fx<E, A>): Fx.Fx<E | Stream<A>, 
  * Apply an effectful function to each value in a stream
  */
 export const forEach = <E, R, E2>(fx: Fx.Fx<E, R>, f: (a: Event<E>) => Fx.Fx<E2, void>): Fx.Fx<ExcludeStream<E, E2>, R> =>
-  fx.pipe(Fx.handle(Stream, a => f(a as Event<E>)))
+  fx.pipe(handle(Stream, a => f(a as Event<E>)))
 
 /**
  * Take the first n values from a stream
  */
 export const take = (n: number) => <const E, const A, const R>(fx: Fx.Fx<E | Stream<A>, R>) => {
   let i = n
-  return fx.pipe(Fx.control(Stream, (resume, a) => Fx.fx(function* () {
+  return fx.pipe(control(Stream, (resume, a) => Fx.fx(function* () {
     if (i > 0) {
       --i
       return resume(yield* emit(a))
     } else {
       return yield* abort
     }
-  }))) as Fx.Fx<Fx.Handle<E, Stream<A>, Stream<A> | Abort>, A>
+  }))) as Fx.Fx<Handle<E, Stream<A>, Stream<A> | Abort>, A>
 }
 
 /**

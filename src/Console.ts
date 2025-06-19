@@ -1,5 +1,6 @@
 import { Effect } from "./Effect"
-import { Fx, handle, ok } from "./Fx"
+import { Fx, ok } from "./Fx"
+import { handle } from './Handler'
 
 export type Console = Log | Error
 

@@ -15,7 +15,7 @@ export class Once<Y, R> implements Generator<Y, R>, Pipeable {
   }
 
   return(a: R): IteratorResult<Y, R> {
-    return { done: true, value: a}
+    return { done: true, value: a }
   }
 
   throw(e: unknown): IteratorResult<Y, R> {
@@ -56,40 +56,6 @@ export class Ok<R> implements Generator<never, R>, Pipeable {
   }
 
   [Symbol.dispose]() { }
-
-  pipe() { return pipe(this, arguments) }
-}
-
-/**
- * Always return the result of the provided function.
- */
-export class Sync<R> implements Generator<never, R>, Pipeable {
-  private called = false
-
-  constructor(public readonly f: () => R) { }
-
-  next(r: R): IteratorResult<never, R> {
-    if (this.called) return { done: true, value: r }
-    this.called = true
-    return { done: true, value: this.f() }
-  }
-
-  return(a: R): IteratorResult<never, R> {
-    return { done: true, value: a }
-  }
-
-  throw(e: unknown): IteratorResult<never, R> {
-    throw e
-  }
-
-  [Symbol.iterator](): Generator<never, R> {
-    return new Sync<R>(this.f)
-  }
-
-  [Symbol.dispose]() {
-    this.called = true
-  }
-
 
   pipe() { return pipe(this, arguments) }
 }

@@ -1,5 +1,6 @@
 import { Effect } from './Effect'
-import { Fx, fx, handle, unit } from './Fx'
+import { Fx, fx, unit } from './Fx'
+import { handle } from './Handler'
 
 import { Fail, fail, returnFail } from './Fail'
 

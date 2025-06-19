@@ -1,5 +1,6 @@
 import { Effect } from './Effect'
-import { Fx, flatten, handle, ok } from './Fx'
+import { Fx, flatten, ok } from './Fx'
+import { handle } from './Handler'
 import { XoroShiro128Plus, generateSeed, uniformFloat, uniformIntMax } from './internal/random'
 
 // Random Effect

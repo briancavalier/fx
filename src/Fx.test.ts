@@ -2,7 +2,8 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Effect } from './Effect'
 import { Fail, returnFail } from './Fail'
-import { assertSync, flatMap, fx, handle, ok, run, trySync } from './Fx'
+import { assertSync, flatMap, fx, ok, run, trySync } from './Fx'
+import { handle } from './Handler'
 
 describe('Fx', () => {
   describe('fx', () => {

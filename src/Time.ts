@@ -1,6 +1,7 @@
 import * as Async from './Async'
 import { Effect } from './Effect'
-import { Fx, Handle, handle, ok } from './Fx'
+import { Fx, ok } from './Fx'
+import { Handle, handle } from './Handler'
 import { dispose } from './internal/disposable'
 import { Clock, RealClock } from './internal/time'
 

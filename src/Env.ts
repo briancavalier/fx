@@ -1,5 +1,6 @@
 import { Effect } from './Effect'
-import { Fx, handle, map, ok } from './Fx'
+import { Fx, map, ok } from './Fx'
+import { handle } from './Handler'
 
 export class Get<E extends Record<PropertyKey, unknown>> extends Effect('fx/Env')<void, E> { }
 

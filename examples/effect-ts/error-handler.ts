@@ -1,4 +1,4 @@
-import { Fail, Log, Random, flatMap, ok, run } from "../../src"
+import { Console, Fail, Random, flatMap, ok, run } from "../../src"
 
 class CustomError {
   constructor(readonly value: number) { }
@@ -12,14 +12,14 @@ const maybeFail = Random.float.pipe(
 )
 
 const main = maybeFail.pipe(
-  flatMap(value => Log.info(`Value is ${value}`)),
+  flatMap(value => Console.log(`Value is ${value}`)),
   Fail.catchOnly(CustomError, e =>
-    Log.error(`Oops! Got value`, e)
+    Console.error(`Oops! Got value`, e)
   ),
 )
 
 main.pipe(
-  Log.console,
+  Console.defaultConsole,
   Random.defaultRandom(),
   run
 )

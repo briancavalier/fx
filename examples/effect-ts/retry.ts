@@ -1,4 +1,4 @@
-import { Async, Console, Effect, Fail, Fx, handle, runPromise, tap } from "../../src"
+import { Async, Console, Effect, Fail, Fx, flatMap, handle, runPromise, tap } from "../../src"
 
 // fx doesn't have a built-in HTTP client, but we can create
 // a simple GetJson effect
@@ -8,9 +8,8 @@ class GetJson extends Effect("Http")<string, unknown> { }
 const withFetchGetJson = handle(GetJson, (url) =>
   Async.tryPromise(signal =>
     fetch(new URL(url, 'https://jsonplaceholder.typicode.com/'), { signal })
-      .then(res => res.ok
-        ? res.json()
-        : Promise.reject(new Error(`Failed to fetch ${url}: ${res.statusText}`)))
+  ).pipe(
+    flatMap(r => Async.tryPromise(() => r.json())),
   ))
 
 // We can also create a simple retry handler easily

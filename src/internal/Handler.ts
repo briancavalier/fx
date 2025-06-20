@@ -19,9 +19,10 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
   ) { }
 
   *[Symbol.iterator](): Iterator<E, A> {
-    let done = 0
+    let done = false
     const k = (x: any) => {
-      done += 1
+      if (done) throw new Error('Handler resumed more than once')
+      done = true
       return x
     }
 
@@ -39,9 +40,8 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
             const control = controls.get(ir.value._fxEffectId)
             if (control) {
               const hr = yield* control(k, ir.value.arg) as any
-              if (done > 1) throw new Error(`Handler resumed ${done} times`)
-              if (done === 0) return hr
-              done = 0
+              if (!done) return hr
+              done = false
               ir = i.next(hr)
             } else if (GetHandlerContext.is(ir.value)) {
               ir = i.next([this, ...(yield ir.value) as any])
@@ -49,6 +49,8 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
               ir = i.next(yield ir.value as any)
             }
           }
+        } else {
+          throw new Error(`Unexpected non-Effect value yielded ${ir.value}`)
         }
       }
 

@@ -99,7 +99,7 @@ const runTask = <A>(run: (s: AbortSignal) => Promise<A>) => {
 }
 
 const withContext = (c: readonly HandlerContext[], f: Fx<unknown, unknown>) =>
-  c.reduce((f, handler) => new Handler(f, handler.handlers, new Map()), f)
+  c.reduce((f, handler) => new Handler(f, handler.effectId, handler.handler), f)
 
 class DisposableAbortController extends AbortController {
   [Symbol.dispose]() { this.abort() }

@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 
 import { fx, ok, run } from './Fx'
 
-import { Fail, fail, returnFail, returnIf } from './Fail'
+import { Fail, fail, returnFail, returnIf, returnOnly } from './Fail'
 
 describe('Fail', () => {
   describe('returnIf', () => {
@@ -40,32 +40,37 @@ describe('Fail', () => {
   })
 
   describe('returnOnly', () => {
+    class CustomError extends Error {
+      name = 'CustomError' as const
+    }
+
     it('given no failures, returns result', () => {
       const expected = Math.random()
       const f = ok(expected)
-      const actual = run(f.pipe(returnIf((_): _ is never => true)))
+      const actual = run(f.pipe(returnOnly(Error)))
       assert.equal(actual, expected)
     })
-    
+
     it('given non-matching failure, return neither result nor failure', () => {
       const unexpected = Math.random()
       const f = fx(function* () {
-        yield* fail(unexpected)
+        yield* fail(new Error('Unexpected'))
         return unexpected
       })
 
       // @ts-expect-error failure is not handled
-      const result = run(f.pipe(returnIf((x): x is string => typeof x === 'string')))
+      const result = run(f.pipe(returnOnly(CustomError)))
       assert.notEqual(result, unexpected)
     })
 
     it('given matching failure, returns failure', () => {
-      const expected = Math.random()
+      const expected = new CustomError('expected')
       const f = fx(function* () {
         yield* fail(expected)
         return -1
       })
-      const actual = run(f.pipe(returnIf((x): x is number => typeof x === 'number')))
+
+      const actual = run(f.pipe(returnOnly(CustomError)))
       assert.equal(actual, expected)
     })
   })
@@ -78,6 +83,7 @@ describe('Fail', () => {
       const actual = f.pipe(returnFail, run)
       assert.equal(actual, expected)
     })
+
     it('given failure, returns failure wrapped with Fail', () => {
       const expected = Math.random()
       const f = fx(function* () {

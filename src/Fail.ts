@@ -17,12 +17,11 @@ export const fail = <const E>(e: E): Fx<Fail<E>, never> => new Fail(e)
 export const catchIf = <const E1, const E extends ExtractFail<E1>, const E2, const B>(
   match: (e: ExtractFail<E1>) => e is E,
   handle: (e: E) => Fx<E2, B>
-) =>
-  <const A>(f: Fx<E1, A>) => f.pipe(
-    control(Fail, (_, e) =>
-      (match(e as ExtractFail<E1>) ? handle(e as E) : fail(e)) as Fx<Exclude<E1, Fail<E>>, A | B>
-    )
-  ) as Fx<Exclude<E1, Fail<E>> | E2, A | B>
+) => <const A>(f: Fx<E1, A>): Fx<Exclude<E1, Fail<E>> | E2, A | B> =>
+    f.pipe(
+      control(Fail<ExtractFail<E>>, (_, e) =>
+        (match(e) ? handle(e) : fail(e)) as Fx<Exclude<E1, Fail<E>> | E2, A | B>)
+    ) as Fx<Exclude<E1, Fail<E>> | E2, A | B>
 
 type AnyConstructor = abstract new (...args: any[]) => any
 
@@ -31,16 +30,14 @@ type AnyConstructor = abstract new (...args: any[]) => any
  * @example
  *   computation.pipe(catchOnly(AuthError, e => recoverFx))
  */
-export function catchOnly<const E1, const E extends AnyConstructor, const E2, const B>(
+export const catchOnly = <const E1, const E extends AnyConstructor, const E2, const B>(
   cls: E,
   handle: (e: Extract<ExtractFail<E1>, InstanceType<E>>) => Fx<E2, B>
-): <const A>(f: Fx<E1, A>) => Fx<Exclude<E1, Fail<InstanceType<E>>> | E2, A | B> {
-  return <const A>(f: Fx<E1, A>) => f.pipe(
-    control(Fail, (_, e) =>
-      (e instanceof cls ? handle(e) : fail(e)) as Fx<Exclude<E1, Fail<InstanceType<E>>> | E2, A | B>
-    )
-  ) as Fx<Exclude<E1, Fail<InstanceType<E>>> | E2, A | B>
-}
+) =>
+  catchIf(
+    (e: ExtractFail<E1>): e is Extract<ExtractFail<E1>, InstanceType<E>> => e instanceof cls,
+    handle
+  )
 
 /**
  * Catch all failures and handle them with the provided function.
@@ -48,9 +45,7 @@ export function catchOnly<const E1, const E extends AnyConstructor, const E2, co
  *   computation.pipe(catchAll(e => recoverFx))
  */
 export const catchAll = <const E1, const E2, const B>(handle: (e: ExtractFail<E1>) => Fx<E2, B>) =>
-  <const A>(f: Fx<E1, A>) => f.pipe(
-    control(Fail, (_, e) => handle(e as ExtractFail<E1>) as Fx<Exclude<E1, Fail<any>>, A | B>)
-  ) as Fx<Exclude<E1, Fail<any>> | E2, A | B>
+  catchIf((_: ExtractFail<E1>): _ is ExtractFail<E1> => true, handle)
 
 /**
  * Catch failures matching a type guard and return the caught error.
@@ -58,15 +53,15 @@ export const catchAll = <const E1, const E2, const B>(handle: (e: ExtractFail<E1
  *   const resultOrError = computation.pipe(returnIf(isNotFoundError))
  */
 export const returnIf = <const E1, const E extends ExtractFail<E1>>(match: (x: ExtractFail<E1>) => x is E) =>
-  <const A>(f: Fx<E1, A>) => f.pipe(catchIf(match, ok))
+  catchIf(match, ok)
 
 /**
  * Catch failures that are instances of the given constructor and return the caught error.
  * @example
  *   const resultOrNotFoundError = computation.pipe(returnOnly(NotFoundError))
  */
-export const returnOnly = <const E1, const C extends AnyConstructor>(c: C) =>
-  <const A>(f: Fx<E1, A>) => f.pipe(catchOnly(c, ok))
+export const returnOnly = <const C extends AnyConstructor>(c: C) =>
+  <const E, const A>(f: Fx<E, A>) => f.pipe(catchOnly(c, ok))
 
 /**
  * Catch all failures and return the caught error.
@@ -81,7 +76,7 @@ export const returnAll = <const E, const A>(f: Fx<E, A>) => f.pipe(catchAll(ok))
  *   const resultOrFail = computation.pipe(returnFail)
  */
 export const returnFail = <const E, const A>(f: Fx<E, A>) =>
-  f.pipe(catchAll(e => ok(new Fail(e)))) as Fx<Exclude<E, Fail<any>>, A | Fail<Extract<E, Fail<any>>>>
+  f.pipe(catchAll(e => ok(fail(e)))) as Fx<Exclude<E, Fail<any>>, A | Extract<E, Fail<any>>>
 
 /**
  * Assert that an Fx does not fail, throwing the error if it does.

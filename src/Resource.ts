@@ -30,7 +30,8 @@ export const scope = <const E, const A>(f: Fx<E, A>) => fx(function* () {
 
         if (Fail.is(a)) {
           const failures = yield* releaseSafely(resources)
-          return yield* fail(new AggregateError([a.arg, ...failures], 'Resource release failed'))
+          resources.length = 0 // Clear resources
+          return yield* fail(new AggregateError([a.arg, ...failures], 'Resource acquisition failed'))
         }
 
         resources.push(release(a))
@@ -39,6 +40,7 @@ export const scope = <const E, const A>(f: Fx<E, A>) => fx(function* () {
     )
   } finally {
     const failures = yield* releaseSafely(resources)
+    resources.length = 0 // Clear resources
     if (failures.length) yield* fail(new AggregateError(failures, 'Resource release failed'))
   }
 }) as Fx<UnwrapAcquire<E>, A>

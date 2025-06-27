@@ -16,35 +16,33 @@ export class Task<A, E> {
   }
 }
 
-export const wait = <const A, const E>(t: Task<A, E>) =>
-  flatten(assertPromise<Fx<E | Fail<unknown>, A>>(
-    s => new Promise(resolve => {
-      const dispose = () => t[Symbol.dispose]()
-      s.addEventListener('abort', dispose)
-      t.promise.then(
-        a => s.aborted || resolve(ok(a)),
-        e => s.aborted || resolve(fail(e))
-      ).finally(() => s.removeEventListener('abort', dispose))
-    }))
-  ) as Fx<Extract<E, Fail<any>> | Async, A>
+export const dispose = <const A, const E>(t: Task<A, E>) =>
+  t[Symbol.dispose]()
 
 type Result<P> = P extends Task<infer A, unknown> ? A : never
 type Errors<P> = P extends Task<unknown, infer E> ? E : never
 
+export const wait = <const A, const E>(t: Task<A, E>) =>
+  flatten(assertPromise<Fx<E | Fail<unknown>, A>>(
+    s => {
+      const dispose = () => t[Symbol.dispose]()
+      s.addEventListener('abort', dispose)
+      return t.promise
+        .finally(() => s.removeEventListener('abort', dispose))
+        .then(ok, fail)
+    })
+  ) as Fx<Extract<E, Fail<any>> | Async, A>
+
 export const all = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) => {
-  const dispose = new DisposeAll(tasks)
-  return new Task(
-    Promise.all(tasks.map(p => p.promise)).finally(() => { dispose[Symbol.dispose]() }),
-    dispose
-  ) as Task<{ readonly [K in keyof Tasks]: Result<Tasks[K]> }, Errors<Tasks[number]>>
+  const d = new DisposeAll(tasks)
+  const p = Promise.all(tasks.map(t => t.promise)).finally(() => { d[Symbol.dispose]() })
+  return new Task(p, d) as Task<{ readonly [K in keyof Tasks]: Result<Tasks[K]> }, Errors<Tasks[number]>>
 }
 
 export const race = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) => {
-  const dispose = new DisposeAll(tasks)
-  return new Task(
-    Promise.race(tasks.map(p => p.promise)).finally(() => { dispose[Symbol.dispose]() }),
-    dispose
-  ) as Task<Result<Tasks[number]>, Errors<Tasks[number]>>
+  const d = new DisposeAll(tasks)
+  const p = Promise.race(tasks.map(t => t.promise)).finally(() => { d[Symbol.dispose]() })
+  return new Task(p, d) as Task<Result<Tasks[number]>, Errors<Tasks[number]>>
 }
 
 export class DisposeAll {

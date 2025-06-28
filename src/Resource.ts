@@ -23,14 +23,15 @@ export const finalize = <E>(release: Fx<E, void>) =>
 
 export const scope = <const E, const A>(f: Fx<E, A>) => fx(function* () {
   const resources = [] as Fx<unknown, unknown>[]
+  let released = false
   try {
     return yield* f.pipe(
       handle(Acquire, ({ acquire, release }) => fx(function* () {
         const a = yield* returnFail(acquire)
 
         if (Fail.is(a)) {
+          released = true
           const failures = yield* releaseSafely(resources)
-          resources.length = 0 // Clear resources
           return yield* fail(new AggregateError([a.arg, ...failures], 'Resource acquisition failed'))
         }
 
@@ -39,9 +40,10 @@ export const scope = <const E, const A>(f: Fx<E, A>) => fx(function* () {
       }))
     )
   } finally {
-    const failures = yield* releaseSafely(resources)
-    resources.length = 0 // Clear resources
-    if (failures.length) yield* fail(new AggregateError(failures, 'Resource release failed'))
+    if (!released) {
+      const failures = yield* releaseSafely(resources)
+      if (failures.length) yield* fail(new AggregateError(failures, 'Resource release failed'))
+    }
   }
 }) as Fx<UnwrapAcquire<E>, A>
 

@@ -1,16 +1,16 @@
 import { Effect } from './Effect'
-import { Fx, fx, map, ok, unit } from './Fx'
+import { Fx, fx, map as mapFx, ok, unit } from './Fx'
 import { handle } from './Handler'
 import { now } from './Time'
 
-export class Log<M> extends Effect('fx/Log')<M, void> { }
+export class Log extends Effect('fx/Log')<LogMessage, void> { }
 
-export const log = <const M>(m: M) => new Log(m)
+export const log = (m: LogMessage) => new Log(m)
 
-export const debug = (msg: string, data?: unknown): Log<LogMessage> => log({ level: Level.DEBUG, msg, data })
-export const info = (msg: string, data?: unknown): Log<LogMessage> => log({ level: Level.INFO, msg, data })
-export const warn = (msg: string, data?: unknown): Log<LogMessage> => log({ level: Level.WARN, msg, data })
-export const error = (msg: string, data?: unknown): Log<LogMessage> => log({ level: Level.ERROR, msg, data })
+export const debug = (message: string, data?: Record<string, unknown>): Log => log({ level: Level.DEBUG, component: [], message, data })
+export const info = (message: string, data?: Record<string, unknown>): Log => log({ level: Level.INFO, component: [], message, data })
+export const warn = (message: string, data?: Record<string, unknown>): Log => log({ level: Level.WARN, component: [], message, data })
+export const error = (message: string, data?: Record<string, unknown>): Log => log({ level: Level.ERROR, component: [], message, data })
 
 export enum Level {
   DEBUG = 1,
@@ -20,46 +20,37 @@ export enum Level {
   SILENT
 }
 
-export interface HasLevel {
-  readonly level: Level
+export interface LogMessage {
+  readonly level: Level,
+  readonly component: readonly string[],
+  readonly message: string,
+  readonly data?: { readonly [key: string]: unknown }
 }
 
-export interface HasContext {
-  readonly context?: Record<string, unknown>
-}
-
-export interface LogMessage extends HasLevel, HasContext {
-  readonly msg: string,
-  readonly data?: unknown
-}
-
-export const console = handle(Log<HasLevel>, ({ level, ...msg }) => fx(function* () {
-  const c = globalThis.console
-  const l = Level[level]
+export const console = handle(Log, ({ level, component, ...m }) => fx(function* () {
+  const console = globalThis.console
+  const l = Level[level].padEnd(5, ' ')
   const t = new Date(yield* now).toISOString()
-  const m = Object.values(msg).filter(v => v !== undefined)
+  const path = `${component.join('.')}`
+  const msg = Object.values(m).filter(v => v !== undefined)
   switch (level) {
-    case Level.DEBUG: return c.debug(l, t, ...m)
-    case Level.INFO: return c.info(l, t, ...m)
-    case Level.WARN: return c.warn(l, t, ...m)
-    case Level.ERROR: return c.error(l, t, ...m)
+    case Level.DEBUG: return console.debug(t, l, path, ...msg)
+    case Level.INFO: return console.info(t, l, path, ...msg)
+    case Level.WARN: return console.warn(t, l, path, ...msg)
+    case Level.ERROR: return console.error(t, l, path, ...msg)
   }
 }))
 
-export const collect = <const M, const E, const A>(f: Fx<E | Log<M>, A>) => fx(function* () {
-  const log = [] as M[]
+export const collect = <const E, const A>(f: Fx<E | Log, A>) => fx(function* () {
+  const log = [] as LogMessage[]
   return yield* f.pipe(
-    handle(Log<M>, m => ok(void log.push(m))),
-    map(a => [a, log as readonly M[]])
+    handle(Log, m => ok(void log.push(m))),
+    mapFx(a => [a, log as readonly LogMessage[]])
   )
 })
 
-export const minLevel = <const M extends HasLevel>(min: Level) =>
-  handle(Log<M>, m =>
-    m.level >= min ? log(m) : unit
-  )
+export const minLevel = (min: Level) =>
+  handle(Log, m => m.level < min ? unit : log(m))
 
-export const context = <const M extends HasContext>(context: Record<string, unknown>) =>
-  handle(Log<M>, m =>
-    log({ ...m, context: { ...m.context, ...context } }))
-
+export const child = <C extends { readonly [key: string]: unknown }>(component: string, context?: C) =>
+  handle(Log, m => log({ ...m, component: [component, ...m.component], data: { ...context, ...m.data } }))

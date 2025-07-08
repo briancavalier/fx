@@ -1,14 +1,16 @@
 import * as Async from '../Async'
 import { Fx } from '../Fx'
-import { Variant } from './Variant'
 
 export type Sink<A> = (a: A) => void
 
-export type Dequeued<A> = Variant<'fx/Queue/Dequeued', A>
+export type Dequeued<A> = {
+  readonly tag: 'fx/Queue/Dequeued'
+  readonly value: A
+}
 
-export type Disposed = Variant<'fx/Queue/Disposed', void>
+const queueDisposed = { tag: 'fx/Queue/Disposed' } as const
 
-const queueDisposed: Disposed = { tag: 'fx/Queue/Disposed', value: undefined }
+export type Disposed = typeof queueDisposed
 
 export interface Queue<A> extends Disposable {
   enqueue(a: A): boolean

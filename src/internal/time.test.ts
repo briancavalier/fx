@@ -11,12 +11,12 @@ describe('time', () => {
     it('now starts at specified origin', () => {
       const origin = Date.now()
       const c = new VirtualClock(origin)
-      assert.equal(c.now, origin)
+      assert.equal(c.now(), origin)
     })
 
     it('monotonic starts at 0', () => {
       const c = new VirtualClock(Date.now())
-      assert.equal(c.monotonic, 0)
+      assert.equal(c.monotonic(), 0)
     })
 
     describe('step', () => {
@@ -25,13 +25,13 @@ describe('time', () => {
 
         const test = async (c: Clock, progress: (readonly [number, number])[]) => {
           await sleep(c, 1000)
-          progress.push([c.monotonic, c.now])
+          progress.push([c.monotonic(), c.now()])
           await sleep(c, 1000)
-          progress.push([c.monotonic, c.now])
+          progress.push([c.monotonic(), c.now()])
           await sleep(c, 1000)
-          progress.push([c.monotonic, c.now])
+          progress.push([c.monotonic(), c.now()])
           await sleep(c, 1000)
-          return [c.monotonic, c.now]
+          return [c.monotonic(), c.now()]
         }
 
         const c = new VirtualClock(1)
@@ -56,13 +56,13 @@ describe('time', () => {
 
         const test = async (c: Clock, progress: (readonly [number, number])[]) => {
           await sleep(c, 1000)
-          progress.push([c.monotonic, c.now])
+          progress.push([c.monotonic(), c.now()])
           await sleep(c, 1000)
-          progress.push([c.monotonic, c.now])
+          progress.push([c.monotonic(), c.now()])
           await sleep(c, 1000)
-          progress.push([c.monotonic, c.now])
+          progress.push([c.monotonic(), c.now()])
           await sleep(c, 1000)
-          return [c.monotonic, c.now]
+          return [c.monotonic(), c.now()]
         }
 
         const c = new VirtualClock(1)
@@ -81,8 +81,8 @@ describe('time', () => {
       it('given negative duration, does not advance', async () => {
         const s = new VirtualClock(1)
         await s.step(-1000)
-        assert.equal(s.now, 1)
-        assert.equal(s.monotonic, 0)
+        assert.equal(s.now(), 1)
+        assert.equal(s.monotonic(), 0)
       })
     })
 
@@ -92,13 +92,13 @@ describe('time', () => {
 
         const test = async (c: Clock, progress: (readonly [number, number])[]) => {
           await sleep(c, 1000)
-          progress.push([c.monotonic, c.now])
+          progress.push([c.monotonic(), c.now()])
           await sleep(c, 1000)
-          progress.push([c.monotonic, c.now])
+          progress.push([c.monotonic(), c.now()])
           await sleep(c, 1000)
-          progress.push([c.monotonic, c.now])
+          progress.push([c.monotonic(), c.now()])
           await sleep(c, 1000)
-          return [c.monotonic, c.now]
+          return [c.monotonic(), c.now()]
         }
 
         const c = new VirtualClock(1)
@@ -118,13 +118,13 @@ describe('time', () => {
 
         const test = async (c: Clock, progress: (readonly [number, number])[]) => {
           await sleep(c, 1000)
-          progress.push([c.monotonic, c.now])
+          progress.push([c.monotonic(), c.now()])
           await sleep(c, 1000)
-          progress.push([c.monotonic, c.now])
+          progress.push([c.monotonic(), c.now()])
           await sleep(c, 1000)
-          progress.push([c.monotonic, c.now])
+          progress.push([c.monotonic(), c.now()])
           await sleep(c, 1000)
-          return [c.monotonic, c.now]
+          return [c.monotonic(), c.now()]
         }
 
         const c = new VirtualClock(1)

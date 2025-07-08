@@ -67,7 +67,8 @@ export class XoroShiro128Plus implements UnsafeGen {
   }
 }
 
-export const generateSeed = (): number => Date.now() ^ (Math.random() * 0x100000000)
+export const generateSeed = (): number =>
+  Date.now() ^ (Math.random() * 0x100000000)
 
 // #endregion
 
@@ -91,13 +92,12 @@ export const uniformFloat = (g: UnsafeGen) => {
  * Uniform int distribution in [0, max)
  */
 export const uniformIntMax = (max: number, g: UnsafeGen) => {
-  if (!max) {
+  if (!max)
     return g.unsafeNext()
-  }
+
   max = max >>> 0
-  if ((max & (max - 1)) === 0) {
+  if ((max & (max - 1)) === 0)
     return g.unsafeNext() & (max - 1) // fast path for power of 2
-  }
 
   let num = 0
   const skew = (-max >>> 0) % max >>> 0

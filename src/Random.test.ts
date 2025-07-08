@@ -18,13 +18,13 @@ describe('Random', () => {
       assert.deepEqual(r1, r2)
     })
 
-    it('given no seed, distinct handlers generate different sequences', () => {
+    it('given different seeds, distinct handlers generate different sequences', () => {
       const f = fx(function* () {
         return [yield* int(10), yield* int(10), yield* int(10)]
       })
 
-      const r1 = f.pipe(defaultRandom(), run)
-      const r2 = f.pipe(defaultRandom(), run)
+      const r1 = f.pipe(defaultRandom(42), run)
+      const r2 = f.pipe(defaultRandom(43), run)
 
       assert.notDeepEqual(r1, r2)
     })

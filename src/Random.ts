@@ -1,7 +1,7 @@
 import { Effect } from './Effect'
 import { Fx, flatten, ok } from './Fx'
 import { handle } from './Handler'
-import { XoroShiro128Plus, generateSeed, uniformFloat, uniformIntMax } from './internal/random'
+import { XoroShiro128Plus, uniformFloat, uniformIntMax } from './internal/random'
 
 // Random Effect
 // Non-cryptographically secure random number generator
@@ -57,7 +57,7 @@ export const xoroshiro128plus = (seed: number) => <const E, const A>(f: Fx<E, A>
  *
  * Not cryptographically secure.
  */
-export const defaultRandom = (seed = generateSeed()) => xoroshiro128plus(seed)
+export const defaultRandom = xoroshiro128plus
 
 const runXoroShiro128Plus = <const E, const A>(gen: XoroShiro128Plus, f: Fx<E, A>): Fx<Exclude<E, Random>, A> => f.pipe(
   handle(Int, max => ok(uniformIntMax(max, gen))),

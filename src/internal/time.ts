@@ -6,13 +6,13 @@ export interface Clock {
   /**
    * Current system time in milliseconds
    */
-  readonly now: number
+  now(): number
   /**
    * Elapsed time in *decimal* milliseconds with fractional microseconds
    * since some arbitrary fixed point in the past. This is guaranteed to be monotonic:
    * it cannot decrease or be set/changed.
    */
-  readonly monotonic: number
+  monotonic(): number
 
   /**
    * Schedule a task to run after the specified number of milliseconds.
@@ -30,11 +30,11 @@ interface ScheduledTask {
  * Timeouts longer than JS max timeout 2147483647 are supported.
  */
 export class RealClock implements Clock {
-  get now(): number {
+  now(): number {
     return Date.now()
   }
 
-  get monotonic(): number {
+  monotonic(): number {
     return performance.now()
   }
 
@@ -87,11 +87,11 @@ export class VirtualClock implements Clock {
 
   constructor(public readonly nowOrigin = 0) { }
 
-  get monotonic(): number {
+  monotonic(): number {
     return this._monotonic
   }
 
-  get now(): number {
+  now(): number {
     return this.nowOrigin + Math.floor(this._monotonic)
   }
 
@@ -120,7 +120,7 @@ export class VirtualClock implements Clock {
   }
 
   schedule(ms: number, task: () => void): Disposable {
-    const t = { at: this.monotonic + Math.max(0, ms), task }
+    const t = { at: this.monotonic() + Math.max(0, ms), task }
     this._tasks.push(t)
     return new SpliceDisposable(this._tasks, t)
   }

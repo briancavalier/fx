@@ -2,6 +2,8 @@ export * from './Effect'
 export * from './Fx'
 export * from './Handler'
 
+export * from './runtime'
+
 export * as Abort from './Abort'
 export * as Async from './Async'
 export * as Breadcrumb from './Breadcrumb'
@@ -15,6 +17,6 @@ export * as Ref from './Ref'
 export * as Resource from './Resource'
 export * as Sink from './Sink'
 export * as Stream from './Stream'
+export * as Task from './Task'
 export * as Time from './Time'
 
-export * as Task from './Task'

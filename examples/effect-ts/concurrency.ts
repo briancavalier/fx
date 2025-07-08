@@ -1,4 +1,4 @@
-import { Console, Fork, Task, Time, flatMap, fx, runPromise } from "../../src"
+import { Console, Fork, Task, Time, defaultRuntime, flatMap, fx, runPromise } from "../../src"
 
 const getUser = (id: number) => fx(function* () {
   yield* Time.sleep(1000) // Simulate a delay
@@ -17,8 +17,7 @@ const main2 = Fork.all(ids.map(getUser))
   )
 
 main2.pipe(
-  Time.defaultTime,
-  Console.defaultConsole,
+  ...defaultRuntime,
   Fork.bounded(3),
   runPromise
 )

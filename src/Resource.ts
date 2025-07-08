@@ -1,51 +1,44 @@
 import { Effect } from './Effect'
-import { Fx, fx, unit } from './Fx'
-import { handle } from './Handler'
+import { Fx, fx, ok } from './Fx'
+import { Handle, handle } from './Handler'
 
 import { Fail, fail, returnFail } from './Fail'
 
 // ----------------------------------------------------------------------
 // Resource effect to acquire and release resources within a scope
 
-export interface Resource<E1, E2, R> {
-  readonly acquire: Fx<E1, R>
-  readonly release: (r: R) => Fx<E2, void>
-}
+export type Resource<E1, E2, R> = Fx<E1, readonly [R, Fx<E2, void>]>
 
-export class Acquire<E> extends Effect('fx/Resource')<Resource<E, E, any>> { }
+export class Acquire extends Effect('fx/Resource')<Resource<any, any, any>> { }
 
 export const acquire = <const R, const E1, const E2>(
   r: Resource<E1, E2, R>
-) => new Acquire<E1 | E2>(r).returning<R>()
+) => new Acquire(r).returning<R>() as Fx<Acquire | E1 | E2, R>
 
 export const finalize = <E>(release: Fx<E, void>) =>
-  acquire({ acquire: unit, release: () => release })
+  ok([undefined, release])
 
 export const scope = <const E, const A>(f: Fx<E, A>) => fx(function* () {
-  const resources = [] as Fx<unknown, unknown>[]
-  let released = false
-  try {
-    return yield* f.pipe(
-      handle(Acquire, ({ acquire, release }) => fx(function* () {
-        const a = yield* returnFail(acquire)
+  const finalizers = [] as Fx<unknown, unknown>[]
+  const result = yield* f.pipe(
+    handle(Acquire, (acquire) => fx(function* () {
+      const [r, release] = yield* acquire
+      finalizers.push(release)
+      return r
+    })),
+    returnFail
+  )
 
-        if (Fail.is(a)) {
-          released = true
-          const failures = yield* releaseSafely(resources)
-          return yield* fail(new AggregateError([a.arg, ...failures], 'Resource acquisition failed'))
-        }
+  const failed = Fail.is(result)
+  const failures = yield* releaseSafely(finalizers)
+  if (failures.length > 0)
+    return yield* fail(new AggregateError(
+      failed ? [result.arg, ...failures] : failures,
+      'Resource release failed'
+    ))
 
-        resources.push(release(a))
-        return a
-      }))
-    )
-  } finally {
-    if (!released) {
-      const failures = yield* releaseSafely(resources)
-      if (failures.length) yield* fail(new AggregateError(failures, 'Resource release failed'))
-    }
-  }
-}) as Fx<UnwrapAcquire<E>, A>
+  return failed ? yield* fail(result.arg) : result
+}) as Fx<Handle<E, Acquire, Fail<AggregateError>>, A>
 
 const releaseSafely = (resources: readonly Fx<unknown, unknown>[]) => fx(function* () {
   const failures = [] as unknown[]
@@ -55,5 +48,3 @@ const releaseSafely = (resources: readonly Fx<unknown, unknown>[]) => fx(functio
   }
   return failures
 })
-
-type UnwrapAcquire<Effect> = Effect extends Acquire<infer E> ? E : Effect

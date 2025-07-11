@@ -7,25 +7,15 @@ import { Fail, fail, returnFail } from './Fail'
 // ----------------------------------------------------------------------
 // Resource effect to acquire and release resources within a scope
 
-export type Resource<E1, E2, R> = Fx<E1, readonly [R, Fx<E2, void>]>
+export class Finalize extends Effect('fx/Finalize')<Fx<unknown, void>, void> { }
 
-export class Acquire extends Effect('fx/Resource')<Resource<any, any, any>> { }
-
-export const acquire = <const R, const E1, const E2>(
-  r: Resource<E1, E2, R>
-) => new Acquire(r).returning<R>() as Fx<Acquire | E1 | E2, R>
-
-export const finalize = <E>(release: Fx<E, void>) =>
-  ok([undefined, release])
+export const finalize = <E>(f: Fx<E, void>) =>
+  new Finalize(f)
 
 export const scope = <const E, const A>(f: Fx<E, A>) => fx(function* () {
   const finalizers = [] as Fx<unknown, unknown>[]
   const result = yield* f.pipe(
-    handle(Acquire, (acquire) => fx(function* () {
-      const [r, release] = yield* acquire
-      finalizers.push(release)
-      return r
-    })),
+    handle(Finalize, f => ok(void finalizers.push(f))),
     returnFail
   )
 
@@ -38,7 +28,7 @@ export const scope = <const E, const A>(f: Fx<E, A>) => fx(function* () {
     ))
 
   return failed ? yield* fail(result.arg) : result
-}) as Fx<Handle<E, Acquire, Fail<AggregateError>>, A>
+}) as Fx<Handle<E, Finalize, Fail<AggregateError>>, A>
 
 const releaseSafely = (resources: readonly Fx<unknown, unknown>[]) => fx(function* () {
   const failures = [] as unknown[]

@@ -69,18 +69,16 @@ export const filter: {
 } = <E, A>(fx: Fx.Fx<E, A>, predicate: (a: Event<E>) => boolean): Fx.Fx<ExcludeStream<E, Stream<Event<E>>>, A> =>
     forEach(fx, a => predicate(a) ? emit(a) : Fx.unit)
 
-export const switchMap = <E, X, E2>(fx: Fx.Fx<E, X>, f: (a: Event<E>) => Fx.Fx<E2, unknown>): Fx.Fx<ExcludeStream<E, Fork.Fork | Async.Async | E2>, X> =>
+export const switchMap = <E, A, E2>(fx: Fx.Fx<E, A>, f: (a: Event<E>) => Fx.Fx<E2, unknown>): Fx.Fx<ExcludeStream<E, Fork.Fork | Async.Async | E2>, A> =>
   Fx.bracket(
     Fx.assertSync(() => new CurrentTask<E2>()),
-    task => Fx.assertSync(() => dispose(task)),
+    task => Fx.ok(dispose(task)),
     task => Fx.fx(function* () {
       const x = yield* forEach(fx, a => task.run(f(a)))
-
       yield* task.wait()
-
       return x
     })
-  ) as Fx.Fx<ExcludeStream<E, Fork.Fork | Async.Async | E2>, X>
+  ) as Fx.Fx<ExcludeStream<E, Fork.Fork | Async.Async | E2>, A>
 
 /**
  * Create a stream that emits all values from a {@link Queue.Dequeue}

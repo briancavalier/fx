@@ -139,7 +139,7 @@ export class VirtualClock implements Clock {
   }
 
   private runTaskLoop(resolve: () => void): void {
-    this._timeout = setTimeout(_ => {
+    this._timeout = setTimeout(() => {
       // More tasks may have been added between timeouts,
       // so have to sort each time
       this._tasks.sort((a, b) => a.at - b.at)

@@ -1,13 +1,13 @@
-import { Async } from '../Async'
-import { Breadcrumb, at } from '../Breadcrumb'
-import { Fail } from '../Fail'
-import { Fork, ForkContext } from '../Fork'
-import { Fx } from '../Fx'
-import { Task } from '../Task'
-import { Handler, } from './Handler'
-import { GetHandlerContext, HandlerContext } from './HandlerContext'
-import { Semaphore } from './Semaphore'
-import { DisposableSet, dispose } from './disposable'
+import { Async } from '../Async.js'
+import { Breadcrumb, at } from '../Breadcrumb.js'
+import { Fail } from '../Fail.js'
+import { Fork, ForkContext } from '../Fork.js'
+import { Fx } from '../Fx.js'
+import { Task } from '../Task.js'
+import { Handler, } from './Handler.js'
+import { GetHandlerContext, HandlerContext } from './HandlerContext.js'
+import { Semaphore } from './Semaphore.js'
+import { DisposableSet, dispose } from './disposable.js'
 
 export type RunForkOptions = {
   readonly origin?: Breadcrumb | string

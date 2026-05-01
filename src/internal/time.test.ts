@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { dispose } from './disposable'
-import { Clock, VirtualClock } from './time'
+import { dispose } from './disposable.js'
+import { Clock, VirtualClock } from './time.js'
 
 const sleep = (c: Clock, ms: number) =>
   new Promise<void>(resolve => c.schedule(ms, resolve))

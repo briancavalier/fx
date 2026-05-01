@@ -1,11 +1,11 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { assertPromise } from './Async'
-import { fork, unbounded } from './Fork'
-import { fx, ok, run } from './Fx'
-import { handle } from './Handler'
-import { wait } from './Task'
-import { GetHandlerContext } from './internal/HandlerContext'
+import { assertPromise } from './Async.js'
+import { fork, unbounded } from './Fork.js'
+import { fx, ok, run } from './Fx.js'
+import { handle } from './Handler.js'
+import { wait } from './Task.js'
+import { GetHandlerContext } from './internal/HandlerContext.js'
 
 const asyncValue = <A>(a: A) => assertPromise(() => Promise.resolve(a))
 

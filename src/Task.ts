@@ -1,7 +1,7 @@
-import { Async, assertPromise } from './Async'
+import { Async, assertPromise } from './Async.js'
 
-import { Fail, fail } from './Fail'
-import { Fx, flatten, ok } from './Fx'
+import { Fail, fail } from './Fail.js'
+import { Fx, flatten, ok } from './Fx.js'
 
 export class Task<A, E> {
   private disposed = false

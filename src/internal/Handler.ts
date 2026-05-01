@@ -1,7 +1,7 @@
-import { EffectType, isEffect } from '../Effect'
-import { Fx } from '../Fx'
-import { GetHandlerContext, HandlerContext } from './HandlerContext'
-import { Pipeable, pipeThis } from './pipe'
+import { EffectType, isEffect } from '../Effect.js'
+import { Fx } from '../Fx.js'
+import { GetHandlerContext, HandlerContext } from './HandlerContext.js'
+import { Pipeable, pipeThis } from './pipe.js'
 
 export type Answer<E extends EffectType> = InstanceType<E>['R']
 export type Arg<E extends EffectType> = InstanceType<E>['arg']

@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { Effect } from './Effect'
+import { Effect } from './Effect.js'
 
 describe('Effect', () => {
   describe('is', () => {

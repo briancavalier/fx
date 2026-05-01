@@ -1,7 +1,7 @@
-import { defaultConsole } from "./Console"
-import { defaultRandom } from "./Random"
-import { defaultTime } from "./Time"
-import { generateSeed } from "./internal/random"
+import { defaultConsole } from "./Console.js"
+import { defaultRandom } from "./Random.js"
+import { defaultTime } from "./Time.js"
+import { generateSeed } from "./internal/random.js"
 
 export const defaultRuntime = [
   defaultTime,

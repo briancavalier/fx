@@ -1,9 +1,9 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { orReturn } from './Abort'
-import { unbounded } from './Fork'
-import { fx, map as mapFx, ok, run, runPromise, unit, type Fx } from './Fx'
-import { next as nextSink } from './Sink'
+import { orReturn } from './Abort.js'
+import { unbounded } from './Fork.js'
+import { fx, map as mapFx, ok, run, runPromise, unit, type Fx } from './Fx.js'
+import { next as nextSink } from './Sink.js'
 import {
   emit,
   filter,
@@ -20,9 +20,9 @@ import {
   withEnqueue,
   type Event,
   type ExcludeStream
-} from './Stream'
-import { Enqueue, UnboundedQueue } from './internal/Queue'
-import { dispose } from './internal/disposable'
+} from './Stream.js'
+import { Enqueue, UnboundedQueue } from './internal/Queue.js'
+import { dispose } from './internal/disposable.js'
 
 describe('Stream', () => {
   it('allows emitting events and observing those events', () => {

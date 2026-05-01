@@ -1,8 +1,8 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { fx, run, runPromise } from './Fx'
-import { monotonic, now, sleep, withClock } from './Time'
-import { VirtualClock } from './internal/time'
+import { fx, run, runPromise } from './Fx.js'
+import { monotonic, now, sleep, withClock } from './Time.js'
+import { VirtualClock } from './internal/time.js'
 
 describe('Time', () => {
   describe('now', () => {

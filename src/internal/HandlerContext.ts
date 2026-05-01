@@ -1,5 +1,5 @@
-import { Effect } from '../Effect'
-import { Fx } from '../Fx'
+import { Effect } from '../Effect.js'
+import { Fx } from '../Fx.js'
 
 export interface HandlerContext extends Fx<unknown, unknown> {
   readonly effectId: unknown

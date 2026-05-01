@@ -1,9 +1,9 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { fx, run } from './Fx'
+import { fx, run } from './Fx.js'
 
-import { get, provide, provideAll } from './Env'
+import { get, provide, provideAll } from './Env.js'
 
 describe('Env', () => {
   describe('get', () => {

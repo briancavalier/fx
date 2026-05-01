@@ -1,8 +1,8 @@
-import { Effect } from './Effect'
-import { Fx, fx, ok } from './Fx'
-import { Handle, handle } from './Handler'
+import { Effect } from './Effect.js'
+import { Fx, fx, ok } from './Fx.js'
+import { Handle, handle } from './Handler.js'
 
-import { Fail, fail, returnFail } from './Fail'
+import { Fail, fail, returnFail } from './Fail.js'
 
 // ----------------------------------------------------------------------
 // Resource effect to acquire and release resources within a scope

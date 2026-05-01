@@ -1,5 +1,5 @@
-export * from './Effect'
-export * from './Fx'
-export * from './Handler'
+export * from './Effect.js'
+export * from './Fx.js'
+export * from './Handler.js'
 
-export * from './runtime'
+export * from './runtime.js'

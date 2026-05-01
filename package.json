@@ -2,6 +2,7 @@
   "name": "@briancavalier/fx",
   "version": "1.0.0",
   "description": "TypeScript algebraic effects system",
+  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

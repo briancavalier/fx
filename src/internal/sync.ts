@@ -1,5 +1,5 @@
-import { Fail } from '../Fail'
-import { Pipeable, pipe } from './pipe'
+import { Fail } from '../Fail.js'
+import { Pipeable, pipe } from './pipe.js'
 
 /**
  * Always return the result of the provided function.

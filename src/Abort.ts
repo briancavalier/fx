@@ -1,6 +1,6 @@
-import { Effect } from './Effect'
-import { ok } from './Fx'
-import { control } from './Handler'
+import { Effect } from './Effect.js'
+import { ok } from './Fx.js'
+import { control } from './Handler.js'
 
 /**
  * Abort a computation without returning a result. Abort represents partial functions,

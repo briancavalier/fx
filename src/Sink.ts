@@ -1,4 +1,4 @@
-import { Effect } from './Effect'
+import { Effect } from './Effect.js'
 
 export class Sink<A> extends Effect('fx/Sink')<void, A> { }
 

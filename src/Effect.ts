@@ -1,6 +1,6 @@
-import { Fx } from './Fx'
-import { Once } from './internal/generator'
-import { Pipeable, pipeThis } from './internal/pipe'
+import { Fx } from './Fx.js'
+import { Once } from './internal/generator.js'
+import { Pipeable, pipeThis } from './internal/pipe.js'
 
 export interface EffectType {
   readonly _fxEffectId: unknown

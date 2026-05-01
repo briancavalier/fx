@@ -1,5 +1,5 @@
-import { Async, assertPromise } from '../Async'
-import { Fx } from '../Fx'
+import { Async, assertPromise } from '../Async.js'
+import { Fx } from '../Fx.js'
 
 export type Sink<A> = (a: A) => void
 

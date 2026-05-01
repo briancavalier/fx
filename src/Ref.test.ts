@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { compareAndSet, of } from './Ref'
+import { compareAndSet, of } from './Ref.js'
 
 describe('Ref', () => {
   describe('compareAndSet', () => {

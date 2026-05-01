@@ -1,13 +1,13 @@
-import { Async } from './Async'
-import { Breadcrumb, at } from './Breadcrumb'
-import { Effect } from './Effect'
-import { Fail } from './Fail'
-import { Fx, flatMap, fx, map, ok } from './Fx'
-import { Handle, control } from './Handler'
-import { Task, all as allTasks, race as raceTasks } from './Task'
-import { GetHandlerContext, HandlerContext, getHandlerContext } from './internal/HandlerContext'
-import { Semaphore } from './internal/Semaphore'
-import { acquireAndRunFork } from './internal/runFork'
+import { Async } from './Async.js'
+import { Breadcrumb, at } from './Breadcrumb.js'
+import { Effect } from './Effect.js'
+import { Fail } from './Fail.js'
+import { Fx, flatMap, fx, map, ok } from './Fx.js'
+import { Handle, control } from './Handler.js'
+import { Task, all as allTasks, race as raceTasks } from './Task.js'
+import { GetHandlerContext, HandlerContext, getHandlerContext } from './internal/HandlerContext.js'
+import { Semaphore } from './internal/Semaphore.js'
+import { acquireAndRunFork } from './internal/runFork.js'
 
 export class Fork extends Effect('fx/Fork')<ForkContext, Task<unknown, unknown>> { }
 

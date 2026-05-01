@@ -1,11 +1,11 @@
-import { Async, assertPromise } from './Async'
-import { Effect } from './Effect'
-import { Fx, ok } from './Fx'
-import { Handle, handle } from './Handler'
-import { dispose } from './internal/disposable'
-import { Clock, RealClock } from './internal/time'
+import { Async, assertPromise } from './Async.js'
+import { Effect } from './Effect.js'
+import { Fx, ok } from './Fx.js'
+import { Handle, handle } from './Handler.js'
+import { dispose } from './internal/disposable.js'
+import { Clock, RealClock } from './internal/time.js'
 
-export { VirtualClock } from './internal/time'
+export { VirtualClock } from './internal/time.js'
 
 export class Now extends Effect('fx/Time/Now')<void, number> { }
 

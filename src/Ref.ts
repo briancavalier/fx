@@ -1,4 +1,4 @@
-import { Pipeable, pipeThis } from './internal/pipe'
+import { Pipeable, pipeThis } from './internal/pipe.js'
 
 export interface Get<A> {
   get(): A

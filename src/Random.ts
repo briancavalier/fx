@@ -1,7 +1,7 @@
-import { Effect } from './Effect'
-import { Fx, flatten, ok } from './Fx'
-import { handle } from './Handler'
-import { XoroShiro128Plus, uniformFloat, uniformIntMax } from './internal/random'
+import { Effect } from './Effect.js'
+import { Fx, flatten, ok } from './Fx.js'
+import { handle } from './Handler.js'
+import { XoroShiro128Plus, uniformFloat, uniformIntMax } from './internal/random.js'
 
 // Random Effect
 // Non-cryptographically secure random number generator

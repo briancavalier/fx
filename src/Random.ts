@@ -57,7 +57,8 @@ export const xoroshiro128plus = (seed: number) => <const E, const A>(f: Fx<E, A>
  *
  * Not cryptographically secure.
  */
-export const defaultRandom = xoroshiro128plus
+export const defaultRandom = (seed?: number) =>
+  xoroshiro128plus(seed ?? Date.now() ^ (Math.random() * 0x100000000))
 
 const runXoroShiro128Plus = <const E, const A>(gen: XoroShiro128Plus, f: Fx<E, A>): Fx<Exclude<E, Random>, A> => f.pipe(
   handle(Int, max => ok(uniformIntMax(max, gen))),

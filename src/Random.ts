@@ -6,7 +6,7 @@ import { XoroShiro128Plus, uniformFloat, uniformIntMax } from './internal/random
 // Random Effect
 // Non-cryptographically secure random number generator
 
-type Random = Int | Float | Split
+export type Random = Int | Float | Split
 
 /**
  * The next 32-bit integer in [0, max)

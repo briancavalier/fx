@@ -1,12 +1,12 @@
 import { Abort, abort } from './Abort'
-import * as Async from './Async'
-import * as Effect from './Effect'
-import * as Fail from './Fail'
-import * as Fork from './Fork'
-import * as Fx from './Fx'
+import { Async, assertPromise } from './Async'
+import { Effect } from './Effect'
+import { Fail } from './Fail'
+import { Fork, fork } from './Fork'
+import { Fx, assertSync, bracket, fx as gen, ok, unit } from './Fx'
 import { Handle, control, handle } from './Handler'
-import * as Sink from './Sink'
-import * as Task from './Task'
+import { Sink } from './Sink'
+import { Task, wait as waitTask } from './Task'
 import * as Queue from './internal/Queue'
 import { dispose } from './internal/disposable'
 import { IfAny } from './internal/type'
@@ -15,7 +15,7 @@ import { IfAny } from './internal/type'
  * The Stream effect represents computations that may emit zero or more values of
  * a particular type before returning a final result.
  */
-export class Stream<A> extends Effect.Effect('fx/Stream')<A, void> { }
+export class Stream<A> extends Effect('fx/Stream')<A, void> { }
 
 export type Event<T> = T extends Stream<infer A> ? A : never
 
@@ -29,61 +29,61 @@ export const emit = <const A>(a: A) => new Stream(a)
 /**
  * Repeat the provided effectful computation forever, and emit each result
  */
-export const repeat = <const E, const A>(fx: Fx.Fx<E, A>): Fx.Fx<E | Stream<A>, void> => Fx.fx(function* () {
-  while (true) yield* emit(yield* fx)
+export const repeat = <const E, const A>(f: Fx<E, A>): Fx<E | Stream<A>, void> => gen(function* () {
+  while (true) yield* emit(yield* f)
 })
 
 /**
  * Apply an effectful function to each value in a stream
  */
-export const forEach = <E, R, E2>(fx: Fx.Fx<E, R>, f: (a: Event<E>) => Fx.Fx<E2, void>): Fx.Fx<ExcludeStream<E, E2>, R> =>
-  fx.pipe(handle(Stream, a => f(a as Event<E>)))
+export const forEach = <E, R, E2>(f: Fx<E, R>, each: (a: Event<E>) => Fx<E2, void>): Fx<ExcludeStream<E, E2>, R> =>
+  f.pipe(handle(Stream, a => each(a as Event<E>)))
 
 /**
  * Take the first n values from a stream
  */
-export const take = (n: number) => <const E, const A, const R>(fx: Fx.Fx<E | Stream<A>, R>) => {
+export const take = (n: number) => <const E, const A, const R>(f: Fx<E | Stream<A>, R>) => {
   let i = n
-  return fx.pipe(control(Stream, (resume, a) => Fx.fx(function* () {
+  return f.pipe(control(Stream, (resume, a) => gen(function* () {
     if (i > 0) {
       --i
       return resume(yield* emit(a))
     } else {
       return yield* abort
     }
-  }))) as Fx.Fx<Handle<E, Stream<A>, Stream<A> | Abort>, A>
+  }))) as Fx<Handle<E, Stream<A>, Stream<A> | Abort>, A>
 }
 
 /**
  * Transform each value in a stream
  */
-export const map = <E, A, B>(fx: Fx.Fx<E, A>, f: (a: Event<E>) => B): Fx.Fx<ExcludeStream<E, Stream<B>>, A> =>
-  forEach(fx, a => emit(f(a)))
+export const map = <E, A, B>(f: Fx<E, A>, map: (a: Event<E>) => B): Fx<ExcludeStream<E, Stream<B>>, A> =>
+  forEach(f, a => emit(map(a)))
 
 /**
  * Drop values from the stream that don't satisfy the predicate
  */
 export const filter: {
-  <E, A, B extends Event<E>>(fx: Fx.Fx<E, A>, refinement: (a: Event<E>) => a is B): Fx.Fx<ExcludeStream<E, Stream<B>>, A>
-  <E, A>(fx: Fx.Fx<E, A>, predicate: (a: Event<E>) => boolean): Fx.Fx<E, A>
-} = <E, A>(fx: Fx.Fx<E, A>, predicate: (a: Event<E>) => boolean): Fx.Fx<ExcludeStream<E, Stream<Event<E>>>, A> =>
-    forEach(fx, a => predicate(a) ? emit(a) : Fx.unit)
+  <E, A, B extends Event<E>>(f: Fx<E, A>, refinement: (a: Event<E>) => a is B): Fx<ExcludeStream<E, Stream<B>>, A>
+  <E, A>(f: Fx<E, A>, predicate: (a: Event<E>) => boolean): Fx<E, A>
+} = <E, A>(f: Fx<E, A>, predicate: (a: Event<E>) => boolean): Fx<ExcludeStream<E, Stream<Event<E>>>, A> =>
+    forEach(f, a => predicate(a) ? emit(a) : unit)
 
-export const switchMap = <E, A, E2>(fx: Fx.Fx<E, A>, f: (a: Event<E>) => Fx.Fx<E2, unknown>): Fx.Fx<ExcludeStream<E, Fork.Fork | Async.Async | E2>, A> =>
-  Fx.bracket(
-    Fx.assertSync(() => new CurrentTask<E2>()),
-    task => Fx.ok(dispose(task)),
-    task => Fx.fx(function* () {
-      const x = yield* forEach(fx, a => task.run(f(a)))
+export const switchMap = <E, A, E2>(f: Fx<E, A>, each: (a: Event<E>) => Fx<E2, unknown>): Fx<ExcludeStream<E, Fork | Async | E2>, A> =>
+  bracket(
+    assertSync(() => new CurrentTask<E2>()),
+    task => ok(dispose(task)),
+    task => gen(function* () {
+      const x = yield* forEach(f, a => task.run(each(a)))
       yield* task.wait()
       return x
     })
-  ) as Fx.Fx<ExcludeStream<E, Fork.Fork | Async.Async | E2>, A>
+  ) as Fx<ExcludeStream<E, Fork | Async | E2>, A>
 
 /**
  * Create a stream that emits all values from a {@link Queue.Dequeue}
  */
-export const fromDequeue = <A>(queue: Queue.Dequeue<A>): Fx.Fx<Async.Async | Stream<A>, void> => Fx.fx(function* () {
+export const fromDequeue = <A>(queue: Queue.Dequeue<A>): Fx<Async | Stream<A>, void> => gen(function* () {
   const take = Queue.dequeue(queue)
 
   while (!queue.disposed) {
@@ -98,9 +98,9 @@ export const fromDequeue = <A>(queue: Queue.Dequeue<A>): Fx.Fx<Async.Async | Str
 export const withEnqueue = <A>(
   f: (o: Queue.Enqueue<A>) => Disposable,
   q: Queue.Queue<A> = new Queue.UnboundedQueue()
-): Fx.Fx<Async.Async | Stream<A>, void> => Fx.bracket(
-  Fx.assertSync(() => f(q)),
-  disposable => Fx.ok(dispose(disposable)),
+): Fx<Async | Stream<A>, void> => bracket(
+  assertSync(() => f(q)),
+  disposable => ok(dispose(disposable)),
   _ => fromDequeue(q)
 )
 
@@ -111,10 +111,10 @@ export interface IterableWithReturn<Y, R> {
 /**
  * Create a stream that emits all values from an Iterable
  */
-export const fromIterable = <A, R>(i: IterableWithReturn<A, R>): Fx.Fx<Stream<A>, IfAny<R, void>> => Fx.bracket(
-  Fx.assertSync(() => i[Symbol.iterator]()),
-  iterator => Fx.ok(void iterator.return?.()),
-  iterator => Fx.fx(function* () {
+export const fromIterable = <A, R>(i: IterableWithReturn<A, R>): Fx<Stream<A>, IfAny<R, void>> => bracket(
+  assertSync(() => i[Symbol.iterator]()),
+  iterator => ok(void iterator.return?.()),
+  iterator => gen(function* () {
     let result = iterator.next()
     while (!result.done) {
       yield* emit(result.value)
@@ -122,7 +122,7 @@ export const fromIterable = <A, R>(i: IterableWithReturn<A, R>): Fx.Fx<Stream<A>
     }
     return result.value
   })
-) as Fx.Fx<Stream<A>, IfAny<R, void>>
+) as Fx<Stream<A>, IfAny<R, void>>
 
 export interface AsyncIterableWithReturn<Y, R> {
   [Symbol.asyncIterator](): AsyncIterator<Y, R>
@@ -131,11 +131,11 @@ export interface AsyncIterableWithReturn<Y, R> {
 /**
  * Create a stream that emits all values from an AsyncIterable
  */
-export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>): Fx.Fx<Async.Async | Stream<A>, R> => Fx.bracket(
-  Fx.assertSync(() => f()[Symbol.asyncIterator]()),
-  iterator => Async.assertPromise(() => iterator.return?.().then(() => { }) ?? Promise.resolve()),
-  iterator => Fx.fx(function* () {
-    const next = Async.assertPromise(() => iterator.next())
+export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>): Fx<Async | Stream<A>, R> => bracket(
+  assertSync(() => f()[Symbol.asyncIterator]()),
+  iterator => assertPromise(() => iterator.return?.().then(() => { }) ?? Promise.resolve()),
+  iterator => gen(function* () {
+    const next = assertPromise(() => iterator.next())
     let result = yield* next
     while (!result.done) {
       yield* emit(result.value)
@@ -145,10 +145,10 @@ export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>):
   })
 )
 
-export const toAsyncIterable = <E extends Async.Async | Stream<any> | Fail.Fail<any>, A>(fx: Fx.Fx<E, A>): AsyncIterableWithReturn<Event<E>, A> => ({
+export const toAsyncIterable = <E extends Async | Stream<any> | Fail<any>, A>(f: Fx<E, A>): AsyncIterableWithReturn<Event<E>, A> => ({
   async *[Symbol.asyncIterator]() {
     const controller = new AbortController()
-    const iterator = fx[Symbol.iterator]()
+    const iterator = f[Symbol.iterator]()
     let result = iterator.next()
 
     try {
@@ -173,14 +173,14 @@ export const toAsyncIterable = <E extends Async.Async | Stream<any> | Fail.Fail<
 })
 
 class CurrentTask<E> {
-  private task: Task.Task<any, Extract<E, Fail.Fail<any>>> | null = null
+  private task: Task<any, Extract<E, Fail<any>>> | null = null
 
-  run<A>(fx: Fx.Fx<E, A>) {
-    return Fx.fx(this, function* () {
+  run<A>(f: Fx<E, A>) {
+    return gen(this, function* () {
       dispose(this)
 
-      this.task = yield* Fork.fork(Fx.fx(this, function* () {
-        const x = yield* fx
+      this.task = yield* fork(gen(this, function* () {
+        const x = yield* f
         this.task = null
         return x
       }))
@@ -188,7 +188,7 @@ class CurrentTask<E> {
   }
 
   wait() {
-    return this.task ? Task.wait(this.task) : Fx.unit
+    return this.task ? waitTask(this.task) : unit
   }
 
   [Symbol.dispose]() {
@@ -199,12 +199,12 @@ class CurrentTask<E> {
   }
 }
 
-type Sinks<E> = E extends Sink.Sink<infer A> ? A : never
+type Sinks<E> = E extends Sink<infer A> ? A : never
 
 /**
  * Pipe all values from a stream into a sink.
  */
-export const to = <E1, E2, R1, R2>(stream: Fx.Fx<E1, R1>, sink: Fx.Fx<E2, R2>): Fx.Fx<Exclude<E1, Stream<Sinks<E2>>> | Exclude<E2, Sink.Sink<any>>, R2> => Fx.fx(function* () {
+export const to = <E1, E2, R1, R2>(stream: Fx<E1, R1>, sink: Fx<E2, R2>): Fx<Exclude<E1, Stream<Sinks<E2>>> | Exclude<E2, Sink<any>>, R2> => gen(function* () {
   const sii = sink[Symbol.iterator]()
   const sti = stream[Symbol.iterator]()
 
@@ -213,7 +213,7 @@ export const to = <E1, E2, R1, R2>(stream: Fx.Fx<E1, R1>, sink: Fx.Fx<E2, R2>): 
     let str = sti.next()
 
     while (true) {
-      while (!sir.done && !str.done && !Sink.Sink.is(sir.value))
+      while (!sir.done && !str.done && !Sink.is(sir.value))
         sir = sii.next(yield sir.value)
 
       while (!sir.done && !str.done && !Stream.is(str.value))
@@ -229,4 +229,4 @@ export const to = <E1, E2, R1, R2>(stream: Fx.Fx<E1, R1>, sink: Fx.Fx<E2, R2>): 
     sti.return?.()
     sii.return?.()
   }
-}) as Fx.Fx<Exclude<E1, Stream<Sinks<E2>>> | Exclude<E2, Sink.Sink<any>>, R2>
+}) as Fx<Exclude<E1, Stream<Sinks<E2>>> | Exclude<E2, Sink<any>>, R2>

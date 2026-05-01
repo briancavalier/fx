@@ -1,23 +1,39 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import * as Abort from './Abort'
-import * as Fork from './Fork'
-import * as Fx from './Fx'
-import * as Sink from './Sink'
-import * as Stream from './Stream'
+import { orReturn } from './Abort'
+import { unbounded } from './Fork'
+import { fx, map as mapFx, ok, run, runPromise, unit, type Fx } from './Fx'
+import { next as nextSink } from './Sink'
+import {
+  emit,
+  filter,
+  forEach,
+  fromAsyncIterable,
+  fromDequeue,
+  fromIterable,
+  map,
+  repeat,
+  switchMap,
+  take,
+  to,
+  toAsyncIterable,
+  withEnqueue,
+  type Event,
+  type ExcludeStream
+} from './Stream'
 import { Enqueue, UnboundedQueue } from './internal/Queue'
 import { dispose } from './internal/disposable'
 
 describe('Stream', () => {
   it('allows emitting events and observing those events', () => {
-    const [r, events] = Fx.fx(function* () {
-      for (let i = 0; i < 25; i++) yield* Stream.emit(i)
+    const [r, events] = fx(function* () {
+      for (let i = 0; i < 25; i++) yield* emit(i)
       return 42
     }).pipe(
-      _ => Stream.filter(_, a => a % 2 === 0),
-      _ => Stream.map(_, a => a * 2),
+      _ => filter(_, a => a % 2 === 0),
+      _ => map(_, a => a * 2),
       collectAll,
-      Fx.run
+      run
     )
 
     assert.equal(r, 42)
@@ -28,11 +44,11 @@ describe('Stream', () => {
     it('given effectful computation, forces it repeatedly', () => {
       const x = Math.random()
       const n = Math.floor(Math.random() * 100)
-      const [r, events] = Stream.repeat(Fx.ok(x)).pipe(
-        Stream.take(n),
-        Abort.orReturn(n),
+      const [r, events] = repeat(ok(x)).pipe(
+        take(n),
+        orReturn(n),
         collectAll,
-        Fx.run
+        run
       )
 
       assert.equal(r, n)
@@ -44,14 +60,14 @@ describe('Stream', () => {
     it('given stream with proportion > n, takes n values', () => {
       const n = 10
       const a = Array.from({ length: n }, (_, i) => i)
-      const [r, events] = Fx.fx(function* () {
-        for (const x of a) yield* Stream.emit(x)
+      const [r, events] = fx(function* () {
+        for (const x of a) yield* emit(x)
         return 'done'
       }).pipe(
-        Stream.take(n - 1),
-        Abort.orReturn('aborted'),
+        take(n - 1),
+        orReturn('aborted'),
         collectAll,
-        Fx.run
+        run
       )
 
       assert.equal(r, 'aborted')
@@ -61,14 +77,14 @@ describe('Stream', () => {
     it('given stream with proportion <= n, takes all values', () => {
       const n = 10
       const a = Array.from({ length: n }, (_, i) => i)
-      const [r, events] = Fx.fx(function* () {
-        for (const x of a) yield* Stream.emit(x)
+      const [r, events] = fx(function* () {
+        for (const x of a) yield* emit(x)
         return 'done'
       }).pipe(
-        Stream.take(n),
-        Abort.orReturn('aborted'),
+        take(n),
+        orReturn('aborted'),
         collectAll,
-        Fx.run
+        run
       )
 
       assert.equal(r, 'done')
@@ -78,17 +94,17 @@ describe('Stream', () => {
 
   describe('switchMap', () => {
     it('allows chaining multiple streams, favoring the latest', async () => {
-      const [r, events] = await Fx.fx(function* () {
-        for (let i = 0; i < 25; i++) yield* Stream.emit(i)
+      const [r, events] = await fx(function* () {
+        for (let i = 0; i < 25; i++) yield* emit(i)
         return 42
       }).pipe(
-        _ => Stream.switchMap(_, a => Fx.fx(function* () {
-          yield* Stream.emit(String(a))
-          yield* Stream.emit(BigInt(a))
+        _ => switchMap(_, a => fx(function* () {
+          yield* emit(String(a))
+          yield* emit(BigInt(a))
         })),
         collectAll,
-        Fork.unbounded,
-        Fx.runPromise
+        unbounded,
+        runPromise
       )
 
       assert.equal(r, 42)
@@ -104,8 +120,8 @@ describe('Stream', () => {
 
       enqueueAllAsync(queue, expected)
 
-      const [r, events] = await Stream.fromDequeue(queue)
-        .pipe(collectAll, Fx.runPromise)
+      const [r, events] = await fromDequeue(queue)
+        .pipe(collectAll, runPromise)
 
       assert.equal(r, undefined)
       assert.deepEqual(events, expected)
@@ -119,14 +135,14 @@ describe('Stream', () => {
       const queue = new UnboundedQueue<number>()
       let disposed = false
 
-      const [r, events] = await Stream.withEnqueue(q => {
+      const [r, events] = await withEnqueue(q => {
         enqueueAllAsync(q, expected)
 
         return {
           [Symbol.dispose]: () => { disposed = true }
         }
       }, queue)
-        .pipe(collectAll, Fx.runPromise)
+        .pipe(collectAll, runPromise)
 
       assert.equal(r, undefined)
       assert.deepEqual(events, expected)
@@ -144,8 +160,8 @@ describe('Stream', () => {
         return 42
       }
 
-      const [r, events] = Stream.fromIterable(makeIterable())
-        .pipe(collectAll, Fx.run)
+      const [r, events] = fromIterable(makeIterable())
+        .pipe(collectAll, run)
 
       assert.equal(r, 42)
       assert.deepEqual(events, inputs)
@@ -162,8 +178,8 @@ describe('Stream', () => {
         return 42
       }
 
-      const [r, events] = await Stream.fromAsyncIterable(makeAsyncGenerator)
-        .pipe(collectAll, Fx.runPromise)
+      const [r, events] = await fromAsyncIterable(makeAsyncGenerator)
+        .pipe(collectAll, runPromise)
 
       assert.equal(r, 42)
       assert.deepEqual(events, inputs)
@@ -174,15 +190,15 @@ describe('Stream', () => {
     it('converts a stream to an async iterable', async () => {
       const inputs = Array.from({ length: 25 }, (_, i) => i)
 
-      const fx = Fx.fx(function* () {
+      const streamFx = fx(function* () {
         for (const i of inputs) {
-          yield* Stream.emit(i)
-          yield* Stream.emit(String(i))
+          yield* emit(i)
+          yield* emit(String(i))
         }
 
         return 42
       })
-      const asyncIterable = Stream.toAsyncIterable(fx)
+      const asyncIterable = toAsyncIterable(streamFx)
 
       const events = []
       const iterator = asyncIterable[Symbol.asyncIterator]()
@@ -199,33 +215,33 @@ describe('Stream', () => {
   describe('to', () => {
     it('given stream < sink, has stream proportion and prefers sink return value', () => {
       const expected = [1, 2, 3]
-      const stream = Stream.fromIterable(expected).pipe(Fx.map(_ => 'stream'))
+      const stream = fromIterable(expected).pipe(mapFx(_ => 'stream'))
 
       const actual: number[] = []
-      const sink = Fx.fx(function* () {
-        while (true) actual.push(yield* Sink.next<number>())
+      const sink = fx(function* () {
+        while (true) actual.push(yield* nextSink<number>())
       })
 
-      const r = stream.pipe(_ => Stream.to(_, sink), Fx.run)
+      const r = stream.pipe(_ => to(_, sink), run)
 
       assert.equal(r, undefined)
       assert.deepEqual(actual, expected)
     })
 
     it('given stream > sink, has sink proportion and prefers sink return value', () => {
-      const stream = Fx.fx(function* () {
+      const stream = fx(function* () {
         let i = 1
-        while (true) yield* Stream.emit(i++)
+        while (true) yield* emit(i++)
       })
 
       const actual: number[] = []
-      const sink = Fx.fx(function* () {
+      const sink = fx(function* () {
         let i = 3
-        while (--i >= 0) actual.push(yield* Sink.next<number>())
+        while (--i >= 0) actual.push(yield* nextSink<number>())
         return 'sink'
       })
 
-      const r = stream.pipe(_ => Stream.to(_, sink), Fx.run)
+      const r = stream.pipe(_ => to(_, sink), run)
 
       assert.equal(r, 'sink')
       assert.deepEqual(actual, [1, 2, 3])
@@ -233,16 +249,16 @@ describe('Stream', () => {
 
     it('given stream ~ sink, has expected proportion and prefers sink return value', () => {
       const expected = [1, 2, 3]
-      const stream = Stream.fromIterable(expected).pipe(Fx.map(_ => 'stream'))
+      const stream = fromIterable(expected).pipe(mapFx(_ => 'stream'))
 
       const actual: number[] = []
-      const sink = Fx.fx(function* () {
+      const sink = fx(function* () {
         let i = expected.length
-        while (--i >= 0) actual.push(yield* Sink.next<number>())
+        while (--i >= 0) actual.push(yield* nextSink<number>())
         return 'sink'
       })
 
-      const r = stream.pipe(_ => Stream.to(_, sink), Fx.run)
+      const r = stream.pipe(_ => to(_, sink), run)
 
       assert.equal(r, 'sink')
       assert.deepEqual(actual, expected)
@@ -250,12 +266,12 @@ describe('Stream', () => {
   })
 })
 
-function collectAll<E, A>(fx: Fx.Fx<E, A>): Fx.Fx<Stream.ExcludeStream<E>, readonly [A, readonly Stream.Event<E>[]]> {
-  return Fx.fx(function* () {
-    const events: Stream.Event<E>[] = []
-    const r: A = yield* Stream.forEach(fx, a => {
+function collectAll<E, A>(f: Fx<E, A>): Fx<ExcludeStream<E>, readonly [A, readonly Event<E>[]]> {
+  return fx(function* () {
+    const events: Event<E>[] = []
+    const r: A = yield* forEach(f, a => {
       events.push(a)
-      return Fx.unit
+      return unit
     })
     return [r, events]
   })

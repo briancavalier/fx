@@ -1,32 +1,36 @@
-import { Console, Fail, Fork, Task, flatMap, fx, runPromise, tap } from "../../src"
+import { flatMap, fx, runPromise, tap } from "../../src"
+import { catchAll, fail } from "../../src/Fail"
+import { defaultConsole, error, log } from "../../src/Console"
+import { fork, unbounded } from "../../src/Fork"
+import { wait } from "../../src/Task"
 
 const f1 = fx(function* () {
-  yield* Console.log('f1 start, forking f2')
-  const r = yield* Fork.fork(f2).pipe(flatMap(Task.wait))
-  yield* Console.log(`f1 finished, f2 result: ${r}`)
+  yield* log('f1 start, forking f2')
+  const r = yield* fork(f2).pipe(flatMap(wait))
+  yield* log(`f1 finished, f2 result: ${r}`)
   return r
 })
 
 const f2 = fx(function* () {
-  yield* Console.log('f2 start, forking f3')
-  const r = yield* Fork.fork(f3).pipe(flatMap(Task.wait))
-  yield* Console.log(`f2 finished, f3 result: ${r}`)
+  yield* log('f2 start, forking f3')
+  const r = yield* fork(f3).pipe(flatMap(wait))
+  yield* log(`f2 finished, f3 result: ${r}`)
   return r
 })
 
 const f3 = fx(function* () {
-  yield* Console.log('f3 start, about to fail')
-  yield* Fail.fail(new Error('An error occurred in f3'))
+  yield* log('f3 start, about to fail')
+  yield* fail(new Error('An error occurred in f3'))
   return 42
 })
 
-const main = Fork.fork(f1)
+const main = fork(f1)
 
 main.pipe(
-  flatMap(Task.wait),
-  tap(result => Console.log(`main finished`, result)),
-  Fail.catchAll(error => Console.error('Error!', error)),
-  Fork.unbounded,
-  Console.defaultConsole,
+  flatMap(wait),
+  tap(result => log(`main finished`, result)),
+  catchAll(e => error('Error!', e)),
+  unbounded,
+  defaultConsole,
   runPromise
 )

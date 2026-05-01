@@ -1,14 +1,17 @@
-import { Console, Fail, Fork, Time, andThen, runPromise } from "../../src"
+import { andThen, runPromise } from "../../src"
+import { log, defaultConsole } from "../../src/Console"
+import { fail } from "../../src/Fail"
+import { race, unbounded } from "../../src/Fork"
+import { sleep, defaultTime } from "../../src/Time"
 
-const main = Fork.race([
-  Time.sleep(1000).pipe(andThen(Console.log("Hello"))),
-  Time.sleep(500).pipe(andThen(Fail.fail("Aborted!")))
+const main = race([
+  sleep(1000).pipe(andThen(log("Hello"))),
+  sleep(500).pipe(andThen(fail("Aborted!")))
 ])
 
 main.pipe(
-  Console.defaultConsole,
-  Time.defaultTime,
-  Fork.unbounded,
+  defaultConsole,
+  defaultTime,
+  unbounded,
   runPromise
 )
-

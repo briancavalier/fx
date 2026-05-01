@@ -1,5 +1,9 @@
 import { setTimeout } from 'node:timers/promises'
-import { Fork, Random, Task, Time, flatMap, fx, runPromise } from '../../src'
+import { flatMap, fx, runPromise } from '../../src'
+import { race, unbounded } from '../../src/Fork'
+import { int, defaultRandom } from '../../src/Random'
+import { sleep, defaultTime } from '../../src/Time'
+import { wait } from '../../src/Task'
 
 const randomWait = () => Math.floor(Math.random() * 100)
 
@@ -17,19 +21,19 @@ Promise.race([
 ]).then(_ => console.log('Promise done'), console.error)
 
 const delayFx = (message: string) => fx(function* () {
-  yield* Random.int(100).pipe(flatMap(Time.sleep))
+  yield* int(100).pipe(flatMap(sleep))
   console.log(message)
 })
 
-// In contrast, Fork.race will cancel the losing tasks when the race
+// In contrast, race will cancel the losing tasks when the race
 // has been won, ensuring that resources are cleaned up.
-Fork.race([
+race([
   delayFx('Fx A'),
   delayFx('Fx B'),
 ]).pipe(
-  flatMap(Task.wait),
-  Time.defaultTime,
-  Random.defaultRandom(),
-  Fork.unbounded,
+  flatMap(wait),
+  defaultTime,
+  defaultRandom(),
+  unbounded,
   runPromise
 ).then(_ => console.log('Fx done'), console.error)

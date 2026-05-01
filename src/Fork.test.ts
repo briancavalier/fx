@@ -1,13 +1,13 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import * as Async from './Async'
+import { assertPromise } from './Async'
 import { fork, unbounded } from './Fork'
 import { fx, ok, run } from './Fx'
 import { handle } from './Handler'
-import * as Task from './Task'
+import { wait } from './Task'
 import { GetHandlerContext } from './internal/HandlerContext'
 
-const asyncValue = <A>(a: A) => Async.assertPromise(() => Promise.resolve(a))
+const asyncValue = <A>(a: A) => assertPromise(() => Promise.resolve(a))
 
 const emptyHandlerContext = handle(GetHandlerContext, () => ok([]))
 
@@ -50,7 +50,7 @@ describe('Fork', () => {
       const x = Math.random()
       const f = fx(function* () {
         const t1 = yield* fork(asyncValue(x))
-        return yield* Task.wait(t1)
+        return yield* wait(t1)
       })
 
       const t = f.pipe(fork, unbounded, emptyHandlerContext, run)

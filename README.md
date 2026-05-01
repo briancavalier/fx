@@ -76,11 +76,12 @@ Core primitives are exported from `@briancavalier/fx`. Built-in effects are
 exported from named subpaths, so effect signatures stay concise:
 
 ```ts
-import { Fx, fx, runPromise } from "@briancavalier/fx"
+import { Fx } from "@briancavalier/fx"
 import { Async, tryPromise } from "@briancavalier/fx/Async"
-import { defaultTime, sleep } from "@briancavalier/fx/Time"
+import { Fail } from "@briancavalier/fx/Fail"
 
-const load: Fx<Async, string> = tryPromise(() => fetch("/").then(r => r.text()))
+const load: Fx<Async | Fail<unknown>, string> =
+  tryPromise(() => fetch("/").then(r => r.text()))
 ```
 
 ---

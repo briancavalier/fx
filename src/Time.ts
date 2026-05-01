@@ -1,11 +1,11 @@
-import * as Async from './Async'
-import { Effect } from './Effect'
-import { Fx, ok } from './Fx'
-import { Handle, handle } from './Handler'
-import { dispose } from './internal/disposable'
-import { Clock, RealClock } from './internal/time'
+import { Async, assertPromise } from './Async.js'
+import { Effect } from './Effect.js'
+import { Fx, ok } from './Fx.js'
+import { Handle, handle } from './Handler.js'
+import { dispose } from './internal/disposable.js'
+import { Clock, RealClock } from './internal/time.js'
 
-export { VirtualClock } from './internal/time'
+export { VirtualClock } from './internal/time.js'
 
 export class Now extends Effect('fx/Time/Now')<void, number> { }
 
@@ -27,6 +27,8 @@ export const monotonic = new Monotonic()
 
 export class Sleep extends Effect('fx/Time/Sleep')<number, void> { }
 
+export type Time = Now | Monotonic | Sleep
+
 /**
  * Delay the current fork by the specified number of milliseconds.
  */
@@ -35,10 +37,10 @@ export const sleep = (ms: number) => new Sleep(ms)
 /**
  * Handle Now, Monotonic, and Schedule using the provided Clock
  */
-export const withClock = (c: Clock) => <E, A>(f: Fx<E, A>): Fx<Handle<Handle<E, Sleep, Async.Async>, Now | Monotonic>, A> => f.pipe(
+export const withClock = (c: Clock) => <E, A>(f: Fx<E, A>): Fx<Handle<Handle<E, Sleep, Async>, Now | Monotonic>, A> => f.pipe(
   handle(Now, () => ok(c.now())),
   handle(Monotonic, () => ok(c.monotonic())),
-  handle(Sleep, ms => Async.assertPromise(signal => new Promise(resolve => {
+  handle(Sleep, ms => assertPromise(signal => new Promise(resolve => {
     const d = c.schedule(ms, () => {
       signal.removeEventListener('abort', disposeOnAbort)
       resolve()
@@ -46,7 +48,7 @@ export const withClock = (c: Clock) => <E, A>(f: Fx<E, A>): Fx<Handle<Handle<E, 
     const disposeOnAbort = () => dispose(d)
     signal.addEventListener('abort', disposeOnAbort, { once: true })
   })))
-) as Fx<Handle<Handle<E, Sleep, Async.Async>, Now | Monotonic>, A>
+) as Fx<Handle<Handle<E, Sleep, Async>, Now | Monotonic>, A>
 
 /**
  * Handle Now, Monotonic, and Schedule using standard APIs:

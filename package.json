@@ -2,10 +2,71 @@
   "name": "@briancavalier/fx",
   "version": "1.0.0",
   "description": "TypeScript algebraic effects system",
+  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./Abort": {
+      "types": "./dist/Abort.d.ts",
+      "import": "./dist/Abort.js"
+    },
+    "./Async": {
+      "types": "./dist/Async.d.ts",
+      "import": "./dist/Async.js"
+    },
+    "./Breadcrumb": {
+      "types": "./dist/Breadcrumb.d.ts",
+      "import": "./dist/Breadcrumb.js"
+    },
+    "./Console": {
+      "types": "./dist/Console.d.ts",
+      "import": "./dist/Console.js"
+    },
+    "./Env": {
+      "types": "./dist/Env.d.ts",
+      "import": "./dist/Env.js"
+    },
+    "./Fail": {
+      "types": "./dist/Fail.d.ts",
+      "import": "./dist/Fail.js"
+    },
+    "./Fork": {
+      "types": "./dist/Fork.d.ts",
+      "import": "./dist/Fork.js"
+    },
+    "./Log": {
+      "types": "./dist/Log.d.ts",
+      "import": "./dist/Log.js"
+    },
+    "./Random": {
+      "types": "./dist/Random.d.ts",
+      "import": "./dist/Random.js"
+    },
+    "./Ref": {
+      "types": "./dist/Ref.d.ts",
+      "import": "./dist/Ref.js"
+    },
+    "./Scope": {
+      "types": "./dist/Scope.d.ts",
+      "import": "./dist/Scope.js"
+    },
+    "./Sink": {
+      "types": "./dist/Sink.d.ts",
+      "import": "./dist/Sink.js"
+    },
+    "./Stream": {
+      "types": "./dist/Stream.d.ts",
+      "import": "./dist/Stream.js"
+    },
+    "./Task": {
+      "types": "./dist/Task.d.ts",
+      "import": "./dist/Task.js"
+    },
+    "./Time": {
+      "types": "./dist/Time.d.ts",
+      "import": "./dist/Time.js"
     }
   },
   "files": [

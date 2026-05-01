@@ -1,4 +1,7 @@
-import { Console, Sink, Stream, flatMap, fx, run } from '../../src'
+import { flatMap, fx, run } from '../../src'
+import { log, defaultConsole } from '../../src/Console'
+import { next } from '../../src/Sink'
+import { emit, forEach, fromIterable, to } from '../../src/Stream'
 
 // From Effect-TS discord
 // https://discord.com/channels/795981131316985866/1125094089281511474/1245070996621365318
@@ -27,7 +30,7 @@ import { Console, Sink, Stream, flatMap, fx, run } from '../../src'
 // - Group 8: [50]
 // "
 
-// groupDivBy7: Fx<Sink.Sink<number> | Stream.Stream<number[]>, number[]>
+// groupDivBy7: Fx<Sink<number> | Stream<number[]>, number[]>
 // Consumes numbers and emits number[] by grouping them
 // when a number is divisible by 7. Note that this is not the
 // same as splitting into groups of size 7
@@ -35,10 +38,10 @@ const groupDivBy7 = fx(function* () {
   let group: number[] = []
   try {
     while (true) {
-      const n = yield* Sink.next<number>()
+      const n = yield* next<number>()
       group.push(n)
       if ((n % 7) === 0) {
-        yield* Stream.emit(group)
+        yield* emit(group)
         group = []
       }
     }
@@ -51,10 +54,10 @@ const groupDivBy7 = fx(function* () {
 // [1, 2, 3, ... 50]
 const numbers = Array.from({ length: 50 }, (_, i) => i + 1)
 
-Stream.fromIterable(numbers).pipe(
-  _ => Stream.to(_, groupDivBy7),
-  flatMap(Stream.emit), // emit trailing numbers
-  _ => Stream.forEach(_, Console.log),
-  Console.defaultConsole,
+fromIterable(numbers).pipe(
+  _ => to(_, groupDivBy7),
+  flatMap(emit), // emit trailing numbers
+  _ => forEach(_, log),
+  defaultConsole,
   run
 )

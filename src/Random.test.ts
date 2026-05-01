@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { fx, run } from './Fx'
-import { defaultRandom, float, int, split, xoroshiro128plus } from './Random'
+import { fx, run } from './Fx.js'
+import { defaultRandom, float, int, split, xoroshiro128plus } from './Random.js'
 
 describe('Random', () => {
 

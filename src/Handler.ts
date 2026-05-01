@@ -1,6 +1,6 @@
-import { EffectType } from './Effect'
-import { Fx } from './Fx'
-import { Answer, Arg, Control, Handler } from './internal/Handler'
+import { EffectType } from './Effect.js'
+import { Fx } from './Fx.js'
+import { Answer, Arg, Control, Handler } from './internal/Handler.js'
 
 export type Handle<E, A, B = never> = E extends A ? B : E
 

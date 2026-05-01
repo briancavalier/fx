@@ -1,12 +1,12 @@
-import { Async } from './Async'
-import { provideAll } from './Env'
-import { Fail, assert } from './Fail'
-import { Task } from './Task'
-import { GetHandlerContext } from './internal/HandlerContext'
-import * as generator from './internal/generator'
-import { Pipeable } from './internal/pipe'
-import { RunForkOptions, runFork } from './internal/runFork'
-import { TrySync } from './internal/sync'
+import { Async } from './Async.js'
+import { provideAll } from './Env.js'
+import { Fail, assert } from './Fail.js'
+import { Task } from './Task.js'
+import { GetHandlerContext } from './internal/HandlerContext.js'
+import * as generator from './internal/generator.js'
+import { Pipeable } from './internal/pipe.js'
+import { RunForkOptions, runFork } from './internal/runFork.js'
+import { TrySync } from './internal/sync.js'
 
 /**
  * A computation that produces a value of type `A`, and may produce effects of

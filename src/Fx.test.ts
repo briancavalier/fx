@@ -1,9 +1,9 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { Effect } from './Effect'
-import { Fail, returnFail } from './Fail'
-import { assertSync, flatMap, fx, ok, run, trySync } from './Fx'
-import { handle } from './Handler'
+import { Effect } from './Effect.js'
+import { Fail, returnFail } from './Fail.js'
+import { assertSync, flatMap, fx, ok, run, trySync } from './Fx.js'
+import { handle } from './Handler.js'
 
 describe('Fx', () => {
   describe('fx', () => {

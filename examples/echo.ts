@@ -1,7 +1,8 @@
 
 import { createInterface } from 'node:readline/promises'
 
-import { Async, Effect, Fx, assertSync, bracket, fx, handle, ok, runPromise } from '../src'
+import { Effect, Fx, assertSync, bracket, fx, handle, ok, runPromise } from '../src'
+import { assertPromise } from '../src/Async'
 
 class Print extends Effect('Print')<string, void> { }
 
@@ -25,7 +26,7 @@ const handleRead = <E, A>(f: Fx<E, A>) => bracket(
   assertSync(() => createInterface({ input: process.stdin, output: process.stdout })),
   readline => ok(readline.close()),
   readline => f.pipe(
-    handle(Read, prompt => Async.assertPromise(signal => readline.question(prompt, { signal })))
+    handle(Read, prompt => assertPromise(signal => readline.question(prompt, { signal })))
   ))
 
 // Run with "real" Read and Print effects

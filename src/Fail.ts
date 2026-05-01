@@ -1,6 +1,6 @@
-import { Effect } from './Effect'
-import { Fx, ok } from './Fx'
-import { control } from './Handler'
+import { Effect } from './Effect.js'
+import { Fx, ok } from './Fx.js'
+import { control } from './Handler.js'
 
 export class Fail<const E> extends Effect('fx/Fail')<E, never> { }
 

@@ -1,4 +1,6 @@
-import { Abort, Effect, Env, fx, ok } from '../../src'
+import { Effect, fx, ok } from '../../src'
+import { abort, orReturn } from '../../src/Abort'
+import { get } from '../../src/Env'
 
 // -------------------------------------------------------------------
 // The number guessing game example from
@@ -17,7 +19,7 @@ const read = (prompt: string) => new Read(prompt)
 
 export const toInteger = (s: string) => {
   const i = Number.parseInt(s, 10)
-  return Number.isInteger(i) ? ok(i) : Abort.abort
+  return Number.isInteger(i) ? ok(i) : abort
 }
 
 export class GenerateSecret extends Effect('GetSecret')<number, number> { }
@@ -38,7 +40,7 @@ export const main = fx(function* () {
   const name = yield* read(`What's your name? `)
   yield* print(`Hello, ${name}. Welcome to the game!`)
 
-  const { max } = yield* Env.get<{ max: number }>()
+  const { max } = yield* get<{ max: number }>()
 
   do
     yield* play(name, max)
@@ -56,7 +58,7 @@ const play = (name: string, max: number) => fx(function* () {
 
   const result = yield* read(`Dear ${name}, please guess a number from 1 to ${max}: `)
 
-  const guess = yield* toInteger(result).pipe(Abort.orReturn(undefined))
+  const guess = yield* toInteger(result).pipe(orReturn(undefined))
   if (typeof guess !== 'number')
     yield* print('You did not enter an integer!')
   else if (checkAnswer(secret, guess))

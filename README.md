@@ -28,10 +28,10 @@ Most solutions rely on dependency injection or implicit runtime behavior.
 Everything is an effect.
 
 ```ts
-yield* Console.log("hello")
+yield* log("hello")
 yield* Db.query("select * from users")
-yield* Fail.fail(new Error("boom"))
-yield* Fork.fork(otherProgram)
+yield* fail(new Error("boom"))
+yield* fork(otherProgram)
 ```
 
 A program is:
@@ -50,8 +50,11 @@ Handlers progressively eliminate effects until the program can run.
 ## Example
 
 ```ts
+import { fx, handle, runPromise } from "@briancavalier/fx"
+import { defaultConsole, log } from "@briancavalier/fx/Console"
+
 const getUser = fx(function* () {
-  yield* Console.log("fetching user")
+  yield* log("fetching user")
 
   const user = yield* Db.query(
     "select * from users where id = ?",
@@ -64,9 +67,21 @@ const getUser = fx(function* () {
 const program =
   getUser.pipe(
     handle(DbQuery, ({ sql, params }) => runQuery(sql, params)),
-    Console.defaultConsole,
+    defaultConsole,
     runPromise
   )
+```
+
+Core primitives are exported from `@briancavalier/fx`. Built-in effects are
+exported from named subpaths, so effect signatures stay concise:
+
+```ts
+import { Fx } from "@briancavalier/fx"
+import { Async, tryPromise } from "@briancavalier/fx/Async"
+import { Fail } from "@briancavalier/fx/Fail"
+
+const load: Fx<Async | Fail<unknown>, string> =
+  tryPromise(() => fetch("/").then(r => r.text()))
 ```
 
 ---

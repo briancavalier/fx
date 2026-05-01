@@ -1,4 +1,7 @@
-import { Async, Console, Effect, Fail, Fx, flatMap, handle, runPromise, tap } from "../../src"
+import { Effect, Fx, flatMap, handle, runPromise, tap } from "../../src"
+import { tryPromise } from "../../src/Async"
+import { catchAll, fail } from "../../src/Fail"
+import { defaultConsole, error, log } from "../../src/Console"
 
 // fx doesn't have a built-in HTTP client, but we can create
 // a simple GetJson effect
@@ -6,16 +9,16 @@ class GetJson extends Effect("Http")<string, unknown> { }
 
 // and a handler that uses the Fetch API.
 const withFetchGetJson = handle(GetJson, (url) =>
-  Async.tryPromise(signal =>
+  tryPromise(signal =>
     fetch(new URL(url, 'https://jsonplaceholder.typicode.com/'), { signal })
   ).pipe(
-    flatMap(r => Async.tryPromise(() => r.json())),
+    flatMap(r => tryPromise(() => r.json())),
   ))
 
 // We can also create a simple retry handler easily
 const retry = (tries: number) => <E, A>(fa: Fx<E, A>): Fx<E, A> =>
-  fa.pipe(Fail.catchAll((e) =>
-    (tries > 1 ? fa.pipe(retry(tries - 1)) : Fail.fail(e)) as Fx<E, A>
+  fa.pipe(catchAll((e) =>
+    (tries > 1 ? fa.pipe(retry(tries - 1)) : fail(e)) as Fx<E, A>
   ))
 
 // Define findUserById using the new GetJson effect
@@ -27,8 +30,8 @@ const main = findUserById('1').pipe(
 )
 
 main.pipe(
-  tap(user => Console.log('Got user', user)),
-  Fail.catchAll(error => Console.error(`Error fetching user`, { error })),
-  Console.defaultConsole,
+  tap(user => log('Got user', user)),
+  catchAll(e => error(`Error fetching user`, { error: e })),
+  defaultConsole,
   runPromise
 )

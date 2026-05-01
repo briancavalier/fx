@@ -1,5 +1,5 @@
-import * as Async from '../Async'
-import { Fx } from '../Fx'
+import { Async, assertPromise } from '../Async.js'
+import { Fx } from '../Fx.js'
 
 export type Sink<A> = (a: A) => void
 
@@ -21,7 +21,7 @@ export interface Queue<A> extends Disposable {
 export type Enqueue<A> = Pick<Queue<A>, 'enqueue' | 'disposed' | keyof Disposable>
 export type Dequeue<A> = Pick<Queue<A>, 'dequeue' | 'disposed' | keyof Disposable>
 
-export const dequeue = <A>(q: Dequeue<A>): Fx<Async.Async, Dequeued<A> | Disposed> => Async.assertPromise(() => q.dequeue())
+export const dequeue = <A>(q: Dequeue<A>): Fx<Async, Dequeued<A> | Disposed> => assertPromise(() => q.dequeue())
 
 export class UnboundedQueue<A> implements Queue<A> {
   private readonly items: A[] = []

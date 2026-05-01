@@ -1,6 +1,6 @@
-import { Effect } from './Effect'
-import { Fx, map, ok } from './Fx'
-import { handle } from './Handler'
+import { Effect } from './Effect.js'
+import { Fx, map, ok } from './Fx.js'
+import { handle } from './Handler.js'
 
 export class Get<E extends Record<PropertyKey, unknown>> extends Effect('fx/Env')<void, E> { }
 

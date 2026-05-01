@@ -1,7 +1,12 @@
-import { Fail, Fork, Scope, Task, Time, assertSync, flatMap, fx, runPromise } from "../src"
+import { assertSync, flatMap, fx, runPromise } from "../src"
+import { assert, fail } from "../src/Fail"
+import { all, unbounded } from "../src/Fork"
+import { finalize, scope } from "../src/Scope"
+import { wait } from "../src/Task"
+import { sleep, defaultTime } from "../src/Time"
 
 const myResource = (name: string) => fx(function* () {
-  yield* Time.sleep(100)
+  yield* sleep(100)
   return [
     name,
     assertSync(() => console.log(`releasing resource: ${name}`))
@@ -10,21 +15,21 @@ const myResource = (name: string) => fx(function* () {
 
 const f = fx(function* () {
   const [resource, release] = yield* myResource('my-resource')
-  yield* Scope.finalize(release)
+  yield* finalize(release)
 
   console.log(`using resource: ${resource}`)
 
-  yield* Time.sleep(1000)
-  yield* Fail.fail(new Error('Simulated failure'))
+  yield* sleep(1000)
+  yield* fail(new Error('Simulated failure'))
 
   console.log(`done using resource: ${resource}`)
 })
 
-Fork.all([f, f]).pipe(
-  flatMap(Task.wait),
-  Scope.scope,
-  Time.defaultTime,
-  Fork.unbounded,
-  Fail.assert,
+all([f, f]).pipe(
+  flatMap(wait),
+  scope,
+  defaultTime,
+  unbounded,
+  assert,
   runPromise
 )

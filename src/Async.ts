@@ -1,6 +1,6 @@
-import { Effect } from './Effect'
-import { Fail, fail } from './Fail'
-import { Fx, flatten, ok } from './Fx'
+import { Effect } from './Effect.js'
+import { Fail, fail } from './Fail.js'
+import { Fx, flatten, ok } from './Fx.js'
 
 type Run<A> = (abort: AbortSignal) => Promise<A>
 

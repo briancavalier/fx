@@ -1,4 +1,4 @@
-import { Pipeable, pipe } from './pipe'
+import { Pipeable, pipe } from './pipe.js'
 
 /**
  * Yield the provided value once, then always return.

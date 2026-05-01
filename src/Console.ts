@@ -1,6 +1,6 @@
-import { Effect } from "./Effect"
-import { Fx, ok } from "./Fx"
-import { handle } from './Handler'
+import { Effect } from "./Effect.js"
+import { Fx, ok } from "./Fx.js"
+import { handle } from './Handler.js'
 
 export type Console = Log | Error
 

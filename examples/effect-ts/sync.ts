@@ -1,5 +1,6 @@
-import { Console, run } from "../../src"
+import { run } from "../../src"
+import { log, defaultConsole } from "../../src/Console"
 
-const main = Console.log('Hello, World!')
+const main = log('Hello, World!')
 
-main.pipe(Console.defaultConsole, run)
+main.pipe(defaultConsole, run)

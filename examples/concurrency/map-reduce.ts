@@ -1,15 +1,19 @@
-import { Async, Fork, Fx, Task, Time, fx, ok, runPromise } from '../../src'
+import { Fx, fx, ok, runPromise } from '../../src'
+import { Async } from '../../src/Async'
+import { Fork, all, unbounded } from '../../src/Fork'
+import { sleep, defaultTime } from '../../src/Time'
+import { wait } from '../../src/Task'
 
 // Concurrent map-reduce
 // Splits the input in half and runs mapReduce on each half concurrently
-const mapReduce = <A, B, EM, ER>(inputs: readonly A[], map: (a: A) => Fx<EM, B>, reduce: (b1: B, b2: B) => Fx<ER, B>, init: B): Fx<Async.Async | Fork.Fork | EM | ER, B> => fx(function* () {
+const mapReduce = <A, B, EM, ER>(inputs: readonly A[], map: (a: A) => Fx<EM, B>, reduce: (b1: B, b2: B) => Fx<ER, B>, init: B): Fx<Async | Fork | EM | ER, B> => fx(function* () {
   if (inputs.length === 0) return init
   if (inputs.length === 1) return yield* map(inputs[0])
 
   const half = Math.floor(inputs.length / 2)
   const [l, r] = [inputs.slice(0, half), inputs.slice(half)]
 
-  const [rl, rr] = yield* Task.wait(yield* Fork.all([
+  const [rl, rr] = yield* wait(yield* all([
     mapReduce(l, map, reduce, init),
     mapReduce(r, map, reduce, init)
   ]))
@@ -20,7 +24,7 @@ const mapReduce = <A, B, EM, ER>(inputs: readonly A[], map: (a: A) => Fx<EM, B>,
 // Simulate a long running computation or network request
 // for the mapping operation
 const delay = <const A>(ms: number, a: A) => fx(function* () {
-  yield* Time.sleep(ms)
+  yield* sleep(ms)
   return a
 })
 
@@ -31,8 +35,8 @@ const inputs = Array.from({ length: 1000 }, (_, i) => i)
 // This should take a little over 1 second, not inputs.length seconds
 const start = performance.now()
 mapReduce(inputs, i => delay(1000, i + 1), (a, b) => ok(a + b), 0).pipe(
-  Time.defaultTime,
-  Fork.unbounded,
+  defaultTime,
+  unbounded,
   runPromise
 ).then(result =>
   console.log(`result: ${result}, elapsed: ${performance.now() - start}ms`)

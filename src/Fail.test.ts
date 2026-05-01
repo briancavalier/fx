@@ -1,9 +1,9 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { fx, ok, run } from './Fx'
+import { fx, ok, run } from './Fx.js'
 
-import { Fail, fail, returnFail, returnIf, returnOnly } from './Fail'
+import { Fail, fail, returnFail, returnIf, returnOnly } from './Fail.js'
 
 describe('Fail', () => {
   describe('returnIf', () => {

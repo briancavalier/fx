@@ -1,6 +1,9 @@
 import { inspect } from 'util'
 
-import { Effect, Fork, Fx, Task, Time, fx, handle, map, ok, runPromise } from '../src'
+import { Effect, Fx, fx, handle, map, ok, runPromise } from '../src'
+import { all, unbounded } from '../src/Fork'
+import { wait } from '../src/Task'
+import { sleep, defaultTime } from '../src/Time'
 
 // The usual state monad, as an effect
 class Get<A> extends Effect('State/Set')<void, A> { }
@@ -30,23 +33,23 @@ type U2I<U> = (U extends any ? (k: U) => void : never) extends ((k: infer I) => 
 const f = fx(function* () {
   const x0 = yield* get<number>()
   yield* set(x0 + 1)
-  yield* Time.sleep(1)
+  yield* sleep(1)
   const x1 = yield* get<number>()
   yield* set(x1 + 1)
-  yield* Time.sleep(1)
+  yield* sleep(1)
   const x2 = yield* get<number>()
   return [x0, x1, x2]
 })
 
 const main1 = fx(function* () {
-  const r1 = yield* Fork.all([f, f])
-  const r3 = yield* Task.wait(r1)
+  const r1 = yield* all([f, f])
+  const r3 = yield* wait(r1)
   return r3
 })
 
 const main2 = fx(function* () {
-  const r1 = yield* Fork.all([runState(1, f), runState(1, f)])
-  const r3 = yield* Task.wait(r1)
+  const r1 = yield* all([runState(1, f), runState(1, f)])
+  const r3 = yield* wait(r1)
   return r3
 })
 
@@ -59,4 +62,4 @@ const main = fx(function* () {
   }
 })
 
-main.pipe(Time.defaultTime, Fork.unbounded, runPromise).then(x => console.log(inspect(x, false, Infinity)))
+main.pipe(defaultTime, unbounded, runPromise).then(x => console.log(inspect(x, false, Infinity)))

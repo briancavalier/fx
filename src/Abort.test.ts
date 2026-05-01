@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { abort, orReturn } from './Abort'
-import { ok, run } from './Fx'
+import { abort, orReturn } from './Abort.js'
+import { ok, run } from './Fx.js'
 
 describe('Abort', () => {
   describe('orReturn', () => {

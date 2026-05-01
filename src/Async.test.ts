@@ -1,8 +1,8 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { assertPromise, tryPromise } from './Async'
-import { returnFail } from './Fail'
-import { runPromise } from './Fx'
+import { assertPromise, tryPromise } from './Async.js'
+import { returnFail } from './Fail.js'
+import { runPromise } from './Fx.js'
 
 describe('Async', () => {
   describe('assertPromise', () => {

@@ -5,7 +5,10 @@
 
 import { createInterface } from 'node:readline/promises'
 
-import { Async, Env, Fx, Random, assertSync, bracket, fx, handle, ok, runPromise } from '../../src'
+import { Fx, assertSync, bracket, fx, handle, ok, runPromise } from '../../src'
+import { assertPromise } from '../../src/Async'
+import { provide } from '../../src/Env'
+import { int, defaultRandom } from '../../src/Random'
 
 import { GenerateSecret, Print, Read, main } from './main'
 
@@ -15,19 +18,19 @@ const handleRead = <E, A>(f: Fx<E, A>) => bracket(
   assertSync(() => createInterface({ input: process.stdin, output: process.stdout })),
   readline => ok(readline.close()),
   readline => f.pipe(
-    handle(Read, prompt => Async.assertPromise(signal => readline.question(prompt, { signal })))
+    handle(Read, prompt => assertPromise(signal => readline.question(prompt, { signal })))
   ))
 
 const handleGenerateSecret = handle(GenerateSecret, max => fx(function* () {
-  return 1 + (yield* Random.int(max))
+  return 1 + (yield* int(max))
 }))
 
 const { max = 10 } = process.env
 
 main.pipe(
-  Env.provide({ max: +max }),
+  provide({ max: +max }),
   handleGenerateSecret,
-  Random.defaultRandom(),
+  defaultRandom(),
   handlePrint,
   handleRead,
   runPromise

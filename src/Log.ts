@@ -1,7 +1,7 @@
-import { Effect } from './Effect'
-import { Fx, fx, map as mapFx, ok, unit } from './Fx'
-import { handle } from './Handler'
-import { now } from './Time'
+import { Effect } from './Effect.js'
+import { Fx, fx, map as mapFx, ok, unit } from './Fx.js'
+import { handle } from './Handler.js'
+import { now } from './Time.js'
 
 export class Log extends Effect('fx/Log')<LogMessage, void> { }
 

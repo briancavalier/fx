@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { Env, Fx, handle, map, ok, run } from '../../src'
+import { Fx, handle, map, ok, run } from '../../src'
+import { provide } from '../../src/Env'
 
 import { GenerateSecret, Print, Read, checkAnswer, main } from './main'
 
@@ -55,7 +56,7 @@ describe('main', () => {
       handleGenerateSecret(secretNumbers),
       handleRead(['Brian', '1', 'y', '2', 'y', '3', 'y', '1', 'n']),
       handlePrint,
-      Env.provide(range),
+      provide(range),
       run
     )
 

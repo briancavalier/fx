@@ -1,6 +1,10 @@
 import { IncomingMessage, ServerResponse, createServer } from 'http'
 
-import { Env, Fork, Fx, Log, Stream, bracket, fx, ok } from '../../src'
+import { Fx, bracket, fx, ok } from '../../src'
+import { get } from '../../src/Env'
+import { fork } from '../../src/Fork'
+import { info } from '../../src/Log'
+import { forEach, withEnqueue } from '../../src/Stream'
 //----------------------------------------------------------------------
 // Http Server example
 // This shows the flexibility of handlers.  We can implement an http
@@ -18,11 +22,11 @@ export type Response = Readonly<{ status: number; headers: Record<string, string
 
 export const httpServer = bracket(
   fx(function* () {
-    const { port } = yield* Env.get<{ port: number }>()
+    const { port } = yield* get<{ port: number }>()
     return createServer().listen(port)
   }),
   server => ok(void server.close()),
-  server => Stream.withEnqueue<Connection>(q => {
+  server => withEnqueue<Connection>(q => {
     server.on('request', (request, response) => q.enqueue({ request, response }))
     return q
   })
@@ -35,10 +39,10 @@ export const httpServer = bracket(
 
 export const runServer = <E>(
   handleRequest: (r: Request) => Fx<E, Response>
-) => Stream.forEach(httpServer, ({ request, response }) => fx(function* () {
-  yield* Fork.fork(fx(function* () {
+) => forEach(httpServer, ({ request, response }) => fx(function* () {
+  yield* fork(fx(function* () {
     const r = yield* handleRequest({ method: 'GET', url: '', ...request })
-    yield* Log.info('Handled request', { method: request.method, url: request.url, status: r.status })
+    yield* info('Handled request', { method: request.method, url: request.url, status: r.status })
     response.writeHead(r.status, r.headers).end(r.body)
   }))
 }))

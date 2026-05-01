@@ -1,4 +1,8 @@
-import { Env, Fork, Log, Time, fx, runPromise } from '../../src'
+import { fx, runPromise } from '../../src'
+import { provide } from '../../src/Env'
+import { unbounded } from '../../src/Fork'
+import { console as logConsole, info } from '../../src/Log'
+import { defaultTime } from '../../src/Time'
 
 import { Request, runServer } from './HttpServer'
 import { next } from './counter'
@@ -12,7 +16,7 @@ const myHandler = (r: Request) => fx(function* () {
   const key = r.url ?? ''
   const value = yield* next(key)
 
-  yield* Log.info('Incremented', { key, value })
+  yield* info('Incremented', { key, value })
 
   return {
     status: 200,
@@ -27,12 +31,12 @@ const myHandler = (r: Request) => fx(function* () {
 const { port = 3000 } = process.env
 
 runServer(myHandler).pipe(
-  Log.console,
-  Time.defaultTime,
-  Env.provide({ port: +port }),
+  logConsole,
+  defaultTime,
+  provide({ port: +port }),
   mapCounter,
   // keyvCounter,
-  Fork.unbounded,
+  unbounded,
   runPromise
 )
 

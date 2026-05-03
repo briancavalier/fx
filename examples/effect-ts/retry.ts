@@ -29,7 +29,7 @@ const main = findUserById('1').pipe(
   retry(3)
 )
 
-main.pipe(
+await main.pipe(
   tap(user => log('Got user', user)),
   catchAll(e => error(`Error fetching user`, { error: e })),
   defaultConsole,

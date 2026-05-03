@@ -23,7 +23,7 @@ const main = fx(function* () {
   yield* info('Done')
 })
 
-all([
+await all([
   main.pipe(child('main1', { contextInfo: 'Context for main1' })),
   main.pipe(child('main2', { contextInfo: 'Context for main2' })),
 ]).pipe(

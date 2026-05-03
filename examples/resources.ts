@@ -25,7 +25,7 @@ const f = fx(function* () {
   console.log(`done using resource: ${resource}`)
 })
 
-all([f, f]).pipe(
+await all([f, f]).pipe(
   flatMap(wait),
   scope,
   defaultTime,

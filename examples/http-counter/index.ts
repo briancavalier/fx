@@ -30,7 +30,7 @@ const myHandler = (r: Request) => fx(function* () {
 
 const { port = 3000 } = process.env
 
-runServer(myHandler).pipe(
+await runServer(myHandler).pipe(
   logConsole,
   defaultTime,
   provide({ port: +port }),

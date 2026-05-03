@@ -47,5 +47,17 @@ describe('Async', () => {
 
       assert.equal(actual.arg, expected)
     })
+
+    it('given thrown error, produces Fail', async () => {
+      const expected = new Error()
+
+      const actual = await tryPromise<never>(() => { throw expected })
+        .pipe(
+          returnFail,
+          runPromise
+        )
+
+      assert.equal(actual.arg, expected)
+    })
   })
 })

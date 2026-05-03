@@ -30,7 +30,7 @@ const handleRead = <E, A>(f: Fx<E, A>) => bracket(
   ))
 
 // Run with "real" Read and Print effects
-main.pipe(handleRead, handlePrint, runPromise)
+await main.pipe(handleRead, handlePrint, runPromise)
   .then(console.log)
 
 // const handlePrintPure = <E, A>(f: Fx<E, A>) => {

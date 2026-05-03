@@ -62,4 +62,4 @@ const main = fx(function* () {
   }
 })
 
-main.pipe(defaultTime, unbounded, runPromise).then(x => console.log(inspect(x, false, Infinity)))
+await main.pipe(defaultTime, unbounded, runPromise).then(x => console.log(inspect(x, false, Infinity)))

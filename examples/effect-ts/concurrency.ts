@@ -20,9 +20,8 @@ const main2 = all(ids.map(getUser))
     flatMap(users => log("Got users", users))
   )
 
-main2.pipe(
+await main2.pipe(
   ...defaultRuntime,
   bounded(3),
   runPromise
 )
-

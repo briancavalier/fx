@@ -9,7 +9,7 @@ const main = race([
   sleep(500).pipe(andThen(fail("Aborted!")))
 ])
 
-main.pipe(
+await main.pipe(
   defaultConsole,
   defaultTime,
   unbounded,

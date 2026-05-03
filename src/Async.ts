@@ -11,7 +11,9 @@ export class Async extends Effect('fx/Async')<Run<any>> { }
  * be propagated as a {@link Fail} effect.
  */
 export const tryPromise = <const A>(f: Run<A>): Fx<Async | Fail<unknown>, A> =>
-  flatten(assertPromise(signal => f(signal).then(ok, fail)))
+  flatten(assertPromise(signal =>
+    Promise.resolve(signal).then(f).then(ok, fail)
+  ))
 
 /**
  * Convert an async function into an Fx, asserting that it does not throw or reject.

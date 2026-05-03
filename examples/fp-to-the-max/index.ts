@@ -27,7 +27,7 @@ const handleGenerateSecret = handle(GenerateSecret, max => fx(function* () {
 
 const { max = 10 } = process.env
 
-main.pipe(
+await main.pipe(
   provide({ max: +max }),
   handleGenerateSecret,
   defaultRandom(),

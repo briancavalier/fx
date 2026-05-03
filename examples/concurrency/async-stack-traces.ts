@@ -26,7 +26,7 @@ const f3 = fx(function* () {
 
 const main = fork(f1)
 
-main.pipe(
+await main.pipe(
   flatMap(wait),
   tap(result => log(`main finished`, result)),
   catchAll(e => error('Error!', e)),

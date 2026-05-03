@@ -31,7 +31,7 @@ const r = of(1)
 // Run three concurrent tasks that interleave and increment the same Ref
 // compareAndSet guarantees safe updates, and this will never print
 // any duplicate values
-all([f(r), f(r), f(r)])
+await all([f(r), f(r), f(r)])
   .pipe(
     flatMap(wait),
     defaultTime,

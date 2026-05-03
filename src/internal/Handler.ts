@@ -31,7 +31,7 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
             ir = i.next(yield ir.value as any)
           }
         } else {
-          throw new Error(`Unexpected non-Effect value yielded ${ir.value}`)
+          throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
         }
       }
 
@@ -75,7 +75,7 @@ export class Control<E, A> implements Fx<E, A>, Pipeable {
             ir = i.next(yield ir.value as any)
           }
         } else {
-          throw new Error(`Unexpected non-Effect value yielded ${ir.value}`)
+          throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
         }
       }
 

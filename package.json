@@ -36,6 +36,10 @@
       "types": "./dist/Fork.d.ts",
       "import": "./dist/Fork.js"
     },
+    "./HttpClient": {
+      "types": "./dist/HttpClient.d.ts",
+      "import": "./dist/HttpClient.js"
+    },
     "./Log": {
       "types": "./dist/Log.d.ts",
       "import": "./dist/Log.js"
@@ -74,7 +78,7 @@
   ],
   "scripts": {
     "build": "tsc --project ./tsconfig.build.json",
-    "lint": "npx oxlint@latest",
+    "lint": "npx --package oxlint@latest --package oxlint-tsgolint@latest oxlint --type-aware",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "test:watch": "node --import tsx --test --test-reporter=dot --watch './src/**/*.test.ts'",
     "typecheck": "tsc --noEmit"

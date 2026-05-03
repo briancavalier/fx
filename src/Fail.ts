@@ -10,7 +10,7 @@ export class Fail<const E> extends Effect('fx/Fail')<E, never> { }
 export const fail = <const E>(e: E): Fx<Fail<E>, never> => new Fail(e)
 
 /**
- * Catch failures matching a type guard and handles them with the provided function.
+ * Catch failures matching a type guard and handle them with the provided function.
  * @example
  *   computation.pipe(catchIf(isAuthError, e => recoverFx))
  */

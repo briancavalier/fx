@@ -7,7 +7,7 @@ const main = sleep(1000).pipe(
   andThen(log('Hello, World!'))
 )
 
-main.pipe(
+await main.pipe(
   ...defaultRuntime,
   unbounded,
   runPromise

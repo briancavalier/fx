@@ -128,7 +128,7 @@ describe('time', () => {
         }
 
         const c = new VirtualClock(1)
-        test(c, results)
+        void test(c, results)
 
         await c.step(1000)
         assert.deepEqual(results, [[1000, 1001]])

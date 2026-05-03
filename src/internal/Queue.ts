@@ -12,14 +12,17 @@ const queueDisposed = { tag: 'fx/Queue/Disposed' } as const
 
 export type Disposed = typeof queueDisposed
 
-export interface Queue<A> extends Disposable {
+export interface Enqueue<A> extends Disposable {
   enqueue(a: A): boolean
+  readonly disposed: boolean
+}
+
+export interface Dequeue<A> extends Disposable {
   dequeue(): Promise<Dequeued<A> | Disposed>
   readonly disposed: boolean
 }
 
-export type Enqueue<A> = Pick<Queue<A>, 'enqueue' | 'disposed' | keyof Disposable>
-export type Dequeue<A> = Pick<Queue<A>, 'dequeue' | 'disposed' | keyof Disposable>
+export interface Queue<A> extends Enqueue<A>, Dequeue<A> { }
 
 export const dequeue = <A>(q: Dequeue<A>): Fx<Async, Dequeued<A> | Disposed> => assertPromise(() => q.dequeue())
 

@@ -21,6 +21,13 @@ describe('Async', () => {
       await assert.rejects(assertPromise(() => Promise.reject(expected))
         .pipe(runPromise), e => (e as Error).cause === expected)
     })
+
+    it('given thrown error, throws', async () => {
+      const expected = new Error()
+
+      await assert.rejects(assertPromise<never>(() => { throw expected })
+        .pipe(runPromise), e => (e as Error).cause === expected)
+    })
   })
 
   describe('tryPromise', () => {

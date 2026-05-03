@@ -95,7 +95,12 @@ const acquire = async <A>(s: Semaphore, scope: DisposableSet, f: () => Promise<A
 
 const runTask = <A>(run: (s: AbortSignal) => Promise<A>) => {
   const s = new DisposableAbortController()
-  return new Task<A, unknown>(run(s.signal), s)
+  try {
+    return new Task<A, unknown>(run(s.signal), s)
+  } catch (e) {
+    s[Symbol.dispose]()
+    return new Task<A, unknown>(Promise.reject(e), s)
+  }
 }
 
 const withContext = (c: readonly HandlerContext[], f: Fx<unknown, unknown>) =>

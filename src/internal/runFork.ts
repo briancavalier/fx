@@ -4,8 +4,7 @@ import { Fail } from '../Fail.js'
 import { Fork, ForkContext } from '../Fork.js'
 import { Fx } from '../Fx.js'
 import { Task } from '../Task.js'
-import { Handler, } from './Handler.js'
-import { GetHandlerContext, HandlerContext } from './HandlerContext.js'
+import { GetHandlerContext, HandlerContext, withContext } from './HandlerContext.js'
 import { Semaphore } from './Semaphore.js'
 import { DisposableSet, dispose } from './disposable.js'
 
@@ -102,9 +101,6 @@ const runTask = <A>(run: (s: AbortSignal) => Promise<A>) => {
     return new Task<A, unknown>(Promise.reject(e), s)
   }
 }
-
-const withContext = (c: readonly HandlerContext[], f: Fx<unknown, unknown>) =>
-  c.reduce((f, handler) => new Handler(f, handler.effectId, handler.handler), f)
 
 class DisposableAbortController extends AbortController {
   [Symbol.dispose]() { this.abort() }

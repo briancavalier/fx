@@ -217,7 +217,7 @@ describe('HttpClient', () => {
         body: { type: 'json' as const, value: { name: 'Ada' } }
       }
       let actualHookRequest: unknown
-      let actualHookInit: globalThis.RequestInit | undefined
+      let actualHookInit: CapturedFetchInit | undefined
       let actualFetchInit: CapturedFetchInit | undefined
 
       const fetch = ((_input, init) => {

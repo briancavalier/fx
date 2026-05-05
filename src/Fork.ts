@@ -5,7 +5,7 @@ import { Fail } from './Fail.js'
 import { Fx, flatMap, fx, map, ok } from './Fx.js'
 import { Handle, control } from './Handler.js'
 import { Task, all as allTasks, race as raceTasks } from './Task.js'
-import { GetHandlerContext, HandlerContext, getHandlerContext } from './internal/HandlerContext.js'
+import { Scoped, HandlerContext, handleScoped, scoped } from './internal/HandlerContext.js'
 import { Semaphore } from './internal/Semaphore.js'
 import { acquireAndRunFork } from './internal/runFork.js'
 
@@ -20,11 +20,11 @@ export interface ForkContext {
 export const fork = <const E, const A>(
   f: Fx<E, A>,
   origin: Breadcrumb | string = at('fx/Fork/fork')
-): Fx<Exclude<E, Async | Fail<any>> | Fork | GetHandlerContext, Task<A, ErrorsOf<E>>> =>
-  getHandlerContext.pipe(
+): Fx<Exclude<E, Async | Fail<any>> | Fork | Scoped<'fx/Fork'>, Task<A, ErrorsOf<E>>> =>
+  scoped('fx/Fork').pipe(
     flatMap(context =>
       new Fork({ fx: f, context, origin: at(origin) }))
-  ) as Fx<Exclude<E, Async | Fail<any>> | Fork | GetHandlerContext, Task<A, ErrorsOf<E>>>
+  ) as Fx<Exclude<E, Async | Fail<any>> | Fork | Scoped<'fx/Fork'>, Task<A, ErrorsOf<E>>>
 
 export const forkEach = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs, origin = 'fx/Fork/forkEach') => fx(function* () {
   const ps = [] as Task<unknown, unknown>[]
@@ -40,17 +40,17 @@ export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs,
 export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs, origin = 'fx/Fork/race') =>
   forkEach(fxs, origin).pipe(map(raceTasks))
 
-export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>): Fx<Handle<E, Fork> | GetHandlerContext, A> =>
+export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, Fork>, Scoped<'fx/Fork'>> | Scoped<'fx/Fork'>, A> =>
   // The HandlerContext for this bounded concurrency scope won't change, so we can cache it
-  getHandlerContext.pipe(
+  scoped('fx/Fork').pipe(
     flatMap(c => {
       const s = new Semaphore(maxConcurrency)
       return f.pipe(
         control(Fork, (resume, f) => ok(resume(acquireAndRunFork(f, s, c)))),
-        control(GetHandlerContext, resume => ok(resume([])))
+        handleScoped('fx/Fork')
       ) as Fx<Handle<E, Fork>, A>
     })
-  )
+  ) as Fx<Handle<Handle<E, Fork>, Scoped<'fx/Fork'>> | Scoped<'fx/Fork'>, A>
 
 export const unbounded = bounded(Infinity)
 

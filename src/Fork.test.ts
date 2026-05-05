@@ -1,21 +1,19 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
+import { Effect } from './Effect.js'
 import { fork, unbounded } from './Fork.js'
-import { fx, ok, run } from './Fx.js'
+import { fx, ok, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
 import { wait } from './Task.js'
-import { GetHandlerContext } from './internal/HandlerContext.js'
 
 const asyncValue = <A>(a: A) => assertPromise(() => Promise.resolve(a))
-
-const emptyHandlerContext = handle(GetHandlerContext, () => ok([]))
 
 describe('Fork', () => {
   describe('unbounded', () => {
     it('given Fork, returns task', async () => {
       const x = Math.random()
-      const t = asyncValue(x).pipe(fork, unbounded, emptyHandlerContext, run)
+      const t = await asyncValue(x).pipe(fork, unbounded, runPromise)
       const r = await t.promise
       assert.equal(r, x)
     })
@@ -27,7 +25,7 @@ describe('Fork', () => {
         return t
       }))
 
-      const t = f.pipe(emptyHandlerContext, run)
+      const t = await f.pipe(runPromise)
       const r = await t.promise
       assert.equal(r, x)
     })
@@ -41,7 +39,7 @@ describe('Fork', () => {
         return [t1, t2]
       }))
 
-      const t = f.pipe(emptyHandlerContext, run)
+      const t = await f.pipe(runPromise)
       const r = await Promise.all(t.map(t => t.promise))
       assert.deepEqual(r, [x1, x2])
     })
@@ -53,9 +51,26 @@ describe('Fork', () => {
         return yield* wait(t1)
       })
 
-      const t = f.pipe(fork, unbounded, emptyHandlerContext, run)
+      const t = await f.pipe(fork, unbounded, runPromise)
       const r = await t.promise
       assert.deepEqual(r, x)
+    })
+
+    it('runs forked tasks with handlers outside the fork handler', async () => {
+      class CurrentValue extends Effect('test/Fork/CurrentValue')<void, string> { }
+
+      const f = fx(function* () {
+        const t = yield* fork(new CurrentValue())
+        return yield* wait(t)
+      })
+
+      const r = await f.pipe(
+        unbounded,
+        handle(CurrentValue, () => ok('handled')),
+        runPromise
+      )
+
+      assert.equal(r, 'handled')
     })
   })
 })

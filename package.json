@@ -48,6 +48,10 @@
       "types": "./dist/Random.d.ts",
       "import": "./dist/Random.js"
     },
+    "./Retry": {
+      "types": "./dist/Retry.d.ts",
+      "import": "./dist/Retry.js"
+    },
     "./Ref": {
       "types": "./dist/Ref.d.ts",
       "import": "./dist/Ref.js"

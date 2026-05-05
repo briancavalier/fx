@@ -4,7 +4,7 @@ import { Fail } from '../Fail.js'
 import { Fork, ForkContext } from '../Fork.js'
 import { Fx } from '../Fx.js'
 import { Task } from '../Task.js'
-import { GetHandlerContext, HandlerContext, withContext } from './HandlerContext.js'
+import { Scoped, HandlerContext, withContext } from './HandlerContext.js'
 import { Semaphore } from './Semaphore.js'
 import { DisposableSet, dispose } from './disposable.js'
 
@@ -13,7 +13,7 @@ export type RunForkOptions = {
   readonly maxConcurrency?: number
 }
 
-export const runFork = <const E extends Async | Fork | Fail<unknown> | GetHandlerContext, const A>(f: Fx<E, A>, { origin = 'fx/runFork', maxConcurrency = Infinity }: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
+export const runFork = <const E extends Async | Fork | Fail<unknown> | Scoped<string>, const A>(f: Fx<E, A>, { origin = 'fx/runFork', maxConcurrency = Infinity }: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new DisposableSet()
 
   const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, at(origin))
@@ -61,7 +61,7 @@ const runForkInternal = <const E, const A>(
           .finally(() => disposables.remove(t))
           .catch(e => reject(new ForkError(`Unhandled failure in forked task`, origin, { cause: e })))
         ir = i.next(t)
-      } else if (GetHandlerContext.is(ir.value)) {
+      } else if (Scoped.is(ir.value)) {
         ir = i.next(context)
       } else if (Fail.is(ir.value))
         return reject(

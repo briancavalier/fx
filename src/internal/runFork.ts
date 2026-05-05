@@ -22,11 +22,11 @@ export const runFork = <const E extends Async | Fork | Fail<unknown> | Scoped<st
   return new Task(promise, disposables)
 }
 
-export const acquireAndRunFork = (f: ForkContext, s: Semaphore, context: readonly HandlerContext[]): Task<unknown, unknown> => {
+export const acquireAndRunFork = (f: ForkContext, s: Semaphore, context: readonly HandlerContext[] = []): Task<unknown, unknown> => {
   const disposables = new DisposableSet()
 
   const promise = acquire(s, disposables,
-    () => runForkInternal(withContext([...f.context, ...context], f.fx), context, s, disposables, f.origin)
+    () => runForkInternal(withContext(context, f.fx), context, s, disposables, f.origin)
       .finally(() => dispose(disposables)))
 
   return new Task(promise, disposables)

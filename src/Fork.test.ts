@@ -72,5 +72,20 @@ describe('Fork', () => {
 
       assert.equal(r, 'handled')
     })
+
+    it('runs forked tasks with handlers between fork and the fork handler', async () => {
+      class CurrentValue extends Effect('test/Fork/LocalCurrentValue')<void, string> { }
+
+      const f = fx(function* () {
+        const t = yield* fork(new CurrentValue())
+        return yield* wait(t)
+      }).pipe(
+        handle(CurrentValue, () => ok('handled'))
+      )
+
+      const r = await f.pipe(unbounded, runPromise)
+
+      assert.equal(r, 'handled')
+    })
   })
 })

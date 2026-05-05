@@ -23,7 +23,9 @@ export type Response = Readonly<{ status: number; headers: Record<string, string
 export const httpServer = bracket(
   fx(function* () {
     const { port } = yield* get<{ port: number }>()
-    return createServer().listen(port)
+    const server = createServer().listen(port)
+    yield* info(`Listening on port ${port}`)
+    return server
   }),
   server => ok(void server.close()),
   server => withEnqueue<Connection>(q => {

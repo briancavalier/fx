@@ -7,6 +7,9 @@ Good examples:
 - write business logic against those effects,
 - provide one or more handlers,
 - compose handlers with `.pipe(...)`,
+- show effect constructors in their pipeable form when available, e.g. `work.pipe(timeout({ ms: 500 }))`,
+- keep the focus on user-facing effects and explicit handler composition,
+- recover or log failures without obscuring the handler composition,
 - end with `run`, `runPromise`, or `runTask`.
 
 Avoid:

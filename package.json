@@ -75,6 +75,10 @@
     "./Time": {
       "types": "./dist/Time.d.ts",
       "import": "./dist/Time.js"
+    },
+    "./Timeout": {
+      "types": "./dist/Timeout.d.ts",
+      "import": "./dist/Timeout.js"
     }
   },
   "files": [

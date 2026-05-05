@@ -13,8 +13,8 @@ export interface Breadcrumb {
 /**
  * Create a Breadcrumb, optionally linked to an existing one.
  */
-export const at = (a: Breadcrumb | string): Breadcrumb =>
-  typeof a === 'string' ? new BreadcrumbAt(a, at) : a
+export const at: (a: Breadcrumb | string, f?: Function) => Breadcrumb = (a, f = at) =>
+  typeof a === 'string' ? new BreadcrumbAt(a, f) : a
 
 class BreadcrumbAt extends Error implements Breadcrumb {
   constructor(

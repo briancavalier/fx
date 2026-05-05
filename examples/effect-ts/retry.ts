@@ -11,7 +11,8 @@ const findUserById = (id: number) => request({
   flatMap(json)
 )
 
-const main = retry(findUserById(1), { retries: 3 }).pipe(
+const main = findUserById(1).pipe(
+  retry({ retries: 3 }),
   tap(user => log('Got user', user)),
 )
 

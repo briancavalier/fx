@@ -18,7 +18,7 @@ export interface ForkContext {
 
 export const fork = <const E, const A>(
   f: Fx<E, A>,
-  origin: Breadcrumb | string = at('fx/Fork/fork')
+  origin: Breadcrumb | string = at('fx/Fork/fork', fork)
 ): Fx<Exclude<E, Async | Fail<any>> | Fork | Scoped<'fx/Fork'>, Task<A, ErrorsOf<E>>> =>
   scoped('fx/Fork', f, fx =>
     ok(new Fork({ fx, origin: at(origin) }) as Fx<Fork, Task<A, ErrorsOf<E>>>)

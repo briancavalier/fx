@@ -3,7 +3,7 @@ import { Breadcrumb, at } from '../Breadcrumb.js'
 import { Fail } from '../Fail.js'
 import { Fork, ForkContext } from '../Fork.js'
 import { Fx } from '../Fx.js'
-import { Scoped, HandlerContext, withContext } from '../Scoped.js'
+import { HandlerContext, Scoped, withContext } from '../Scoped.js'
 import { Task } from '../Task.js'
 import { Semaphore } from './Semaphore.js'
 import { DisposableSet, dispose } from './disposable.js'
@@ -16,7 +16,7 @@ export type RunForkOptions = {
 export const runFork = <const E extends Async | Fork | Fail<unknown> | Scoped<string>, const A>(f: Fx<E, A>, { origin = 'fx/runFork', maxConcurrency = Infinity }: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new DisposableSet()
 
-  const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, at(origin))
+  const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, at(origin, runFork))
     .finally(() => dispose(disposables))
 
   return new Task(promise, disposables)

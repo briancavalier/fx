@@ -19,7 +19,8 @@ describe('Retry', () => {
       return 'ok'
     })
 
-    const r = retry(f, { retries: 2 }).pipe(
+    const r = f.pipe(
+      retry({ retries: 2 }),
       defaultRetry({ observe: e => fx(function* () { events.push(e) }) }),
       returnFail,
       run
@@ -44,7 +45,8 @@ describe('Retry', () => {
       yield* fail('nope')
     })
 
-    const r = retry(f, { retries: 1 }).pipe(
+    const r = f.pipe(
+      retry({ retries: 1 }),
       defaultRetry({ observe: e => fx(function* () { events.push(e) }) }),
       returnFail,
       run
@@ -67,7 +69,7 @@ describe('Retry', () => {
       yield* fail(attempts)
     })
 
-    const r = retry(f, { retries: 3, while: e => e < 2 }).pipe(defaultRetry(), returnFail, run)
+    const r = f.pipe(retry({ retries: 3, while: (e: number) => e < 2 }), defaultRetry(), returnFail, run)
 
     assert.ok(Fail.is(r))
     assert.equal(r.arg, 2)
@@ -83,7 +85,8 @@ describe('Retry', () => {
       yield* fail('once')
     })
 
-    const r = retry(f, { retries: 0 }).pipe(
+    const r = f.pipe(
+      retry({ retries: 0 }),
       defaultRetry({ observe: e => fx(function* () { events.push(e) }) }),
       returnFail,
       run
@@ -106,7 +109,8 @@ describe('Retry', () => {
       return 'ok'
     })
 
-    const r = retry(f, { retries: 2 }).pipe(
+    const r = f.pipe(
+      retry({ retries: 2 }),
       defaultRetry({ observe: e => fx(function* () { events.push(e) }) }),
       returnFail,
       run
@@ -129,7 +133,8 @@ describe('Retry', () => {
       return 'ok'
     })
 
-    const r = retry(f, { retries: 2 }).pipe(
+    const r = f.pipe(
+      retry({ retries: 2 }),
       defaultRetry({ observe: () => fail('observe failed') }),
       returnFail,
       run
@@ -152,7 +157,8 @@ describe('Retry', () => {
       return `${prefix}:${attempts}`
     })
 
-    const r = retry(f, { retries: 1 }).pipe(
+    const r = f.pipe(
+      retry({ retries: 1 }),
       defaultRetry(),
       returnFail,
       handle(CurrentPrefix, () => ok('handled')),
@@ -172,9 +178,9 @@ describe('Retry', () => {
       return 'ok'
     })
 
-    const outer = retry(fx(function* () {
-      return yield* retry(inner, { retries: 1 })
-    }), { retries: 1 })
+    const outer = fx(function* () {
+      return yield* inner.pipe(retry({ retries: 1 }))
+    }).pipe(retry({ retries: 1 }))
 
     const r = outer.pipe(defaultRetry(), returnFail, run)
 
@@ -194,7 +200,8 @@ describe('Retry', () => {
       return yield* new NeedsHandler()
     })
 
-    const r = retry(f, { retries: 2 }).pipe(
+    const r = f.pipe(
+      retry({ retries: 2 }),
       handle(NeedsHandler, () =>
         attempts < 3 ? fail('from handler') : ok('ok')),
       defaultRetry({ observe: e => fx(function* () { events.push(e) }) }),
@@ -223,7 +230,8 @@ describe('Retry', () => {
       return yield* new NeedsHandler()
     })
 
-    const r = retry(f, { retries: 2 }).pipe(
+    const r = f.pipe(
+      retry({ retries: 2 }),
       defaultRetry({ observe: e => fx(function* () { events.push(e) }) }),
       handle(NeedsHandler, () => fail('outside retry')),
       returnFail,
@@ -247,9 +255,9 @@ describe('Retry', () => {
     })
 
     const c = new VirtualClock(0)
-    const p = retry(f, {
+    const p = f.pipe(retry({
       retries: 2
-    }).pipe(defaultRetry({
+    }), defaultRetry({
       observe: event => fx(function* () {
         events.push(event)
         if (event.type === 'failure' && event.retrying) {

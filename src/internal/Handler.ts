@@ -1,6 +1,6 @@
 import { EffectType, isEffect } from '../Effect.js'
 import { Fx } from '../Fx.js'
-import { HandlerContext, Scoped } from './HandlerContext.js'
+import type { HandlerContext } from '../Scoped.js'
 import { Pipeable, pipeThis } from './pipe.js'
 
 export type Answer<E extends EffectType> = InstanceType<E>['R']
@@ -25,7 +25,7 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
         if (isEffect(ir.value)) {
           if (effectId === ir.value._fxEffectId) {
             ir = i.next(yield* handler(ir.value.arg) as any)
-          } else if (Scoped.is(ir.value)) {
+          } else if (ir.value._fxEffectId === 'fx/Scoped') {
             ir = i.next([this, ...(yield ir.value) as any])
           } else {
             ir = i.next(yield ir.value as any)

@@ -4,8 +4,8 @@ import { Effect } from './Effect.js'
 import { Fail } from './Fail.js'
 import { Fx, flatMap, fx, map, ok } from './Fx.js'
 import { Handle, control } from './Handler.js'
+import { Scoped, HandlerContext, captureScoped, closeScoped } from './Scoped.js'
 import { Task, all as allTasks, race as raceTasks } from './Task.js'
-import { Scoped, HandlerContext, handleScoped, scoped } from './internal/HandlerContext.js'
 import { Semaphore } from './internal/Semaphore.js'
 import { acquireAndRunFork } from './internal/runFork.js'
 
@@ -21,7 +21,7 @@ export const fork = <const E, const A>(
   f: Fx<E, A>,
   origin: Breadcrumb | string = at('fx/Fork/fork')
 ): Fx<Exclude<E, Async | Fail<any>> | Fork | Scoped<'fx/Fork'>, Task<A, ErrorsOf<E>>> =>
-  scoped('fx/Fork').pipe(
+  captureScoped('fx/Fork').pipe(
     flatMap(context =>
       new Fork({ fx: f, context, origin: at(origin) }))
   ) as Fx<Exclude<E, Async | Fail<any>> | Fork | Scoped<'fx/Fork'>, Task<A, ErrorsOf<E>>>
@@ -42,12 +42,12 @@ export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs
 
 export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, Fork>, Scoped<'fx/Fork'>> | Scoped<'fx/Fork'>, A> =>
   // The HandlerContext for this bounded concurrency scope won't change, so we can cache it
-  scoped('fx/Fork').pipe(
+  captureScoped('fx/Fork').pipe(
     flatMap(c => {
       const s = new Semaphore(maxConcurrency)
       return f.pipe(
         control(Fork, (resume, f) => ok(resume(acquireAndRunFork(f, s, c)))),
-        handleScoped('fx/Fork')
+        closeScoped('fx/Fork')
       ) as Fx<Handle<E, Fork>, A>
     })
   ) as Fx<Handle<Handle<E, Fork>, Scoped<'fx/Fork'>> | Scoped<'fx/Fork'>, A>

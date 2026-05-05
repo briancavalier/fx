@@ -1,8 +1,8 @@
 import { Effect } from './Effect.js'
 import { Fail, returnFail } from './Fail.js'
-import { Fx, flatMap, flatten, fx, ok, unit } from './Fx.js'
-import { Handle, handle } from './Handler.js'
-import { Scoped, handleScoped, scoped, withContext } from './internal/HandlerContext.js'
+import { Fx, fx, ok, unit } from './Fx.js'
+import { Handle } from './Handler.js'
+import { Scoped, handleScoped, scoped } from './Scoped.js'
 
 export class Retry<const E = unknown, const A = unknown> extends Effect('fx/Retry')<RetryContext<E, A>, Fx<unknown, A>> { }
 
@@ -53,13 +53,11 @@ export const retry = <const E, const A>(
   f: Fx<E, A>,
   options: RetryOptions<ErrorsOf<E>>
 ): Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A> | Scoped<'fx/Retry'>, A> =>
-  scoped('fx/Retry').pipe(
-    flatMap(context =>
-      (new Retry<ErrorsOf<E>, A>({
-        ...normalizeOptions(options),
-        fx: withContext(context, f) as Fx<unknown, A>
-      }) as Fx<Retry<ErrorsOf<E>, A>, Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A>, A>>).pipe(flatten)
-    )
+  scoped('fx/Retry', f, fx =>
+    new Retry<ErrorsOf<E>, A>({
+      ...normalizeOptions(options),
+      fx
+    }) as Fx<Retry<ErrorsOf<E>, A>, Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A>, A>>
   )
 
 /**
@@ -68,10 +66,7 @@ export const retry = <const E, const A>(
  */
 export const defaultRetry = <const OE = never>(options: DefaultRetryOptions<OE> = {}) =>
   <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyRetry, Fail<ErrorsOfRetry<E>>> | OE, Scoped<'fx/Retry'>>, A> =>
-    f.pipe(
-      handle(Retry, runRetry(normalizeObserve(options))),
-      handleScoped('fx/Retry')
-    ) as Fx<Handle<Handle<E, AnyRetry, Fail<ErrorsOfRetry<E>>> | OE, Scoped<'fx/Retry'>>, A>
+    f.pipe(handleScoped('fx/Retry', Retry, runRetry(normalizeObserve(options)))) as Fx<Handle<Handle<E, AnyRetry, Fail<ErrorsOfRetry<E>>> | OE, Scoped<'fx/Retry'>>, A>
 
 const runRetry = <OE>(observe: (e: RetryEvent<unknown>) => Fx<OE, void>) =>
   <const E, const A>(r: RetryContext<E, A>): Fx<never, Fx<Fail<E> | OE, A>> => ok(fx(function* () {

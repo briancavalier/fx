@@ -11,10 +11,25 @@ export interface Breadcrumb {
 }
 
 /**
- * Create a Breadcrumb, optionally linked to an existing one.
+ * Capture a Breadcrumb with the provided message.
  */
-export const at: (a: Breadcrumb | string, f?: Function) => Breadcrumb = (a, f = at) =>
-  typeof a === 'string' ? new BreadcrumbAt(a, f) : a
+export const at: (message: string, f?: Function) => Breadcrumb = (message, f = at) =>
+  new BreadcrumbAt(message, f)
+
+/**
+ * Derive an indexed Breadcrumb from an existing Breadcrumb while preserving the
+ * original stack frames.
+ */
+export const indexed = (origin: Breadcrumb, index: number): Breadcrumb => {
+  const message = `${origin.message}[${index}]`
+
+  return {
+    message,
+    get stack() {
+      return replaceStackMessage(origin.stack, origin.message, message)
+    }
+  }
+}
 
 class BreadcrumbAt extends Error implements Breadcrumb {
   constructor(
@@ -25,4 +40,17 @@ class BreadcrumbAt extends Error implements Breadcrumb {
     super(message, options)
     if (Error.captureStackTrace) Error.captureStackTrace(this, f)
   }
+}
+
+const replaceStackMessage = (stack: string | undefined, current: string, next: string) => {
+  if (stack === undefined) return undefined
+
+  const lineEnd = stack.indexOf('\n')
+  const firstLine = lineEnd === -1 ? stack : stack.slice(0, lineEnd)
+  const rest = lineEnd === -1 ? '' : stack.slice(lineEnd)
+  const replaced = firstLine.includes(current)
+    ? firstLine.replace(current, next)
+    : next
+
+  return `${replaced}${rest}`
 }

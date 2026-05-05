@@ -2,8 +2,9 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
-import { fork, unbounded } from './Fork.js'
-import { fx, ok, runPromise } from './Fx.js'
+import { Fail, fail, returnFail } from './Fail.js'
+import { all, fork, forkEach, race, unbounded } from './Fork.js'
+import { flatMap, fx, ok, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
 import { wait } from './Task.js'
 
@@ -87,5 +88,65 @@ describe('Fork', () => {
 
       assert.equal(r, 'handled')
     })
+
+    it('preserves the all call site in indexed child task failures', async () => {
+      const cause = new Error('all failed')
+      const bad = fx(function* () {
+        yield* fail(cause)
+      })
+
+      const result = await all([bad]).pipe(
+        flatMap(wait),
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.match(firstLine(result.arg), /fx\/Fork\/all\[0\]/)
+      assert.match(result.arg.stack ?? '', /Fork\.test\.ts/)
+      assert.equal((result.arg as Error).cause, cause)
+    })
+
+    it('preserves the forkEach call site in indexed child task failures', async () => {
+      const cause = new Error('forkEach failed')
+      const bad = fx(function* () {
+        yield* fail(cause)
+      })
+
+      const result = await forkEach([bad]).pipe(
+        flatMap(([task]) => wait(task)),
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.match(firstLine(result.arg), /fx\/Fork\/forkEach\[0\]/)
+      assert.match(result.arg.stack ?? '', /Fork\.test\.ts/)
+      assert.equal((result.arg as Error).cause, cause)
+    })
+
+    it('preserves the race call site in indexed child task failures', async () => {
+      const cause = new Error('race failed')
+      const bad = fx(function* () {
+        yield* fail(cause)
+      })
+
+      const result = await race([bad]).pipe(
+        flatMap(wait),
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.match(firstLine(result.arg), /fx\/Fork\/race\[0\]/)
+      assert.match(result.arg.stack ?? '', /Fork\.test\.ts/)
+      assert.equal((result.arg as Error).cause, cause)
+    })
   })
 })
+
+const firstLine = (e: unknown): string =>
+  e instanceof Error ? e.stack?.split('\n')[0] ?? '' : ''

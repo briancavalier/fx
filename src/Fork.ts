@@ -1,5 +1,5 @@
 import { Async } from './Async.js'
-import { Breadcrumb, at } from './Breadcrumb.js'
+import { Breadcrumb, at, indexed } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
 import { Fail } from './Fail.js'
 import { Fx, fx, map, ok } from './Fx.js'
@@ -18,24 +18,33 @@ export interface ForkContext {
 
 export const fork = <const E, const A>(
   f: Fx<E, A>,
-  origin: Breadcrumb | string = at('fx/Fork/fork', fork)
+  origin: Breadcrumb = at('fx/Fork/fork', fork)
 ): Fx<Exclude<E, Async | Fail<any>> | Fork | Scoped<'fx/Fork'>, Task<A, ErrorsOf<E>>> =>
   scoped('fx/Fork', f, fx =>
-    ok(new Fork({ fx, origin: at(origin) }) as Fx<Fork, Task<A, ErrorsOf<E>>>)
+    ok(new Fork({ fx, origin }) as Fx<Fork, Task<A, ErrorsOf<E>>>)
   ) as Fx<Exclude<E, Async | Fail<any>> | Fork | Scoped<'fx/Fork'>, Task<A, ErrorsOf<E>>>
 
-export const forkEach = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs, origin = 'fx/Fork/forkEach') => fx(function* () {
+export const forkEach = <const Fxs extends readonly Fx<unknown, unknown>[]>(
+  fxs: Fxs,
+  origin: Breadcrumb = at('fx/Fork/forkEach', forkEach)
+) => fx(function* () {
   const ps = [] as Task<unknown, unknown>[]
-  for (let i = 0; i < fxs.length; i++) ps.push(yield* fork(fxs[i], `${origin}[${i}]`))
+  for (let i = 0; i < fxs.length; i++) ps.push(yield* fork(fxs[i], indexed(origin, i)))
   return ps
 }) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | Fork, {
   readonly [K in keyof Fxs]: Task<ResultOf<Fxs[K]>, ErrorsOf<EffectsOf<Fxs[K]>>>
 }>
 
-export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs, origin = 'fx/Fork/all') =>
+export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(
+  fxs: Fxs,
+  origin: Breadcrumb = at('fx/Fork/all', all)
+) =>
   forkEach(fxs, origin).pipe(map(allTasks))
 
-export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(fxs: Fxs, origin = 'fx/Fork/race') =>
+export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(
+  fxs: Fxs,
+  origin: Breadcrumb = at('fx/Fork/race', race)
+) =>
   forkEach(fxs, origin).pipe(map(raceTasks))
 
 export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, Fork>, Scoped<'fx/Fork'>> | Scoped<'fx/Fork'>, A> =>

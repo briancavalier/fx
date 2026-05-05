@@ -9,14 +9,14 @@ import { Semaphore } from './Semaphore.js'
 import { DisposableSet, dispose } from './disposable.js'
 
 export type RunForkOptions = {
-  readonly origin?: Breadcrumb | string
+  readonly origin?: Breadcrumb
   readonly maxConcurrency?: number
 }
 
-export const runFork = <const E extends Async | Fork | Fail<unknown> | Scoped<string>, const A>(f: Fx<E, A>, { origin = 'fx/runFork', maxConcurrency = Infinity }: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
+export const runFork = <const E extends Async | Fork | Fail<unknown> | Scoped<string>, const A>(f: Fx<E, A>, { origin = at('fx/runFork', runFork), maxConcurrency = Infinity }: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new DisposableSet()
 
-  const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, at(origin, runFork))
+  const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, origin)
     .finally(() => dispose(disposables))
 
   return new Task(promise, disposables)

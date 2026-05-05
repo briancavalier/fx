@@ -1,8 +1,9 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
 import { Fail, returnFail } from './Fail.js'
-import { assertSync, flatMap, fx, ok, run, trySync } from './Fx.js'
+import { assertSync, flatMap, fx, ok, run, runPromise, runTask, trySync } from './Fx.js'
 import { handle } from './Handler.js'
 
 describe('Fx', () => {
@@ -98,4 +99,35 @@ describe('Fx', () => {
       assert.equal(r.arg, e)
     })
   })
+
+  describe('runTask', () => {
+    it('captures the runTask call site as the default origin', async () => {
+      const cause = new Error('runTask failed')
+
+      await assert.rejects(
+        runTask(assertPromise(() => Promise.reject(cause))).promise,
+        e => e instanceof Error
+          && firstLine(e).includes('fx/runTask')
+          && (e.stack ?? '').includes('Fx.test.ts')
+          && e.cause === cause
+      )
+    })
+  })
+
+  describe('runPromise', () => {
+    it('captures the runPromise call site as the default origin', async () => {
+      const cause = new Error('runPromise failed')
+
+      await assert.rejects(
+        runPromise(assertPromise(() => Promise.reject(cause))),
+        e => e instanceof Error
+          && firstLine(e).includes('fx/runPromise')
+          && (e.stack ?? '').includes('Fx.test.ts')
+          && e.cause === cause
+      )
+    })
+  })
 })
+
+const firstLine = (e: Error): string =>
+  e.stack?.split('\n')[0] ?? ''

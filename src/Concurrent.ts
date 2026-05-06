@@ -2,9 +2,9 @@ import { Async } from './Async.js'
 import { Breadcrumb, at, indexed } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
 import { Fail } from './Fail.js'
-import { Fx, flatMap, fx, ok } from './Fx.js'
+import { Fx, flatMap, flatten, fx, ok } from './Fx.js'
 import { Handle } from './Handler.js'
-import { Scoped, captureScoped, handleScoped, scoped, withContext } from './Scoped.js'
+import { Scoped, handleScoped, scoped, scopedEach } from './Scoped.js'
 import { Task, wait as waitTask } from './Task.js'
 import { Semaphore } from './internal/Semaphore.js'
 import { acquireAndRunFork } from './internal/runFork.js'
@@ -63,8 +63,8 @@ export const fork = <const E, const A>(
   f: Fx<E, A>,
   origin: Breadcrumb = at('fx/Concurrent/fork', fork)
 ): Fx<Exclude<E, Async | Fail<any>> | Fork | Scoped<'fx/Concurrent/Fork'>, Task<A, ErrorsOf<E>>> =>
-  scoped('fx/Concurrent/Fork', f, fx =>
-    ok(new Fork({ fx, origin }) as Fx<Fork, Task<A, ErrorsOf<E>>>)
+  scoped('fx/Concurrent/Fork', f).pipe(
+    flatMap(fx => new Fork({ fx, origin }) as Fx<Fork, Task<A, ErrorsOf<E>>>)
   ) as Fx<Exclude<E, Async | Fail<any>> | Fork | Scoped<'fx/Concurrent/Fork'>, Task<A, ErrorsOf<E>>>
 
 /**
@@ -95,13 +95,12 @@ export const forkEach = <const Fxs extends readonly Fx<unknown, unknown>[]>(
 export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   fxs: Fxs,
   origin: Breadcrumb = at('fx/Concurrent/all', all)
-) => fx(function* () {
-  const context = yield* captureScoped('fx/Concurrent/All')
-  return yield* new All({
-    fxs: fxs.map(f => withContext(context, f)) as unknown as Fxs,
+) => scopedEach('fx/Concurrent/All', fxs).pipe(
+  flatMap(fxs => new All({
+    fxs: fxs as unknown as Fxs,
     origin
-  })
-}) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | All<Fxs> | Scoped<'fx/Concurrent/All'>, {
+  }))
+) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | All<Fxs> | Scoped<'fx/Concurrent/All'>, {
   readonly [K in keyof Fxs]: ResultOf<Fxs[K]>
 }>
 
@@ -115,13 +114,12 @@ export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(
 export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   fxs: Fxs,
   origin: Breadcrumb = at('fx/Concurrent/race', race)
-) => fx(function* () {
-  const context = yield* captureScoped('fx/Concurrent/Race')
-  return yield* new Race({
-    fxs: fxs.map(f => withContext(context, f)) as unknown as Fxs,
+) => scopedEach('fx/Concurrent/Race', fxs).pipe(
+  flatMap(fxs => new Race({
+    fxs: fxs as unknown as Fxs,
     origin
-  })
-}) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | Race<Fxs> | Scoped<'fx/Concurrent/Race'>, ResultOf<Fxs[number]>>
+  }))
+) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | Race<Fxs> | Scoped<'fx/Concurrent/Race'>, ResultOf<Fxs[number]>>
 
 /**
  * Handle All by running all child computations concurrently in a structured
@@ -192,8 +190,11 @@ export class RaceAllFailed<Errors extends readonly unknown[]> extends Error {
  * concurrency.
  */
 export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, Fork>, Scoped<'fx/Concurrent/Fork'>> | Scoped<'fx/Concurrent/Fork'>, A> =>
-  scoped('fx/Concurrent/Fork', f, fx =>
-    ok(fx.pipe(handleScoped('fx/Concurrent/Fork', Fork, runForkWith(new Semaphore(maxConcurrency)))))
+  scoped('fx/Concurrent/Fork', f).pipe(
+    flatMap(fx =>
+      ok(fx.pipe(handleScoped('fx/Concurrent/Fork', Fork, runForkWith(new Semaphore(maxConcurrency)))))
+    ),
+    flatten
   ) as Fx<Handle<Handle<E, Fork>, Scoped<'fx/Concurrent/Fork'>> | Scoped<'fx/Concurrent/Fork'>, A>
 
 /**

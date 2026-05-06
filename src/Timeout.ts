@@ -1,9 +1,9 @@
 import { Async } from './Async.js'
 import { Breadcrumb, at } from './Breadcrumb.js'
+import { Fork, firstSettled, race } from './Concurrent.js'
 import { Effect } from './Effect.js'
 import { Fail, catchAll, fail } from './Fail.js'
-import { Fork, firstSettled, race } from './Concurrent.js'
-import { Fx, fx, map, ok } from './Fx.js'
+import { Fx, flatMap, flatten, fx, map, ok } from './Fx.js'
 import { Handle } from './Handler.js'
 import { Scoped, handleScoped, scoped } from './Scoped.js'
 import { Sleep, sleep } from './Time.js'
@@ -28,16 +28,19 @@ export class Timeout<const E, const A, const TE> extends Effect('fx/Timeout')<Ti
  */
 export function timeout(options: DefaultTimeoutOptions): <const E, const A>(f: Fx<E, A>) => Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TimeoutError> | Scoped<'fx/Timeout'>, A>
 export function timeout<const TE>(options: TimeoutOptions<TE>): <const E, const A>(f: Fx<E, A>) => Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE> | Scoped<'fx/Timeout'>, A>
-export function timeout<const TE>(options: DefaultTimeoutOptions | TimeoutOptions<TE>) {
-  const origin = at(`Timeout requested after ${options.ms}ms`, timeout)
+export function timeout<const TE>({ ms, onTimeout }: DefaultTimeoutOptions | TimeoutOptions<TE>) {
+  const origin = at(`Timeout requested after ${ms}ms`, timeout)
   return <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE | TimeoutError> | Scoped<'fx/Timeout'>, A> =>
-    scoped('fx/Timeout', f, fx =>
-      new Timeout<ErrorsOf<E>, A, TE | TimeoutError>({
-        fx,
-        ms: options.ms,
-        origin,
-        onTimeout: options.onTimeout ?? defaultTimeoutError
-      }) as Fx<Timeout<ErrorsOf<E>, A, TE | TimeoutError>, Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE | TimeoutError>, A>>
+    scoped('fx/Timeout', f).pipe(
+      flatMap(fx =>
+        new Timeout<ErrorsOf<E>, A, TE | TimeoutError>({
+          fx,
+          ms,
+          origin,
+          onTimeout: onTimeout ?? defaultTimeoutError
+        }) as Fx<Timeout<ErrorsOf<E>, A, TE | TimeoutError>, Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE | TimeoutError>, A>>
+      ),
+      flatten
     )
 }
 

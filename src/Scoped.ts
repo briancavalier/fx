@@ -1,5 +1,5 @@
 import { Effect, EffectType, isEffect } from './Effect.js'
-import { flatMap, flatten, Fx } from './Fx.js'
+import { Fx, map } from './Fx.js'
 import { Answer, Arg, Handler } from './internal/Handler.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 
@@ -13,14 +13,23 @@ export class Scoped<const Name extends string> extends Effect('fx/Scoped')<Name,
 export const captureScoped = <const Name extends string>(name: Name): Scoped<Name> =>
   new Scoped(name)
 
-export const scoped = <const Name extends string, const E, const A, const R, const WE, const B>(
+export const scoped = <const Name extends string, const E, const A>(
   name: Name,
-  fx: Fx<E, A>,
-  f: (fx: Fx<unknown, A>) => Fx<R, Fx<WE, B>>
-): Fx<Scoped<Name> | R | WE, B> =>
+  fx: Fx<E, A>
+): Fx<Scoped<Name>, Fx<unknown, A>> =>
   captureScoped(name).pipe(
-    flatMap(context => f(withContext(context, fx) as Fx<unknown, A>))
-  ).pipe(flatten)
+    map(context => withContext(context, fx) as Fx<unknown, A>)
+  )
+
+export const scopedEach = <const Name extends string, const Fxs extends readonly Fx<unknown, unknown>[]>(
+  name: Name,
+  fxs: Fxs
+): Fx<Scoped<Name>, ScopedFxs<Fxs>> =>
+  captureScoped(name).pipe(
+    map(context =>
+      fxs.map(fx => withContext(context, fx)) as unknown as ScopedFxs<Fxs>
+    )
+  )
 
 export const closeScoped = <const Name extends string>(name: Name) =>
   <const E, const A>(fx: Fx<E, A>): Fx<E extends Scoped<Name> ? never : E, A> =>
@@ -42,6 +51,9 @@ export const withContext = (c: readonly HandlerContext[], f: Fx<unknown, unknown
   c.reduce((f, handler) => new Handler(f, handler.effectId, handler.handler), f)
 
 type Handle<E, A, B = never> = E extends A ? B : E
+type ScopedFxs<Fxs extends readonly Fx<unknown, unknown>[]> = {
+  readonly [K in keyof Fxs]: Fxs[K] extends Fx<unknown, infer A> ? Fx<unknown, A> : never
+}
 
 class ScopedHandler<E, A> implements Fx<E, A>, Pipeable {
   public readonly pipe = pipeThis as Pipeable['pipe']

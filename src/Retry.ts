@@ -1,6 +1,6 @@
 import { Effect } from './Effect.js'
 import { Fail, returnFail } from './Fail.js'
-import { Fx, fx, ok, unit } from './Fx.js'
+import { flatMap, flatten, Fx, fx, ok, unit } from './Fx.js'
 import { Handle } from './Handler.js'
 import { Scoped, handleScoped, scoped } from './Scoped.js'
 
@@ -15,11 +15,14 @@ export class Retry<const E, const A> extends Effect('fx/Retry')<RetryContext<E, 
  */
 export const retry = <const RE>(options: RetryOptions<RE>) =>
   <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A> | Scoped<'fx/Retry'>, A> =>
-    scoped('fx/Retry', f, fx =>
-      new Retry<ErrorsOf<E>, A>({
-        ...normalizeOptions(options as RetryOptions<ErrorsOf<E>>),
-        fx
-      }) as Fx<Retry<ErrorsOf<E>, A>, Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A>, A>>
+    scoped('fx/Retry', f).pipe(
+      flatMap(fx =>
+        new Retry<ErrorsOf<E>, A>({
+          ...normalizeOptions(options as RetryOptions<ErrorsOf<E>>),
+          fx
+        }) as Fx<Retry<ErrorsOf<E>, A>, Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A>, A>>
+      ),
+      flatten
     )
 
 /**

@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise, tryPromise } from './Async.js'
-import { returnFail } from './Fail.js'
+import { Fail, returnFail } from './Fail.js'
 import { runPromise } from './Fx.js'
 
 describe('Async', () => {
@@ -19,14 +19,20 @@ describe('Async', () => {
       const expected = new Error()
 
       await assert.rejects(assertPromise(() => Promise.reject(expected))
-        .pipe(runPromise), e => (e as Error).cause === expected)
+        .pipe(runPromise), e => e instanceof Error
+          && firstLine(e).includes('fx/Async/assertPromise')
+          && (e.stack ?? '').includes('Async.test.ts')
+          && e.cause === expected)
     })
 
     it('given thrown error, throws', async () => {
       const expected = new Error()
 
       await assert.rejects(assertPromise<never>(() => { throw expected })
-        .pipe(runPromise), e => (e as Error).cause === expected)
+        .pipe(runPromise), e => e instanceof Error
+          && firstLine(e).includes('fx/Async/assertPromise')
+          && (e.stack ?? '').includes('Async.test.ts')
+          && e.cause === expected)
     })
   })
 
@@ -52,6 +58,7 @@ describe('Async', () => {
           runPromise
         )
 
+      assert.ok(Fail.is(actual))
       assert.equal(actual.arg, expected)
     })
 
@@ -64,7 +71,11 @@ describe('Async', () => {
           runPromise
         )
 
+      assert.ok(Fail.is(actual))
       assert.equal(actual.arg, expected)
     })
   })
 })
+
+const firstLine = (e: Error): string =>
+  e.stack?.split('\n')[0] ?? ''

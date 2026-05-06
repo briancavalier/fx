@@ -101,13 +101,13 @@ describe('Fx', () => {
   })
 
   describe('runTask', () => {
-    it('captures the runTask call site as the default origin', async () => {
+    it('reports the Async call site for rejected Async work', async () => {
       const cause = new Error('runTask failed')
 
       await assert.rejects(
         runTask(assertPromise(() => Promise.reject(cause))).promise,
         e => e instanceof Error
-          && firstLine(e).includes('fx/runTask')
+          && firstLine(e).includes('fx/Async/assertPromise')
           && (e.stack ?? '').includes('Fx.test.ts')
           && e.cause === cause
       )
@@ -115,16 +115,45 @@ describe('Fx', () => {
   })
 
   describe('runPromise', () => {
-    it('captures the runPromise call site as the default origin', async () => {
+    it('reports the Async call site for rejected Async work', async () => {
       const cause = new Error('runPromise failed')
 
       await assert.rejects(
         runPromise(assertPromise(() => Promise.reject(cause))),
         e => e instanceof Error
-          && firstLine(e).includes('fx/runPromise')
+          && firstLine(e).includes('fx/Async/assertPromise')
           && (e.stack ?? '').includes('Fx.test.ts')
           && e.cause === cause
       )
+    })
+
+    it('does not resume the generator after Async rejection', async () => {
+      const cause = new Error('async failed')
+      let resumed = false
+
+      const f = fx(function* () {
+        yield* assertPromise(() => Promise.reject(cause))
+        resumed = true
+      })
+
+      await assert.rejects(runPromise(f), e => e instanceof Error
+        && firstLine(e).includes('fx/Async/assertPromise')
+        && e.cause === cause)
+      assert.equal(resumed, false)
+    })
+
+    it('wraps exceptions thrown after an awaited Async resume', async () => {
+      const cause = new Error('resume failed')
+
+      const f = fx(function* () {
+        yield* assertPromise(() => Promise.resolve())
+        throw cause
+      })
+
+      await assert.rejects(runPromise(f), e => e instanceof Error
+        && firstLine(e).includes('fx/runPromise')
+        && e.message === 'Unhandled exception in forked task'
+        && e.cause === cause)
     })
   })
 })

@@ -155,7 +155,7 @@ export const toAsyncIterable = <E extends Async | Stream<any> | Fail<any>, A>(f:
       while (!result.done) {
         const next = result.value
         if (next._fxEffectId === 'fx/Async') {
-          const value = await next.arg(controller.signal)
+          const value = await next.arg.run(controller.signal)
           result = iterator.next(value)
         } else if (next._fxEffectId === 'fx/Fail') {
           throw next.arg

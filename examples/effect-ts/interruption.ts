@@ -1,7 +1,7 @@
 import { andThen, runPromise } from "../../src"
 import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll } from "../../src/Fail"
-import { unbounded } from "../../src/Fork"
+import { unbounded } from "../../src/Concurrent"
 import { defaultTime, sleep } from "../../src/Time"
 import { defaultTimeout, timeout } from "../../src/Timeout"
 

@@ -1,8 +1,7 @@
 import { inspect } from 'util'
 
 import { Effect, Fx, fx, handle, map, ok, runPromise } from '../src'
-import { all, unbounded } from '../src/Fork'
-import { wait } from '../src/Task'
+import { all, defaultAll, unbounded } from '../src/Concurrent'
 import { sleep, defaultTime } from '../src/Time'
 
 // The usual state monad, as an effect
@@ -42,15 +41,11 @@ const f = fx(function* () {
 })
 
 const main1 = fx(function* () {
-  const r1 = yield* all([f, f])
-  const r3 = yield* wait(r1)
-  return r3
+  return yield* all([f, f])
 })
 
 const main2 = fx(function* () {
-  const r1 = yield* all([runState(1, f), runState(1, f)])
-  const r3 = yield* wait(r1)
-  return r3
+  return yield* all([runState(1, f), runState(1, f)])
 })
 
 const main = fx(function* () {
@@ -62,4 +57,4 @@ const main = fx(function* () {
   }
 })
 
-await main.pipe(defaultTime, unbounded, runPromise).then(x => console.log(inspect(x, false, Infinity)))
+await main.pipe(defaultTime, defaultAll, unbounded, runPromise).then(x => console.log(inspect(x, false, Infinity)))

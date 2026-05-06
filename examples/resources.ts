@@ -1,8 +1,7 @@
-import { assertSync, flatMap, fx, runPromise } from "../src"
+import { assertSync, fx, runPromise } from "../src"
 import { assert, fail } from "../src/Fail"
-import { all, unbounded } from "../src/Fork"
+import { all, defaultAll, unbounded } from "../src/Concurrent"
 import { finalize, scope } from "../src/Scope"
-import { wait } from "../src/Task"
 import { sleep, defaultTime } from "../src/Time"
 
 const myResource = (name: string) => fx(function* () {
@@ -26,7 +25,7 @@ const f = fx(function* () {
 })
 
 await all([f, f]).pipe(
-  flatMap(wait),
+  defaultAll,
   scope,
   defaultTime,
   unbounded,

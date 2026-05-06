@@ -1,8 +1,7 @@
-import { flatMap, fx, runPromise } from "../../src"
+import { fx, runPromise } from "../../src"
 import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll, fail } from "../../src/Fail"
-import { race, unbounded } from "../../src/Fork"
-import { wait } from "../../src/Task"
+import { defaultRace, race, unbounded } from "../../src/Concurrent"
 import { defaultTime, sleep } from "../../src/Time"
 
 const child1 = fx(function* () {
@@ -24,7 +23,7 @@ const child3 = fx(function* () {
 })
 
 await race([child1, child2, child3]).pipe(
-  flatMap(wait),
+  defaultRace,
   catchAll(e => error('Error!', e)),
   unbounded,
   defaultTime,

@@ -2,11 +2,10 @@ import { Async } from './Async.js'
 import { Breadcrumb, at } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
 import { Fail, catchAll, fail } from './Fail.js'
-import { Fork, race } from './Fork.js'
+import { Fork, defaultRace, race } from './Concurrent.js'
 import { Fx, fx, map, ok } from './Fx.js'
 import { Handle } from './Handler.js'
 import { Scoped, handleScoped, scoped } from './Scoped.js'
-import { wait } from './Task.js'
 import { Sleep, sleep } from './Time.js'
 
 /**
@@ -85,12 +84,11 @@ export type ErrorsOfTimeout<E> = E extends Timeout<infer R, any, any> ? R : neve
 export type TimeoutErrorOf<E> = E extends Timeout<any, any, infer TE> ? TE : never
 
 const runTimeout = <const E, const A, const TE>(t: TimeoutContext<E, A, TE>): Fx<Fork | Sleep | Async, Fx<Fail<E | TE>, A>> => fx(function* () {
-  const task = yield* race([
+  const result = yield* race([
     attempt(t.fx as Fx<Fail<E>, A>),
     sleep(t.ms).pipe(map(() => ({ type: 'timeout', failure: t.onTimeout(t) } as const)))
-  ])
+  ]).pipe(defaultRace)
 
-  const result = yield* wait(task)
   return result.type === 'success' ? ok(result.value) : fail(result.failure)
 })
 

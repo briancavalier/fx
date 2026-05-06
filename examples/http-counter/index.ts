@@ -1,6 +1,6 @@
 import { fx, runPromise } from '../../src'
 import { provide } from '../../src/Env'
-import { unbounded } from '../../src/Fork'
+import { unbounded } from '../../src/Concurrent'
 import { console as logConsole, info } from '../../src/Log'
 import { defaultTime } from '../../src/Time'
 

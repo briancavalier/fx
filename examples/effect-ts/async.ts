@@ -1,6 +1,6 @@
 import { andThen, defaultRuntime, runPromise } from "../../src"
 import { log } from "../../src/Console"
-import { unbounded } from "../../src/Fork"
+import { unbounded } from "../../src/Concurrent"
 import { sleep } from "../../src/Time"
 
 const main = sleep(1000).pipe(

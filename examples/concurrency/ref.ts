@@ -1,8 +1,7 @@
 import { flatMap, Fx, fx, runPromise } from '../../src'
-import { all, unbounded } from '../../src/Fork'
+import { all, defaultAll, unbounded } from '../../src/Concurrent'
 import { Int, int, defaultRandom } from '../../src/Random'
 import { Sleep, sleep, defaultTime } from '../../src/Time'
-import { wait } from '../../src/Task'
 import { compareAndSet, of, type Of } from '../../src/Ref'
 
 // Simple Ref example
@@ -33,7 +32,7 @@ const r = of(1)
 // any duplicate values
 await all([f(r), f(r), f(r)])
   .pipe(
-    flatMap(wait),
+    defaultAll,
     defaultTime,
     defaultRandom(),
     unbounded,

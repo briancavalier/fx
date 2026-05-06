@@ -32,9 +32,9 @@
       "types": "./dist/Fail.d.ts",
       "import": "./dist/Fail.js"
     },
-    "./Fork": {
-      "types": "./dist/Fork.d.ts",
-      "import": "./dist/Fork.js"
+    "./Concurrent": {
+      "types": "./dist/Concurrent.d.ts",
+      "import": "./dist/Concurrent.js"
     },
     "./HttpClient": {
       "types": "./dist/HttpClient.d.ts",

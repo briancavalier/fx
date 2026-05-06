@@ -1,7 +1,7 @@
 import { flatMap, fx, runPromise } from "../../src"
 import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll, fail } from "../../src/Fail"
-import { forkEach, unbounded } from "../../src/Fork"
+import { forkEach, unbounded } from "../../src/Concurrent"
 import { wait } from "../../src/Task"
 
 const child1 = fx(function* () {

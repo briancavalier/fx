@@ -1,7 +1,6 @@
 import { fx, runPromise } from '../../src'
-import { all, bounded } from '../../src/Fork'
+import { all, bounded, defaultAll } from '../../src/Concurrent'
 import { sleep, defaultTime } from '../../src/Time'
-import { wait } from '../../src/Task'
 
 // Number of tasks to fork
 const tasks = 4
@@ -20,12 +19,11 @@ const delay = fx(function* () {
 const delays = Array.from({ length: tasks }, () => delay)
 
 const main = fx(function* () {
-  const t1 = yield* all(delays)
-  const r = yield* wait(t1)
-  return r
+  return yield* all(delays)
 })
 
 main.pipe(
+  defaultAll,
   bounded(concurrency),
   defaultTime,
   runPromise

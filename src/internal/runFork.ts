@@ -1,7 +1,7 @@
 import { Async } from '../Async.js'
 import { Breadcrumb, at } from '../Breadcrumb.js'
 import { Fail } from '../Fail.js'
-import { Fork, ForkContext } from '../Fork.js'
+import { Fork, ForkContext } from '../Concurrent.js'
 import { Fx } from '../Fx.js'
 import { HandlerContext, Scoped, withContext } from '../Scoped.js'
 import { Task } from '../Task.js'

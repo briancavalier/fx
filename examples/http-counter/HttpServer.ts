@@ -2,7 +2,7 @@ import { IncomingMessage, ServerResponse, createServer } from 'http'
 
 import { Fx, bracket, fx, ok } from '../../src'
 import { get } from '../../src/Env'
-import { fork } from '../../src/Fork'
+import { fork } from '../../src/Concurrent'
 import { info } from '../../src/Log'
 import { forEach, withEnqueue } from '../../src/Stream'
 //----------------------------------------------------------------------

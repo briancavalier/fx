@@ -1,5 +1,5 @@
 import { fx, runPromise } from "../src"
-import { all, unbounded } from "../src/Fork"
+import { all, defaultAll, unbounded } from "../src/Concurrent"
 import { child, console as logConsole, debug, error, info, warn } from "../src/Log"
 import { defaultTime } from "../src/Time"
 
@@ -14,7 +14,7 @@ const f = (index: number) => fx(function* () {
 
 const main = fx(function* () {
   let i = 0
-  while (i < 1000) {
+  while (i < 10) {
     yield* info('Running iteration', { iteration: i })
     yield* f(i).pipe(child(`iteration-${i}`, { iteration: i }))
 
@@ -29,6 +29,7 @@ await all([
 ]).pipe(
   logConsole,
   defaultTime,
+  defaultAll,
   unbounded,
   runPromise
 )

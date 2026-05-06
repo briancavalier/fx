@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { orReturn } from './Abort.js'
-import { unbounded } from './Fork.js'
+import { unbounded } from './Concurrent.js'
 import { fx, map as mapFx, ok, run, runPromise, unit, type Fx } from './Fx.js'
 import { next as nextSink } from './Sink.js'
 import {

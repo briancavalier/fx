@@ -1,8 +1,7 @@
-import { flatMap, fx, runPromise } from "../../src"
+import { fx, runPromise } from "../../src"
 import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll, fail } from "../../src/Fail"
-import { all, unbounded } from "../../src/Fork"
-import { wait } from "../../src/Task"
+import { all, defaultAll, unbounded } from "../../src/Concurrent"
 
 const child1 = fx(function* () {
   yield* log('child1 start')
@@ -21,7 +20,7 @@ const child3 = fx(function* () {
 })
 
 await all([child1, child2, child3]).pipe(
-  flatMap(wait),
+  defaultAll,
   catchAll(e => error('Error!', e)),
   unbounded,
   defaultConsole,

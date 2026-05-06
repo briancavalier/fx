@@ -1,7 +1,6 @@
 import { defaultRuntime, flatMap, fx, runPromise } from "../../src"
 import { log } from "../../src/Console"
-import { all, bounded } from "../../src/Fork"
-import { wait } from "../../src/Task"
+import { all, bounded, defaultAll } from "../../src/Concurrent"
 import { sleep } from "../../src/Time"
 
 const getUser = (id: number) => fx(function* () {
@@ -16,7 +15,7 @@ const ids = Array.from(
 
 const main2 = all(ids.map(getUser))
   .pipe(
-    flatMap(wait),
+    defaultAll,
     flatMap(users => log("Got users", users))
   )
 

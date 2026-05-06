@@ -2,7 +2,7 @@ import { Async } from './Async.js'
 import { Breadcrumb, at } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
 import { Fail, catchAll, fail } from './Fail.js'
-import { Fork, defaultRace, race } from './Concurrent.js'
+import { Fork, firstSettled, race } from './Concurrent.js'
 import { Fx, fx, map, ok } from './Fx.js'
 import { Handle } from './Handler.js'
 import { Scoped, handleScoped, scoped } from './Scoped.js'
@@ -87,7 +87,7 @@ const runTimeout = <const E, const A, const TE>(t: TimeoutContext<E, A, TE>): Fx
   const result = yield* race([
     attempt(t.fx as Fx<Fail<E>, A>),
     sleep(t.ms).pipe(map(() => ({ type: 'timeout', failure: t.onTimeout(t) } as const)))
-  ]).pipe(defaultRace)
+  ]).pipe(firstSettled)
 
   return result.type === 'success' ? ok(result.value) : fail(result.failure)
 })

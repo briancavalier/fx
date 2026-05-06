@@ -96,6 +96,8 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^25.6.0",
+    "oxfmt": "^0.48.0",
+    "oxlint": "^1.63.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

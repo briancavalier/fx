@@ -1,6 +1,6 @@
 import { setTimeout } from 'node:timers/promises'
 import { flatMap, fx, runPromise } from '../../src'
-import { defaultRace, race, unbounded } from '../../src/Concurrent'
+import { firstSettled, race, unbounded } from '../../src/Concurrent'
 import { int, defaultRandom } from '../../src/Random'
 import { sleep, defaultTime } from '../../src/Time'
 
@@ -30,7 +30,7 @@ race([
   delayFx('Fx A'),
   delayFx('Fx B'),
 ]).pipe(
-  defaultRace,
+  firstSettled,
   defaultTime,
   defaultRandom(),
   unbounded,

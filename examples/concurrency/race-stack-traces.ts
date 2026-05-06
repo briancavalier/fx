@@ -1,7 +1,7 @@
 import { fx, runPromise } from "../../src"
 import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll, fail } from "../../src/Fail"
-import { defaultRace, race, unbounded } from "../../src/Concurrent"
+import { firstSettled, race, unbounded } from "../../src/Concurrent"
 import { defaultTime, sleep } from "../../src/Time"
 
 const child1 = fx(function* () {
@@ -23,7 +23,7 @@ const child3 = fx(function* () {
 })
 
 await race([child1, child2, child3]).pipe(
-  defaultRace,
+  firstSettled,
   catchAll(e => error('Error!', e)),
   unbounded,
   defaultTime,

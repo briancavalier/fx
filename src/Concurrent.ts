@@ -143,18 +143,51 @@ export const defaultAll = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, A
  *
  * @example
  * await race([primary, fallback]).pipe(
- *   defaultRace,
+ *   firstSettled,
  *   unbounded,
  *   runPromise
  * )
  */
-export const defaultRace = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyRace, DefaultRaceEffects<E>>, Scoped<'fx/Concurrent/Race'>>, A> =>
+export const firstSettled = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyRace, DefaultRaceEffects<E>>, Scoped<'fx/Concurrent/Race'>>, A> =>
   f.pipe(handleScoped('fx/Concurrent/Race', Race, runRace)) as Fx<Handle<Handle<E, AnyRace, DefaultRaceEffects<E>>, Scoped<'fx/Concurrent/Race'>>, A>
+
+/**
+ * Handle Race by running child computations concurrently and returning the
+ * first successful result. Child failures are ignored until every child has
+ * failed, at which point the parent fails with {@link RaceAllFailed}.
+ *
+ * @example
+ * await race([primary, replica, cache]).pipe(
+ *   firstSuccess,
+ *   unbounded,
+ *   runPromise
+ * )
+ */
+export const firstSuccess = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyRace, FirstSuccessRaceEffects<E>>, Scoped<'fx/Concurrent/Race'>>, A> =>
+  f.pipe(handleScoped('fx/Concurrent/Race', Race, runFirstSuccessRace)) as Fx<Handle<Handle<E, AnyRace, FirstSuccessRaceEffects<E>>, Scoped<'fx/Concurrent/Race'>>, A>
+
+/**
+ * Failure returned by {@link firstSuccess} when every raced child fails.
+ */
+export class RaceAllFailed<Errors extends readonly unknown[]> extends Error {
+  readonly name = 'RaceAllFailed'
+  readonly errors!: Errors
+
+  constructor(errors: Errors) {
+    super('All raced computations failed')
+    Object.defineProperty(this, 'errors', {
+      value: errors,
+      enumerable: false,
+      writable: false,
+      configurable: true
+    })
+  }
+}
 
 /**
  * Handle Fork by running at most `maxConcurrency` forked computations at once.
  *
- * Structured handlers such as {@link defaultAll} and {@link defaultRace}
+ * Structured handlers such as {@link defaultAll} and {@link firstSettled}
  * elaborate into Fork requests, so `bounded` also limits their child
  * concurrency.
  */
@@ -190,6 +223,13 @@ const runRace = <const Fxs extends readonly Fx<unknown, unknown>[]>(
     flatMap(tasks => waitTask(taskRace(tasks)))
   ) as Fx<Fork | Async | ErrorsOf<EffectsOf<Fxs[number]>>, ResultOf<Fxs[number]>>
 
+const runFirstSuccessRace = <const Fxs extends readonly Fx<unknown, unknown>[]>(
+  r: ConcurrentContext<Fxs>
+): Fx<Fork | Async | FirstSuccessRaceFailure<Race<Fxs>>, ResultOf<Fxs[number]>> =>
+  forkEach(r.fxs, r.origin).pipe(
+    flatMap(tasks => waitTask(taskFirstSuccess(tasks)))
+  ) as Fx<Fork | Async | FirstSuccessRaceFailure<Race<Fxs>>, ResultOf<Fxs[number]>>
+
 export type EffectsOf<F> = F extends Fx<infer E, unknown> ? E : never
 export type ResultOf<F> = F extends Fx<unknown, infer A> ? A : never
 export type ErrorsOf<E> = Extract<E, Fail<any>>
@@ -200,8 +240,31 @@ type EffectsOfAll<E> = E extends All<infer Fxs> ? EffectsOf<Fxs[number]> : never
 type EffectsOfRace<E> = E extends Race<infer Fxs> ? EffectsOf<Fxs[number]> : never
 type DefaultAllEffects<E> = Fork | Async | ErrorsOf<EffectsOfAll<E>>
 type DefaultRaceEffects<E> = Fork | Async | ErrorsOf<EffectsOfRace<E>>
+type FirstSuccessRaceEffects<E> = Fork | Async | FirstSuccessRaceFailure<E>
+type FirstSuccessRaceFailure<E> = E extends Race<infer Fxs>
+  ? EveryFxCanFail<Fxs> extends true ? Fail<RaceAllFailed<FailuresOfFxs<Fxs>>> : never
+  : never
+type EveryFxCanFail<Fxs extends readonly Fx<unknown, unknown>[]> = Fxs extends readonly []
+  ? true
+  : number extends Fxs['length']
+    ? true
+    : Fxs extends readonly [infer F, ...infer Rest]
+      ? F extends Fx<unknown, unknown>
+        ? [FailuresOfFx<F>] extends [never]
+          ? false
+          : Rest extends readonly Fx<unknown, unknown>[] ? EveryFxCanFail<Rest> : true
+        : false
+      : true
+type FailuresOfFxs<Fxs extends readonly Fx<unknown, unknown>[]> = {
+  readonly [K in keyof Fxs]: FailuresOfFx<Fxs[K]>
+}
+type FailuresOfFx<F> = FailureOf<ErrorsOf<EffectsOf<F>>>
+type FailureOf<E> = E extends Fail<infer F> ? F : never
 type TaskResult<P> = P extends Task<infer A, unknown> ? A : never
 type TaskErrors<P> = P extends Task<unknown, infer E> ? E : never
+type TaskErrorsOf<Tasks extends readonly Task<unknown, unknown>[]> = {
+  readonly [K in keyof Tasks]: TaskErrors<Tasks[K]>
+}
 
 const taskAll = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) => {
   const d = new DisposeAll(tasks)
@@ -213,6 +276,37 @@ const taskRace = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks)
   const d = new DisposeAll(tasks)
   const p = Promise.race(tasks.map(t => t.promise)).finally(() => { d[Symbol.dispose]() })
   return new Task(p, d) as Task<TaskResult<Tasks[number]>, TaskErrors<Tasks[number]>>
+}
+
+const taskFirstSuccess = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) => {
+  const d = new DisposeAll(tasks)
+  const p = firstSuccessfulPromise(tasks).finally(() => { d[Symbol.dispose]() })
+  return new Task(p, d) as Task<TaskResult<Tasks[number]>, RaceAllFailed<TaskErrorsOf<Tasks>>>
+}
+
+const firstSuccessfulPromise = async <Tasks extends readonly Task<unknown, unknown>[]>(
+  tasks: Tasks
+): Promise<TaskResult<Tasks[number]>> => {
+  const pending = tasks.map((task, index) =>
+    task.promise.then(
+      value => ({ type: 'success' as const, index, value }),
+      failure => ({ type: 'failure' as const, index, failure })
+    )
+  )
+
+  const failures = [] as unknown[]
+  while (pending.length > 0) {
+    const { position, result } = await Promise.race(pending.map((p, position) =>
+      p.then(result => ({ position, result }))
+    ))
+
+    void pending.splice(position, 1)
+    if (result.type === 'success') return result.value as TaskResult<Tasks[number]>
+
+    failures[result.index] = result.failure
+  }
+
+  throw new RaceAllFailed(failures as TaskErrorsOf<Tasks>)
 }
 
 class DisposeAll {

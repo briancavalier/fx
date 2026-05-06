@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
-import { all, defaultAll, defaultRace, fork, forkEach, race, unbounded } from './Concurrent.js'
+import { RaceAllFailed, all, defaultAll, firstSettled, firstSuccess, fork, forkEach, race, unbounded } from './Concurrent.js'
 import { flatMap, fx, ok, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
 import { Task, wait } from './Task.js'
@@ -134,7 +134,7 @@ describe('Fork', () => {
       })
 
       const result = await race([bad]).pipe(
-        defaultRace,
+        firstSettled,
         returnFail,
         unbounded,
         runPromise
@@ -234,10 +234,10 @@ describe('Fork', () => {
     })
   })
 
-  describe('defaultRace', () => {
+  describe('firstSettled', () => {
     it('returns the first settled child value directly without wait', async () => {
       const result = await race([asyncValue('winner'), ok('loser')]).pipe(
-        defaultRace,
+        firstSettled,
         unbounded,
         runPromise
       )
@@ -255,7 +255,7 @@ describe('Fork', () => {
       }))
 
       const result = await race([ok('winner'), slow]).pipe(
-        defaultRace,
+        firstSettled,
         unbounded,
         runPromise
       )
@@ -264,12 +264,12 @@ describe('Fork', () => {
       assert.equal(cancelled, true)
     })
 
-    it('runs children with handlers between race and defaultRace', async () => {
+    it('runs children with handlers between race and firstSettled', async () => {
       class CurrentValue extends Effect('test/Fork/RaceCurrentValue')<void, string> { }
 
       const result = await race([new CurrentValue()]).pipe(
         handle(CurrentValue, () => ok('handled')),
-        defaultRace,
+        firstSettled,
         unbounded,
         runPromise
       )
@@ -286,12 +286,109 @@ describe('Fork', () => {
         void task
         return n
       }).pipe(
-        defaultRace,
+        firstSettled,
         unbounded,
         runPromise
       )
 
       assert.equal(result, 1)
+    })
+  })
+
+  describe('firstSuccess', () => {
+    it('ignores an early failure and returns the first successful child', async () => {
+      const failed = new Error('fast failure')
+      const bad = fx(function* () {
+        yield* fail(failed)
+      })
+
+      const result = await race([bad, asyncValue('winner')]).pipe(
+        firstSuccess,
+        unbounded,
+        runPromise
+      )
+
+      assert.equal(result, 'winner')
+    })
+
+    it('cancels losers after the first success', async () => {
+      let cancelled = false
+      const slow = assertPromise<string>(signal => new Promise(resolve => {
+        signal.addEventListener('abort', () => {
+          cancelled = true
+          resolve('cancelled')
+        }, { once: true })
+      }))
+
+      const result = await race([ok('winner'), slow]).pipe(
+        firstSuccess,
+        unbounded,
+        runPromise
+      )
+
+      assert.equal(result, 'winner')
+      assert.equal(cancelled, true)
+    })
+
+    it('fails with input-ordered errors when every child fails', async () => {
+      const first = new Error('first failed')
+      const second = new Error('second failed')
+      const bad = (cause: Error) => fx(function* () {
+        yield* fail(cause)
+      })
+
+      const result = await race([bad(first), bad(second)]).pipe(
+        firstSuccess,
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.ok(result.arg instanceof RaceAllFailed)
+      assert.equal(result.arg.errors.length, 2)
+      const causes = result.arg.errors.map(e => (e as Error).cause)
+      assert.deepEqual(causes, [first, second])
+      assert.deepEqual(Object.keys(result.arg), ['name'])
+    })
+
+    it('types all-failed errors by input index', async () => {
+      class FirstError extends Error { readonly first = true }
+      class SecondError extends Error { readonly second = true }
+
+      const result = await race([
+        fail(new FirstError()),
+        fail(new SecondError())
+      ]).pipe(
+        firstSuccess,
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.ok(result.arg instanceof RaceAllFailed)
+
+      const first: FirstError = result.arg.errors[0]
+      const second: SecondError = result.arg.errors[1]
+      // @ts-expect-error errors preserve input indexes.
+      const wrong: FirstError = result.arg.errors[1]
+      void first
+      void second
+      void wrong
+    })
+
+    it('runs children with handlers between race and firstSuccess', async () => {
+      class CurrentValue extends Effect('test/Fork/FirstSuccessCurrentValue')<void, string> { }
+
+      const result = await race([new CurrentValue()]).pipe(
+        handle(CurrentValue, () => ok('handled')),
+        firstSuccess,
+        unbounded,
+        runPromise
+      )
+
+      assert.equal(result, 'handled')
     })
   })
 })

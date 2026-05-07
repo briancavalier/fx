@@ -1,9 +1,9 @@
 import { fx, runPromise } from "../../src"
+import { firstSettled, race, unbounded } from "../../src/Concurrent"
 import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll, fail } from "../../src/Fail"
-import { firstSettled, race, unbounded } from "../../src/Concurrent"
 import { defaultTime, sleep } from "../../src/Time"
-import { formatError, snapshotError } from "../../src/Trace"
+import { formatDiagnostic, snapshotError } from "../../src/Trace"
 
 const child1 = fx(function* () {
   yield* log('child1 start')
@@ -35,7 +35,7 @@ await race([child1, child2, child3]).pipe(
 function errorWithTrace(e: unknown) {
   return error([
     'Human-readable error:',
-    formatError(e),
+    formatDiagnostic(e),
     '',
     'Structured diagnostic snapshot:',
     JSON.stringify(snapshotError(e), null, 2)

@@ -2,7 +2,7 @@ import { fx, runPromise } from '../../src'
 import { RaceAllFailed, firstSettled, firstSuccess, race, unbounded } from '../../src/Concurrent'
 import { Fail, fail, returnFail } from '../../src/Fail'
 import { defaultTime, sleep } from '../../src/Time'
-import { formatDiagnostic, snapshotError } from '../../src/Trace'
+import { formatDiagnostic, formatError, snapshotError } from '../../src/Trace'
  
 // This example builds one Race request and interprets it with two different
 // handlers. `firstSettled` is first-settled, like Promise.race: the fast failure
@@ -76,6 +76,9 @@ function printFailure(failure: unknown): void {
   console.log([
     'Human-readable diagnostic:',
     formatDiagnostic(failure),
+    '',
+    'Short human-readable error:',
+    formatError(failure),
     '',
     'Structured diagnostic snapshot:',
     JSON.stringify(snapshotError(failure), null, 2)

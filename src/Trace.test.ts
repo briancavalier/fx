@@ -184,6 +184,29 @@ describe('Trace', () => {
     ].join('\n'))
   })
 
+  it('formats aggregate errors with compact indexed child summaries', () => {
+    const child = new Error('wrapped child', { cause: new TypeError('root child') })
+    const aggregate = new AggregateError([child, 'plain failure'], 'aggregate failed')
+
+    assert.equal(formatError(aggregate), [
+      'AggregateError: aggregate failed',
+      '  [0] TypeError: root child',
+      '  [1] plain failure'
+    ].join('\n'))
+  })
+
+  it('formats RaceAllFailed with compact child failure summaries', () => {
+    const first = new Error('Unhandled failure in forked task', { cause: new Error('primary failed') })
+    const second = new Error('Unhandled failure in forked task', { cause: new Error('replica failed') })
+    const aggregate = raceAllFailed([first, second])
+
+    assert.equal(formatError(aggregate), [
+      'RaceAllFailed: All raced computations failed',
+      '  [0] Error: primary failed',
+      '  [1] Error: replica failed'
+    ].join('\n'))
+  })
+
   it('snapshots errors with trace, cause, code, and aggregates', () => {
     const child = new TypeError('child failed')
     attachTrace(child, prependTrace(breadcrumb('child trace'), undefined, { kind: 'fail' }))
@@ -211,9 +234,104 @@ describe('Trace', () => {
 
     assert.equal(formatError(error), 'Error: wrapper failed')
     assert.match(formatDiagnostic(error), /Error \[TEST_WRAPPER\]: wrapper failed/)
+    assert.match(formatDiagnostic(error), /Fx trace:/)
     assert.match(formatDiagnostic(error), /Caused by:/)
-    assert.match(formatDiagnostic(error), /at cause trace \(kind=async\)/)
+    assert.match(formatDiagnostic(error), /at cause trace \[async\]/)
     assert.match(formatDiagnostic(error), new RegExp(`${escapeRegExp(import.meta.filename)}:4:5`))
+  })
+
+  it('formats diagnostics without ansi escapes when colors are disabled', () => {
+    const error = tracedError('plain', 'plain trace', { kind: 'fail' })
+    Object.defineProperty(error, 'code', { value: 'TEST_PLAIN' })
+
+    const formatted = formatDiagnostic(error, { colors: 'never' })
+
+    assert.doesNotMatch(formatted, ansiPattern)
+    assert.match(formatted, /Error \[TEST_PLAIN\]: plain/)
+  })
+
+  it('formats diagnostics with ansi escapes when colors are forced', () => {
+    const error = tracedError('colored', 'colored trace', { kind: 'timeout' })
+    Object.defineProperty(error, 'code', { value: 'TEST_COLOR' })
+
+    const formatted = formatDiagnostic(error, { colors: 'always' })
+
+    assert.match(formatted, ansiPattern)
+    assert.match(stripAnsi(formatted), /Error \[TEST_COLOR\]: colored/)
+    assert.match(stripAnsi(formatted), /at colored trace \[timeout\]/)
+    assert.match(stripAnsi(formatted), new RegExp(`${escapeRegExp(import.meta.filename)}:10:11`))
+  })
+
+  it('formats diagnostics without ansi escapes by default in non-tty test runs', () => {
+    const previousNoColor = process.env.NO_COLOR
+    process.env.NO_COLOR = '1'
+    try {
+      const formatted = formatDiagnostic(tracedError('default plain', 'default trace'))
+
+      assert.doesNotMatch(formatted, ansiPattern)
+    } finally {
+      restoreEnv('NO_COLOR', previousNoColor)
+    }
+  })
+
+  it('formats indexed race metadata as a child label', () => {
+    const error = tracedError('race failed', 'race trace', { kind: 'race', index: 1 })
+
+    assert.match(formatDiagnostic(error, { colors: 'never' }), /at race trace \[race child #1\]/)
+  })
+
+  it('formats RaceAllFailed aggregates as failed race children with shared parent trace', () => {
+    const first = tracedError('primary failed', 'fx/Fail/fail', { kind: 'fail' }, sharedRaceTrace(0))
+    const second = tracedError('replica failed', 'fx/Fail/fail', { kind: 'fail' }, sharedRaceTrace(1))
+    const aggregate = raceAllFailed([first, second])
+
+    const formatted = formatDiagnostic(aggregate, { colors: 'never' })
+
+    assert.match(formatted, /RaceAllFailed \[FX_RACE_ALL_FAILED\]: All raced computations failed/)
+    assert.match(formatted, /Failed race children:/)
+    assert.match(formatted, /\n  \[0\]\n/)
+    assert.match(formatted, /\n  \[1\]\n/)
+    assert.match(formatted, /at fx\/Concurrent\/race\[1\] \[race child #1\]/)
+    assert.match(formatted, /Shared parent trace:/)
+    assert.equal(countOccurrences(formatted, 'at fx/Concurrent/race [race]'), 1)
+  })
+
+  it('formats generic aggregates as aggregate errors', () => {
+    const first = tracedError('child failed', 'child trace', { kind: 'fail' })
+    const aggregate = new AggregateError([first, 'plain failure'], 'aggregate failed')
+
+    const formatted = formatDiagnostic(aggregate, { colors: 'never' })
+
+    assert.match(formatted, /AggregateError: aggregate failed/)
+    assert.match(formatted, /Aggregate errors:/)
+    assert.match(formatted, /\n  \[0\]\n/)
+    assert.match(formatted, /\n  \[1\]\n/)
+    assert.match(formatted, /string: plain failure/)
+  })
+
+  it('does not deduplicate aggregate traces without a common trailing parent frame', () => {
+    const first = tracedError('first failed', 'first child', { kind: 'fail' }, prependTrace(breadcrumb('first parent'), undefined, { kind: 'fork' }))
+    const second = tracedError('second failed', 'second child', { kind: 'fail' }, prependTrace(breadcrumb('second parent'), undefined, { kind: 'fork' }))
+    const aggregate = new AggregateError([first, second], 'aggregate failed')
+
+    const formatted = formatDiagnostic(aggregate, { colors: 'never' })
+
+    assert.doesNotMatch(formatted, /Shared parent trace:/)
+    assert.match(formatted, /at first parent \[fork\]/)
+    assert.match(formatted, /at second parent \[fork\]/)
+  })
+
+  it('keeps compact error and trace formatting unchanged', () => {
+    const trace = prependTrace(breadcrumb('frame'))
+    const cause = new Error('root failed')
+    const error = new Error('wrapper failed', { cause })
+    attachTrace(error, trace)
+
+    assert.equal(formatError(error), [
+      'Error: root failed',
+      '  at frame'
+    ].join('\n'))
+    assert.equal(formatTrace(trace), '  at frame')
   })
 })
 
@@ -232,6 +350,40 @@ const stackBreadcrumb = (message: string, stack: string): Breadcrumb => ({
   stack
 })
 
+const tracedError = (
+  message: string,
+  traceMessage: string,
+  metadata = {},
+  parent?: ReturnType<typeof prependTrace>
+) => {
+  const error = new Error(message)
+  attachTrace(error, prependTrace(
+    stackBreadcrumb(traceMessage, `Error: ${traceMessage}\n    at fn (${import.meta.filename}:10:11)`),
+    parent,
+    metadata
+  ))
+  return error
+}
+
+const sharedRaceTrace = (index: number) =>
+  prependTrace(
+    stackBreadcrumb(`fx/Concurrent/race[${index}]`, `Error: race child\n    at child (${import.meta.filename}:20:21)`),
+    prependTrace(
+      stackBreadcrumb('fx/Concurrent/race', `Error: race\n    at race (${import.meta.filename}:19:20)`),
+      undefined,
+      { kind: 'race' }
+    ),
+    { kind: 'race', index }
+  )
+
+const raceAllFailed = (errors: readonly unknown[]) => {
+  const error = new Error('All raced computations failed')
+  Object.defineProperty(error, 'name', { value: 'RaceAllFailed' })
+  Object.defineProperty(error, 'code', { value: 'FX_RACE_ALL_FAILED' })
+  Object.defineProperty(error, 'errors', { value: errors })
+  return error
+}
+
 const messagesOf = (trace: ReturnType<typeof prependTrace>) => {
   const messages: string[] = []
   let current: typeof trace | undefined = trace
@@ -244,3 +396,20 @@ const messagesOf = (trace: ReturnType<typeof prependTrace>) => {
 
 const escapeRegExp = (s: string) =>
   s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const ansiPattern = ansiRegex()
+
+const stripAnsi = (s: string) =>
+  s.replaceAll(ansiRegex('g'), '')
+
+const countOccurrences = (s: string, pattern: string) =>
+  s.split(pattern).length - 1
+
+const restoreEnv = (name: string, value: string | undefined): void => {
+  if (value === undefined) delete process.env[name]
+  else process.env[name] = value
+}
+
+function ansiRegex(flags?: string): RegExp {
+  return new RegExp(`${escapeRegExp(String.fromCharCode(27))}\\[[0-9;]+m`, flags)
+}

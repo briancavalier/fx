@@ -1,8 +1,8 @@
 import { fx, runPromise } from "../../src"
+import { all, defaultAll, unbounded } from "../../src/Concurrent"
 import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll, fail } from "../../src/Fail"
-import { all, defaultAll, unbounded } from "../../src/Concurrent"
-import { formatError, snapshotError } from "../../src/Trace"
+import { formatDiagnostic, formatError, snapshotError } from "../../src/Trace"
 
 const child1 = fx(function* () {
   yield* log('child1 start')
@@ -31,6 +31,9 @@ await all([child1, child2, child3]).pipe(
 function errorWithTrace(e: unknown) {
   return error([
     'Human-readable error:',
+    formatDiagnostic(e),
+    '',
+    'Short human-readable error:',
     formatError(e),
     '',
     'Structured diagnostic snapshot:',

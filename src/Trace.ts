@@ -77,6 +77,12 @@ export interface DiagnosticAggregateSnapshot {
 
 export interface DiagnosticSnapshot extends DiagnosticErrorSnapshot { }
 
+export type DiagnosticColorMode = 'auto' | 'always' | 'never'
+
+export interface DiagnosticFormatOptions {
+  readonly colors?: DiagnosticColorMode
+}
+
 export const traceFrom = (origin: Breadcrumb, parent?: Trace, metadata?: TraceFrameMetadata): Trace =>
   prependTrace(origin, parent, metadata)
 
@@ -184,15 +190,18 @@ export const formatTrace = (trace: Trace): string => {
 }
 
 export const formatError = (error: unknown): string => {
+  const aggregate = aggregateErrors(error)
+  if (aggregate !== undefined) return formatAggregateErrorValue(error, aggregate)
+
   const trace = getTrace(error)
   if (trace === undefined) return formatErrorValue(error)
 
   return `${formatErrorValue(rootCause(error))}\n${formatTrace(trace)}`
 }
 
-export const formatDiagnostic = (error: unknown): string => {
+export const formatDiagnostic = (error: unknown, options?: DiagnosticFormatOptions): string => {
   const lines: string[] = []
-  formatDiagnosticError(snapshotError(error), lines, 0)
+  formatDiagnosticError(snapshotError(error), lines, 0, formatContext(options))
   return lines.join('\n')
 }
 
@@ -344,53 +353,212 @@ const aggregateErrors = (error: unknown): readonly unknown[] | undefined => {
   return undefined
 }
 
-const formatDiagnosticError = (error: DiagnosticErrorSnapshot, lines: string[], indent: number): void => {
+interface FormatContext {
+  readonly style: DiagnosticStyle
+}
+
+interface DiagnosticStyle {
+  readonly header: (s: string) => string
+  readonly code: (s: string) => string
+  readonly location: (s: string) => string
+  readonly section: (s: string) => string
+  readonly frameMetadata: (s: string) => string
+}
+
+interface FormatDiagnosticErrorOptions {
+  readonly omitTraceSuffix?: number
+}
+
+const formatContext = (options: DiagnosticFormatOptions | undefined): FormatContext => ({
+  style: colorEnabled(options?.colors ?? 'auto') ? ansiStyle : plainStyle
+})
+
+const formatDiagnosticError = (
+  error: DiagnosticErrorSnapshot,
+  lines: string[],
+  indent: number,
+  context: FormatContext,
+  options: FormatDiagnosticErrorOptions = {}
+): void => {
   const prefix = ' '.repeat(indent)
-  lines.push(`${prefix}${formatDiagnosticHeader(error)}`)
+  lines.push(`${prefix}${formatDiagnosticHeader(error, context)}`)
 
   if (error.trace !== undefined) {
-    for (const frame of error.trace.frames) {
-      lines.push(`${prefix}  at ${formatSnapshotFrame(frame)}`)
-      if (frame.location !== undefined) lines.push(`${prefix}     ${formatTraceLocation(frame.location)}`)
-    }
-
-    if (error.trace.cycleDetected) lines.push(`${prefix}  <trace cycle detected>`)
-    else if (error.trace.truncated) lines.push(`${prefix}  <trace truncated; older frames omitted>`)
+    const omitTraceSuffix = options.omitTraceSuffix ?? 0
+    const frames = omitTraceSuffix === 0 ? error.trace.frames : error.trace.frames.slice(0, -omitTraceSuffix)
+    formatDiagnosticTrace(frames, error.trace, lines, indent, context, omitTraceSuffix === 0)
   }
 
   if (error.cause !== undefined) {
-    lines.push(`${prefix}Caused by:`)
-    formatDiagnosticError(error.cause, lines, indent + 2)
+    lines.push(`${prefix}${context.style.section('Caused by:')}`)
+    formatDiagnosticError(error.cause, lines, indent + 2, context)
   }
 
   if (error.aggregate !== undefined) {
-    for (let i = 0; i < error.aggregate.errors.length; i++) {
-      lines.push(`${prefix}Aggregate[${i}]:`)
-      formatDiagnosticError(error.aggregate.errors[i], lines, indent + 2)
+    formatDiagnosticAggregate(error, lines, indent, context)
+  }
+}
+
+const formatDiagnosticHeader = (error: DiagnosticErrorSnapshot, context: FormatContext): string => {
+  const code = error.code === undefined ? '' : ` ${context.style.code(`[${error.code}]`)}`
+  const name = error.name ?? error.type
+  const message = error.message === '' ? '' : `: ${error.message}`
+  return context.style.header(`${name}${code}${message}`)
+}
+
+const formatDiagnosticAggregate = (
+  error: DiagnosticErrorSnapshot,
+  lines: string[],
+  indent: number,
+  context: FormatContext
+): void => {
+  const prefix = ' '.repeat(indent)
+  const errors = error.aggregate?.errors ?? []
+  const sharedSuffixLength = sharedTraceSuffixLength(errors)
+  const label = error.name === 'RaceAllFailed'
+    ? 'Failed race children:'
+    : 'Aggregate errors:'
+
+  lines.push(`${prefix}${context.style.section(label)}`)
+
+  for (let i = 0; i < errors.length; i++) {
+    lines.push(`${prefix}  ${context.style.section(`[${i}]`)}`)
+    formatDiagnosticError(errors[i], lines, indent + 4, context, { omitTraceSuffix: sharedSuffixLength })
+  }
+
+  if (sharedSuffixLength > 0) {
+    const trace = firstTrace(errors)
+    if (trace !== undefined) {
+      lines.push(`${prefix}${context.style.section('Shared parent trace:')}`)
+      formatDiagnosticTrace(trace.frames.slice(-sharedSuffixLength), trace, lines, indent + 2, context, true)
     }
   }
 }
 
-const formatDiagnosticHeader = (error: DiagnosticErrorSnapshot): string => {
-  const code = error.code === undefined ? '' : ` [${error.code}]`
-  const name = error.name ?? error.type
-  return `${name}${code}${error.message === '' ? '' : `: ${error.message}`}`
+const formatDiagnosticTrace = (
+  frames: readonly TraceSnapshotFrame[],
+  trace: TraceSnapshot,
+  lines: string[],
+  indent: number,
+  context: FormatContext,
+  includeStatus: boolean
+): void => {
+  const prefix = ' '.repeat(indent)
+
+  if (frames.length > 0) {
+    lines.push(`${prefix}${context.style.section('Fx trace:')}`)
+    for (const frame of frames) {
+      lines.push(`${prefix}  at ${formatSnapshotFrame(frame, context)}`)
+      if (frame.location !== undefined) lines.push(`${prefix}     ${formatTraceLocation(frame.location, context)}`)
+    }
+  }
+
+  if (includeStatus) {
+    if (trace.cycleDetected) lines.push(`${prefix}  ${context.style.section('<trace cycle detected>')}`)
+    else if (trace.truncated) lines.push(`${prefix}  ${context.style.section('<trace truncated; older frames omitted>')}`)
+  }
 }
 
-const formatSnapshotFrame = (frame: TraceSnapshotFrame): string => {
-  const metadata = [
-    frame.kind === undefined ? undefined : `kind=${frame.kind}`,
-    frame.index === undefined ? undefined : `index=${frame.index}`
-  ].filter((s): s is string => s !== undefined)
-
-  const suffix = metadata.length === 0 ? '' : ` (${metadata.join(', ')})`
+const formatSnapshotFrame = (frame: TraceSnapshotFrame, context: FormatContext): string => {
+  const metadata = formatFrameMetadata(frame)
+  const suffix = metadata === undefined ? '' : ` ${context.style.frameMetadata(`[${metadata}]`)}`
   return `${frame.message}${suffix}`
 }
 
-const formatTraceLocation = (location: TraceLocation): string =>
-  location.file === undefined
+const formatFrameMetadata = (frame: TraceSnapshotFrame): string | undefined => {
+  if (frame.kind === undefined) return undefined
+  if ((frame.kind === 'all' || frame.kind === 'race') && frame.index !== undefined) {
+    return `${frame.kind} child #${frame.index}`
+  }
+
+  return frame.kind
+}
+
+const formatTraceLocation = (location: TraceLocation, context: FormatContext): string => {
+  const formatted = location.file === undefined
     ? location.raw
     : `${location.file}${location.line === undefined ? '' : `:${location.line}${location.column === undefined ? '' : `:${location.column}`}`}`
+
+  return context.style.location(formatted)
+}
+
+const sharedTraceSuffixLength = (errors: readonly DiagnosticErrorSnapshot[]): number => {
+  if (errors.length < 2) return 0
+
+  const traces = errors.map(e => e.trace).filter((trace): trace is TraceSnapshot => trace !== undefined && trace.frames.length > 0)
+  if (traces.length !== errors.length) return 0
+
+  const minLength = Math.min(...traces.map(trace => trace.frames.length))
+  let shared = 0
+
+  while (shared < minLength) {
+    const key = traceFrameKey(traces[0].frames[traces[0].frames.length - 1 - shared])
+    if (!traces.every(trace => traceFrameKey(trace.frames[trace.frames.length - 1 - shared]) === key)) break
+    shared += 1
+  }
+
+  return shared
+}
+
+const firstTrace = (errors: readonly DiagnosticErrorSnapshot[]): TraceSnapshot | undefined =>
+  errors.find(error => error.trace !== undefined)?.trace
+
+const traceFrameKey = (frame: TraceSnapshotFrame): string =>
+  JSON.stringify([
+    frame.message,
+    frame.kind,
+    frame.index,
+    frame.location?.file,
+    frame.location?.line,
+    frame.location?.column,
+    frame.location?.raw
+  ])
+
+const plainStyle: DiagnosticStyle = {
+  header: identity,
+  code: identity,
+  location: identity,
+  section: identity,
+  frameMetadata: identity
+}
+
+const ansiStyle: DiagnosticStyle = {
+  header: ansi(1, 31),
+  code: ansi(33),
+  location: ansi(4, 36),
+  section: ansi(2),
+  frameMetadata: ansi(35)
+}
+
+const colorEnabled = (mode: DiagnosticColorMode): boolean => {
+  if (mode === 'always') return true
+  if (mode === 'never') return false
+
+  const env = processEnv()
+  if (env?.FORCE_COLOR === '0') return false
+  if (env?.FORCE_COLOR !== undefined) return true
+  if (env?.NO_COLOR !== undefined) return false
+  if (env?.TERM === 'dumb') return false
+
+  return processStdoutIsTty()
+}
+
+type ProcessEnvironment = Readonly<Record<string, string | undefined>>
+
+const processEnv = (): ProcessEnvironment | undefined =>
+  typeof process === 'object' && process !== null ? process.env : undefined
+
+const processStdoutIsTty = (): boolean =>
+  typeof process === 'object' && process !== null && process.stdout?.isTTY === true
+
+function ansi(...codes: readonly number[]): (s: string) => string {
+  return (s: string): string =>
+    `\u001b[${codes.join(';')}m${s}\u001b[0m`
+}
+
+function identity(s: string): string {
+  return s
+}
 
 const rootCause = (error: unknown): unknown => {
   const seen = new Set<unknown>()
@@ -414,6 +582,12 @@ const formatErrorValue = (error: unknown): string => {
 
   return String(error)
 }
+
+const formatAggregateErrorValue = (error: unknown, aggregate: readonly unknown[]): string =>
+  [
+    formatErrorValue(error),
+    ...aggregate.map((error, i) => `  [${i}] ${formatErrorValue(rootCause(error))}`)
+  ].join('\n')
 
 const typeOf = (value: unknown): string =>
   value === null ? 'null' : typeof value

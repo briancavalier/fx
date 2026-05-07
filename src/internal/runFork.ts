@@ -15,7 +15,7 @@ export type RunForkOptions = {
   readonly maxConcurrency?: number
 }
 
-export const runFork = <const E extends Async | Fork | Fail<unknown> | Scoped<string>, const A>(f: Fx<E, A>, { origin = at('fx/runFork', runFork), trace = captureTrace(origin), maxConcurrency = Infinity }: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
+export const runFork = <const E extends Async | Fork | Fail<unknown> | Scoped<string>, const A>(f: Fx<E, A>, { origin = at('fx/runFork', runFork), trace = captureTrace(origin, undefined, { kind: 'run' }), maxConcurrency = Infinity }: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new DisposableSet()
 
   const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, origin, trace)
@@ -77,21 +77,24 @@ const runForkLoop = async <const E, const A>(
           a = await Promise.race([promise, unhandled])
         } catch (e) {
           if (e instanceof UnhandledForkError) throw e.error
-          const asyncTrace = capturePrependTrace(origin, trace)
-          throw new ForkError(`Awaited Async task failed`, origin, traceWithCause(asyncTrace, e), { cause: e })
+          const asyncTrace = capturePrependTrace(origin, trace, { kind: 'async' })
+          throw new ForkError('FX_AWAITED_ASYNC_FAILED', `Awaited Async task failed`, origin, traceWithCause(asyncTrace, e), { cause: e })
         }
         // stop if the scope was disposed while we were waiting
         if (disposables.disposed) return await never()
         ir = i.next(a)
       } else if (Fork.is(ir.value)) {
         const forkOrigin = ir.value.arg.origin
-        const forkTrace = capturePrependTrace(forkOrigin, trace)
+        const forkTrace = capturePrependTrace(forkOrigin, trace, {
+          kind: ir.value.arg.trace?.frame.kind ?? 'fork',
+          index: ir.value.arg.trace?.frame.index
+        })
         const t = acquireAndRunFork({ ...ir.value.arg, trace: forkTrace }, semaphore, context)
         disposables.add(t)
         t.promise
           .finally(() => disposables.remove(t))
           .catch(e => rejectUnhandled(
-            new ForkError(`Unhandled failure in forked task`, forkOrigin, traceWithCause(forkTrace, e), { cause: e })
+            new ForkError('FX_UNHANDLED_FORK_FAILURE', `Unhandled failure in forked task`, forkOrigin, traceWithCause(forkTrace, e), { cause: e })
           ))
         ir = i.next(t)
       } else if (Scoped.is(ir.value)) {
@@ -100,25 +103,33 @@ const runForkLoop = async <const E, const A>(
         const causeTrace = getTrace(ir.value.arg)
         const failTrace = captureAppendTrace(causeTrace ?? ir.value.trace, trace)
         const failOrigin = causeTrace === undefined ? ir.value.origin : originFromTrace(causeTrace)
-        throw new ForkError(`Unhandled failure in forked task`, failOrigin, failTrace, { cause: ir.value.arg })
+        throw new ForkError('FX_UNHANDLED_FAILURE', `Unhandled failure in forked task`, failOrigin, failTrace, { cause: ir.value.arg })
       }
       else
-        throw new ForkError(`Unhandled failure in forked task`, origin, traceWithCause(trace, ir.value), { cause: ir.value })
+        throw new ForkError('FX_UNHANDLED_FAILURE', `Unhandled failure in forked task`, origin, traceWithCause(trace, ir.value), { cause: ir.value })
     }
     return ir.value as A
   } catch (e) {
     if (e instanceof ForkError) throw e
-    throw new ForkError(`Unhandled exception in forked task`, origin, traceWithCause(trace, e), { cause: e })
+    throw new ForkError('FX_UNHANDLED_EXCEPTION', `Unhandled exception in forked task`, origin, traceWithCause(trace, e), { cause: e })
   }
 }
 
 class ForkError extends Error {
-  constructor(message: string, origin: Breadcrumb, trace: Trace | undefined, options?: ErrorOptions) {
+  constructor(readonly code: ForkErrorCode, message: string, origin: Breadcrumb, trace: Trace | undefined, options?: ErrorOptions) {
     super(message, options)
     if (getTraceCapturePolicy() === 'full' && 'stack' in origin) Object.defineProperty(this, 'stack', { get: () => origin.stack })
+    Object.defineProperty(this, 'code', {
+      value: code,
+      enumerable: false,
+      writable: false,
+      configurable: true
+    })
     if (trace !== undefined) attachTrace(this, trace)
   }
 }
+
+type ForkErrorCode = 'FX_AWAITED_ASYNC_FAILED' | 'FX_UNHANDLED_FORK_FAILURE' | 'FX_UNHANDLED_FAILURE' | 'FX_UNHANDLED_EXCEPTION'
 
 class UnhandledForkError extends Error {
   constructor(readonly error: unknown) {

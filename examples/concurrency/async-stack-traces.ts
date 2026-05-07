@@ -3,7 +3,7 @@ import { catchAll, fail } from "../../src/Fail"
 import { defaultConsole, error, log } from "../../src/Console"
 import { fork, unbounded } from "../../src/Concurrent"
 import { wait } from "../../src/Task"
-import { formatError } from "../../src/Trace"
+import { formatError, snapshotError } from "../../src/Trace"
 
 const f1 = fx(function* () {
   yield* log('f1 start, forking f2')
@@ -37,5 +37,11 @@ await main.pipe(
 )
 
 function errorWithTrace(e: unknown) {
-  return error(formatError(e))
+  return error([
+    'Human-readable error:',
+    formatError(e),
+    '',
+    'Structured diagnostic snapshot:',
+    JSON.stringify(snapshotError(e), null, 2)
+  ].join('\n'))
 }

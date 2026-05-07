@@ -18,7 +18,7 @@ export class Retry<const E, const A> extends Effect('fx/Retry')<RetryContext<E, 
 export const retry = <const RE>(options: RetryOptions<RE>) =>
   <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A> | Scoped<'fx/Retry'>, A> => {
     const origin = at('fx/Retry/retry', retry)
-    const trace = captureTrace(origin)
+    const trace = captureTrace(origin, undefined, { kind: 'retry' })
 
     return scoped('fx/Retry', f).pipe(
       flatMap(fx =>

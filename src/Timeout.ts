@@ -31,7 +31,7 @@ export function timeout(options: DefaultTimeoutOptions): <const E, const A>(f: F
 export function timeout<const TE>(options: TimeoutOptions<TE>): <const E, const A>(f: Fx<E, A>) => Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE> | Scoped<'fx/Timeout'>, A>
 export function timeout<const TE>({ ms, onTimeout }: DefaultTimeoutOptions | TimeoutOptions<TE>) {
   const origin = at(`Timeout requested after ${ms}ms`, timeout)
-  const trace = captureTrace(origin)
+  const trace = captureTrace(origin, undefined, { kind: 'timeout' })
   return <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE | TimeoutError> | Scoped<'fx/Timeout'>, A> =>
     scoped('fx/Timeout', f).pipe(
       flatMap(fx =>
@@ -57,9 +57,16 @@ export const defaultTimeout = () =>
 
 export class TimeoutError extends Error {
   readonly name = 'TimeoutError'
+  declare readonly code: 'FX_TIMEOUT'
 
   constructor(readonly ms: number, options?: ErrorOptions) {
     super(`Timed out after ${ms}ms`, options)
+    Object.defineProperty(this, 'code', {
+      value: 'FX_TIMEOUT',
+      enumerable: false,
+      writable: false,
+      configurable: true
+    })
   }
 }
 

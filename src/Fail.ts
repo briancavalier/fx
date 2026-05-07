@@ -12,7 +12,7 @@ export class Fail<const E> extends Effect('fx/Fail')<E, never> {
     readonly origin: Breadcrumb = at('fx/Fail', Fail)
   ) {
     super(e)
-    this.trace = captureTrace(origin)
+    this.trace = captureTrace(origin, undefined, { kind: 'fail' })
   }
 }
 

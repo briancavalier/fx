@@ -65,7 +65,7 @@ export interface ConcurrentContext<Fxs extends readonly Fx<unknown, unknown>[]> 
 export const fork = <const E, const A>(
   f: Fx<E, A>,
   origin: Breadcrumb = at('fx/Concurrent/fork', fork),
-  trace: Trace | undefined = captureTrace(origin)
+  trace: Trace | undefined = captureTrace(origin, undefined, { kind: 'fork' })
 ): Fx<Exclude<E, Async | Fail<any>> | Fork | Scoped<'fx/Concurrent/Fork'>, Task<A, ErrorsOf<E>>> =>
   scoped('fx/Concurrent/Fork', f).pipe(
     flatMap(fx => new Fork({ fx, origin, trace }) as Fx<Fork, Task<A, ErrorsOf<E>>>)
@@ -81,12 +81,13 @@ export const fork = <const E, const A>(
 export const forkEach = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   fxs: Fxs,
   origin: Breadcrumb = at('fx/Concurrent/forkEach', forkEach),
-  trace: Trace | undefined = captureTrace(origin)
+  trace: Trace | undefined = captureTrace(origin, undefined, { kind: 'fork' })
 ) => fx(function* () {
   const ps = [] as Task<unknown, unknown>[]
+  const kind = childFrameKind(trace)
   for (let i = 0; i < fxs.length; i++) {
     const childOrigin = indexed(origin, i)
-    ps.push(yield* fork(fxs[i], childOrigin, captureTrace(childOrigin, trace)))
+    ps.push(yield* fork(fxs[i], childOrigin, captureTrace(childOrigin, trace, { kind, index: i })))
   }
   return ps
 }) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | Fork, {
@@ -103,7 +104,7 @@ export const forkEach = <const Fxs extends readonly Fx<unknown, unknown>[]>(
 export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   fxs: Fxs,
   origin: Breadcrumb = at('fx/Concurrent/all', all),
-  trace: Trace | undefined = captureTrace(origin)
+  trace: Trace | undefined = captureTrace(origin, undefined, { kind: 'all' })
 ) => scopedEach('fx/Concurrent/All', fxs).pipe(
   flatMap(fxs => new All({
     fxs: fxs as unknown as Fxs,
@@ -124,7 +125,7 @@ export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(
 export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   fxs: Fxs,
   origin: Breadcrumb = at('fx/Concurrent/race', race),
-  trace: Trace | undefined = captureTrace(origin)
+  trace: Trace | undefined = captureTrace(origin, undefined, { kind: 'race' })
 ) => scopedEach('fx/Concurrent/Race', fxs).pipe(
   flatMap(fxs => new Race({
     fxs: fxs as unknown as Fxs,
@@ -181,10 +182,17 @@ export const firstSuccess = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E,
  */
 export class RaceAllFailed<Errors extends readonly unknown[]> extends Error {
   readonly name = 'RaceAllFailed'
+  declare readonly code: 'FX_RACE_ALL_FAILED'
   readonly errors!: Errors
 
   constructor(errors: Errors) {
     super('All raced computations failed')
+    Object.defineProperty(this, 'code', {
+      value: 'FX_RACE_ALL_FAILED',
+      enumerable: false,
+      writable: false,
+      configurable: true
+    })
     Object.defineProperty(this, 'errors', {
       value: errors,
       enumerable: false,
@@ -217,6 +225,9 @@ export const unbounded = bounded(Infinity)
 const runForkWith = (s: Semaphore) =>
   (f: ForkContext): Fx<never, Task<unknown, unknown>> =>
     ok(acquireAndRunFork(f, s))
+
+const childFrameKind = (trace: Trace | undefined) =>
+  trace?.frame.kind === 'all' || trace?.frame.kind === 'race' ? trace.frame.kind : 'fork'
 
 const runAll = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   a: ConcurrentContext<Fxs>

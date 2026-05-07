@@ -7,7 +7,7 @@ import { fx, ok, run, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
 import { TimeoutError, defaultTimeout, timeout } from './Timeout.js'
 import { sleep, withClock } from './Time.js'
-import { getTrace } from './Trace.js'
+import { getTrace, snapshotError } from './Trace.js'
 import { VirtualClock } from './internal/time.js'
 
 describe('Timeout', () => {
@@ -104,9 +104,11 @@ describe('Timeout', () => {
 
     assert.ok(Fail.is(r))
     assert.ok(r.arg instanceof TimeoutError)
+    assert.equal(r.arg.code, 'FX_TIMEOUT')
     assert.ok(r.arg.cause instanceof Error)
     assert.match(r.arg.cause.stack ?? '', /Timeout\.test\.ts/)
     assert.deepEqual(traceMessages(r.arg).slice(0, 1), ['Timeout requested after 50ms'])
+    assert.equal(snapshotError(r.arg).trace?.frames[0].kind, 'timeout')
   })
 
   it('preserves original failures when the Fx fails before the timeout', async () => {

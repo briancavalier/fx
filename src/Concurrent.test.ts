@@ -7,7 +7,7 @@ import { RaceAllFailed, all, defaultAll, firstSettled, firstSuccess, fork, forkE
 import { flatMap, fx, ok, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
 import { Task, wait } from './Task.js'
-import { getTrace } from './Trace.js'
+import { getTrace, snapshotError } from './Trace.js'
 
 const asyncValue = <A>(a: A) => assertPromise(() => Promise.resolve(a))
 
@@ -148,6 +148,41 @@ describe('Fork', () => {
       assert.match(result.arg.stack ?? '', /Concurrent\.test\.ts/)
       assert.deepEqual(traceMessages(result.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/race[0]', 'fx/Concurrent/race'])
       assert.equal((result.arg as Error).cause, cause)
+    })
+
+    it('snapshots indexed child task frame metadata', async () => {
+      const cause = new Error('race metadata failed')
+      const bad = fx(function* () {
+        yield* fail(cause)
+      })
+
+      const result = await race([bad]).pipe(
+        firstSettled,
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      const snapshot = snapshotError(result.arg)
+      assert.equal(snapshot.trace?.frames[1].message, 'fx/Concurrent/race[0]')
+      assert.equal(snapshot.trace?.frames[1].kind, 'race')
+      assert.equal(snapshot.trace?.frames[1].index, 0)
+    })
+
+    it('codes awaited async failures and snapshots async frame metadata', async () => {
+      const cause = new Error('async rejected')
+
+      await assert.rejects(
+        assertPromise(() => Promise.reject(cause)).pipe(runPromise),
+        e => {
+          const snapshot = snapshotError(e)
+          return e instanceof Error
+            && snapshot.code === 'FX_AWAITED_ASYNC_FAILED'
+            && snapshot.trace?.frames[0].kind === 'async'
+            && snapshot.cause?.message === 'async rejected'
+        }
+      )
     })
   })
 
@@ -350,10 +385,13 @@ describe('Fork', () => {
 
       assert.ok(Fail.is(result))
       assert.ok(result.arg instanceof RaceAllFailed)
+      assert.equal(result.arg.code, 'FX_RACE_ALL_FAILED')
       assert.equal(result.arg.errors.length, 2)
       const causes = result.arg.errors.map(e => (e as Error).cause)
       assert.deepEqual(causes, [first, second])
       assert.deepEqual(Object.keys(result.arg), ['name'])
+      assert.equal(snapshotError(result.arg).aggregate?.errors.length, 2)
+      assert.equal(snapshotError(result.arg).aggregate?.errors[0].cause?.message, 'first failed')
     })
 
     it('types all-failed errors by input index', async () => {

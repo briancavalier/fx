@@ -6,7 +6,7 @@ import { fx, ok, run, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
 import { RetryEvent, defaultRetry, retry } from './Retry.js'
 import { sleep, withClock } from './Time.js'
-import { getTrace } from './Trace.js'
+import { getTrace, snapshotError } from './Trace.js'
 import { VirtualClock } from './internal/time.js'
 
 describe('Retry', () => {
@@ -75,6 +75,7 @@ describe('Retry', () => {
     assert.ok(Fail.is(r))
     assert.equal(r.arg, cause)
     assert.deepEqual(traceMessages(cause), ['fx/Retry/retry'])
+    assert.equal(snapshotError(cause).trace?.frames[0].kind, 'retry')
   })
 
   it('stops retrying when the predicate rejects the failure', () => {

@@ -32,4 +32,4 @@ export const tryPromise = <const A>(f: Run<A>): Fx<Async | Fail<unknown>, A> =>
 export const assertPromise = <const A>(
   run: Run<A>,
   origin: Breadcrumb = at('fx/Async/assertPromise', assertPromise)
-) => new Async({ run, origin, trace: captureTrace(origin) }) as Fx<Async, A>
+) => new Async({ run, origin, trace: captureTrace(origin, undefined, { kind: 'async' }) }) as Fx<Async, A>

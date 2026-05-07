@@ -1,8 +1,9 @@
 import { fx, runPromise } from '../../src'
 import { RaceAllFailed, firstSettled, firstSuccess, race, unbounded } from '../../src/Concurrent'
 import { Fail, fail, returnFail } from '../../src/Fail'
-import { sleep, defaultTime } from '../../src/Time'
-
+import { defaultTime, sleep } from '../../src/Time'
+import { formatDiagnostic, snapshotError } from '../../src/Trace'
+ 
 // This example builds one Race request and interprets it with two different
 // handlers. `firstSettled` is first-settled, like Promise.race: the fast failure
 // wins. `firstSuccess` is first-successful, like Promise.any: the fast failure
@@ -34,7 +35,7 @@ const firstSettledResult = await request.pipe(
 
 if (Fail.is(firstSettledResult)) {
   console.log('firstSettled:', 'failed with the first settled child')
-  console.log('firstSettled cause:', failureMessage(firstSettledResult.arg))
+  printFailure(firstSettledResult.arg)
 } else {
   console.log('firstSettled:', firstSettledResult)
 }
@@ -67,15 +68,16 @@ const allFailed = await race([
 )
 
 if (Fail.is(allFailed) && allFailed.arg instanceof RaceAllFailed) {
-  console.log('firstSuccess all failed:', allFailed.arg.errors.map((error, index) => ({
-    index,
-    message: failureMessage(error)
-  })))
+  console.log('firstSuccess all failed:')
+  printFailure(allFailed.arg)
 }
 
-function failureMessage(failure: unknown): string {
-  const cause = failure instanceof Error ? failure.cause : undefined
-  return cause instanceof Error ? cause.message
-    : failure instanceof Error ? failure.message
-      : String(failure)
+function printFailure(failure: unknown): void {
+  console.log([
+    'Human-readable diagnostic:',
+    formatDiagnostic(failure),
+    '',
+    'Structured diagnostic snapshot:',
+    JSON.stringify(snapshotError(failure), null, 2)
+  ].join('\n'))
 }

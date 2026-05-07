@@ -3,7 +3,7 @@ import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll, fail } from "../../src/Fail"
 import { forkEach, unbounded } from "../../src/Concurrent"
 import { wait } from "../../src/Task"
-import { formatTrace, getTrace } from "../../src/Trace"
+import { formatError, snapshotError } from "../../src/Trace"
 
 const child1 = fx(function* () {
   yield* log('child1 start')
@@ -30,8 +30,11 @@ await forkEach([child1, child2, child3]).pipe(
 )
 
 function errorWithTrace(e: unknown) {
-  const trace = getTrace(e)
-  return trace === undefined
-    ? error('No Fx trace')
-    : error('Fx trace:\n' + formatTrace(trace))
+  return error([
+    'Human-readable error:',
+    formatError(e),
+    '',
+    'Structured diagnostic snapshot:',
+    JSON.stringify(snapshotError(e), null, 2)
+  ].join('\n'))
 }

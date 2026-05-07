@@ -14,7 +14,7 @@ export interface Breadcrumb {
  * Capture a Breadcrumb with the provided message.
  */
 export const at: (message: string, f?: Function) => Breadcrumb = (message, f = at) =>
-  new BreadcrumbAt(message, f)
+  capturesStack() ? new BreadcrumbAt(message, f) : { message }
 
 /**
  * Derive an indexed Breadcrumb from an existing Breadcrumb while preserving the
@@ -54,3 +54,4 @@ const replaceStackMessage = (stack: string | undefined, current: string, next: s
 
   return `${replaced}${rest}`
 }
+import { capturesStack } from './internal/tracePolicy.js'

@@ -1,4 +1,13 @@
 import { Breadcrumb } from './Breadcrumb.js'
+import {
+  capturesTrace,
+  getTraceCapturePolicy,
+  setTraceCapturePolicy
+} from './internal/tracePolicy.js'
+import type { TraceCapturePolicy } from './internal/tracePolicy.js'
+
+export type { TraceCapturePolicy }
+export { getTraceCapturePolicy, setTraceCapturePolicy }
 
 export const MaxTraceDepth = 32
 
@@ -18,16 +27,26 @@ export interface Trace {
   readonly parent?: Trace
   readonly depth: number
   readonly truncated: boolean
+  readonly acyclic?: true
 }
 
 export const traceFrom = (origin: Breadcrumb, parent?: Trace): Trace =>
   prependTrace(origin, parent)
 
+export const captureTrace = (origin: Breadcrumb, parent?: Trace): Trace | undefined =>
+  capturesTrace() ? prependTrace(origin, parent) : undefined
+
 export const prependTrace = (origin: Breadcrumb, parent?: Trace): Trace =>
   prependFrame({ message: origin.message, stackSource: origin }, parent)
 
+export const capturePrependTrace = (origin: Breadcrumb, parent?: Trace): Trace | undefined =>
+  capturesTrace() ? prependTrace(origin, parent) : parent
+
 export const appendTrace = (trace: Trace, parent?: Trace): Trace => {
   if (parent === undefined) return trace
+  if (trace.acyclic && parent.acyclic && !trace.truncated && !parent.truncated && trace.depth + parent.depth <= MaxTraceDepth) {
+    return appendTraceFast(trace, parent)
+  }
 
   const frames: TraceFrame[] = []
   let truncated = trace.truncated || parent.truncated
@@ -51,6 +70,12 @@ export const appendTrace = (trace: Trace, parent?: Trace): Trace => {
   }
 
   return fromFrames(frames, truncated)
+}
+
+export const captureAppendTrace = (trace: Trace | undefined, parent?: Trace): Trace | undefined => {
+  if (!capturesTrace()) return undefined
+  if (trace === undefined) return parent
+  return appendTrace(trace, parent)
 }
 
 export const attachTrace = (error: object, trace: Trace): void => {
@@ -96,13 +121,14 @@ export const formatError = (error: unknown): string => {
 }
 
 const prependFrame = (frame: TraceFrame, parent?: Trace): Trace => {
-  if (parent === undefined) return { frame, depth: 1, truncated: false }
+  if (parent === undefined) return { frame, depth: 1, truncated: false, acyclic: true }
   if (parent.depth < MaxTraceDepth) {
     return {
       frame,
       parent,
       depth: parent.depth + 1,
-      truncated: parent.truncated
+      truncated: parent.truncated,
+      acyclic: parent.acyclic
     }
   }
 
@@ -124,11 +150,30 @@ const fromFrames = (frames: readonly TraceFrame[], truncated: boolean): Trace =>
       frame: frames[i],
       parent: trace,
       depth: (trace?.depth ?? 0) + 1,
-      truncated
+      truncated,
+      acyclic: true
     }
   }
 
   return trace as Trace
+}
+
+const appendTraceFast = (trace: Trace, parent: Trace): Trace => {
+  const frames: TraceFrame[] = []
+  let current: Trace | undefined = trace
+
+  while (current !== undefined) {
+    frames.push(current.frame)
+    current = current.parent
+  }
+
+  current = parent
+  while (current !== undefined) {
+    frames.push(current.frame)
+    current = current.parent
+  }
+
+  return fromFrames(frames, false)
 }
 
 const firstStackFrame = (stack: string | undefined): string | undefined => {

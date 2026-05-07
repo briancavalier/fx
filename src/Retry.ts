@@ -4,7 +4,7 @@ import { Fail, returnFail } from './Fail.js'
 import { flatMap, flatten, Fx, fx, ok, unit } from './Fx.js'
 import { Handle } from './Handler.js'
 import { Scoped, handleScoped, scoped } from './Scoped.js'
-import { Trace, attachTrace, traceFrom } from './Trace.js'
+import { Trace, attachTrace, captureTrace } from './Trace.js'
 
 /**
  * A retry effect. Programs yield {@link Retry} values to request that a
@@ -18,7 +18,7 @@ export class Retry<const E, const A> extends Effect('fx/Retry')<RetryContext<E, 
 export const retry = <const RE>(options: RetryOptions<RE>) =>
   <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A> | Scoped<'fx/Retry'>, A> => {
     const origin = at('fx/Retry/retry', retry)
-    const trace = traceFrom(origin)
+    const trace = captureTrace(origin)
 
     return scoped('fx/Retry', f).pipe(
       flatMap(fx =>
@@ -63,7 +63,7 @@ export interface RetryContext<E, A> {
   readonly fx: Fx<unknown, A>
   readonly retries: number
   readonly while: (e: E, attempt: number) => boolean
-  readonly trace: Trace
+  readonly trace?: Trace
 }
 
 export type RetryEvent = RetryFailure | RetrySuccess
@@ -98,7 +98,7 @@ const runRetry = <OE>(observe: (e: RetryEvent) => Fx<OE, void>) =>
       const retrying = attempt <= r.retries && r.while(result.arg, attempt)
       yield* observe({ type: 'failure', attempt, failure: result.arg, retrying })
       if (!retrying) {
-        if (typeof result.arg === 'object' && result.arg !== null) attachTrace(result.arg, r.trace)
+        if (typeof result.arg === 'object' && result.arg !== null && r.trace !== undefined) attachTrace(result.arg, r.trace)
         return yield* result
       }
 

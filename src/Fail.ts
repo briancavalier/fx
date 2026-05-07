@@ -2,17 +2,17 @@ import { Breadcrumb, at } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
 import { Fx, ok } from './Fx.js'
 import { control } from './Handler.js'
-import { Trace, traceFrom } from './Trace.js'
+import { Trace, captureTrace } from './Trace.js'
 
 export class Fail<const E> extends Effect('fx/Fail')<E, never> {
-  readonly trace: Trace
+  readonly trace?: Trace
 
   constructor(
     e: E,
     readonly origin: Breadcrumb = at('fx/Fail', Fail)
   ) {
     super(e)
-    this.trace = traceFrom(origin)
+    this.trace = captureTrace(origin)
   }
 }
 

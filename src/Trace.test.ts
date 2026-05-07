@@ -1,10 +1,51 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { MaxTraceDepth, appendTrace, attachTrace, formatError, formatTrace, getTrace, prependTrace } from './Trace.js'
+import { at } from './Breadcrumb.js'
+import { fail } from './Fail.js'
+import { runPromise } from './Fx.js'
+import { MaxTraceDepth, appendTrace, attachTrace, captureTrace, formatError, formatTrace, getTrace, getTraceCapturePolicy, prependTrace, setTraceCapturePolicy } from './Trace.js'
 import type { Trace } from './Trace.js'
 import type { Breadcrumb } from './Breadcrumb.js'
 
 describe('Trace', () => {
+  it('defaults to full stack capture', () => {
+    assert.equal(getTraceCapturePolicy(), 'full')
+  })
+
+  it('setTraceCapturePolicy returns the previous policy', () => {
+    const previous = setTraceCapturePolicy('labels')
+    try {
+      assert.equal(previous, 'full')
+      assert.equal(setTraceCapturePolicy('full'), 'labels')
+    } finally {
+      setTraceCapturePolicy('full')
+    }
+  })
+
+  it('labels policy preserves trace messages without stack locations', () => {
+    const previous = setTraceCapturePolicy('labels')
+    try {
+      const trace = captureTrace(at('labels/frame'))
+
+      assert.ok(trace !== undefined)
+      assert.equal(formatTrace(trace), '  at labels/frame')
+    } finally {
+      setTraceCapturePolicy(previous)
+    }
+  })
+
+  it('off policy avoids attaching runtime trace metadata', async () => {
+    const previous = setTraceCapturePolicy('off')
+    try {
+      await assert.rejects(
+        runPromise(fail(new Error('off')) as never),
+        e => e instanceof Error && getTrace(e) === undefined
+      )
+    } finally {
+      setTraceCapturePolicy(previous)
+    }
+  })
+
   it('prepends frames newest first', () => {
     const root = prependTrace(breadcrumb('root'))
     const trace = prependTrace(breadcrumb('child'), root)

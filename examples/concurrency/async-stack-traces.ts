@@ -3,6 +3,7 @@ import { catchAll, fail } from "../../src/Fail"
 import { defaultConsole, error, log } from "../../src/Console"
 import { fork, unbounded } from "../../src/Concurrent"
 import { wait } from "../../src/Task"
+import { formatError } from "../../src/Trace"
 
 const f1 = fx(function* () {
   yield* log('f1 start, forking f2')
@@ -29,8 +30,12 @@ const main = fork(f1)
 await main.pipe(
   flatMap(wait),
   tap(result => log(`main finished`, result)),
-  catchAll(e => error('Error!', e)),
+  catchAll(errorWithTrace),
   unbounded,
   defaultConsole,
   runPromise
 )
+
+function errorWithTrace(e: unknown) {
+  return error(formatError(e))
+}

@@ -5,18 +5,20 @@ import { Fork, ForkContext } from '../Concurrent.js'
 import { Fx } from '../Fx.js'
 import { HandlerContext, Scoped, withContext } from '../Scoped.js'
 import { Task } from '../Task.js'
+import { Trace, appendTrace, attachTrace, getTrace, prependTrace, traceFrom } from '../Trace.js'
 import { Semaphore } from './Semaphore.js'
 import { DisposableSet, dispose } from './disposable.js'
 
 export type RunForkOptions = {
   readonly origin?: Breadcrumb
+  readonly trace?: Trace
   readonly maxConcurrency?: number
 }
 
-export const runFork = <const E extends Async | Fork | Fail<unknown> | Scoped<string>, const A>(f: Fx<E, A>, { origin = at('fx/runFork', runFork), maxConcurrency = Infinity }: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
+export const runFork = <const E extends Async | Fork | Fail<unknown> | Scoped<string>, const A>(f: Fx<E, A>, { origin = at('fx/runFork', runFork), trace = traceFrom(origin), maxConcurrency = Infinity }: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new DisposableSet()
 
-  const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, origin)
+  const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, origin, trace)
     .finally(() => dispose(disposables))
 
   return new Task(promise, disposables)
@@ -26,7 +28,7 @@ export const acquireAndRunFork = (f: ForkContext, s: Semaphore, context: readonl
   const disposables = new DisposableSet()
 
   const promise = acquire(s, disposables,
-    () => runForkInternal(withContext(context, f.fx), context, s, disposables, f.origin)
+    () => runForkInternal(withContext(context, f.fx), context, s, disposables, f.origin, f.trace)
       .finally(() => dispose(disposables)))
 
   return new Task(promise, disposables)
@@ -37,7 +39,8 @@ const runForkInternal = <const E, const A>(
   context: readonly HandlerContext[],
   semaphore: Semaphore,
   disposables: DisposableSet,
-  origin: Breadcrumb
+  origin: Breadcrumb,
+  trace: Trace
 ): Promise<A> => {
   let rejectUnhandled: (e: UnhandledForkError) => void = () => { }
   const unhandled = new Promise<never>((_, reject) => {
@@ -45,7 +48,7 @@ const runForkInternal = <const E, const A>(
   })
   unhandled.catch(() => { })
 
-  return runForkLoop(f, context, semaphore, disposables, origin, unhandled, e => rejectUnhandled(new UnhandledForkError(e)))
+  return runForkLoop(f, context, semaphore, disposables, origin, trace, unhandled, e => rejectUnhandled(new UnhandledForkError(e)))
 }
 
 const runForkLoop = async <const E, const A>(
@@ -54,6 +57,7 @@ const runForkLoop = async <const E, const A>(
   semaphore: Semaphore,
   disposables: DisposableSet,
   origin: Breadcrumb,
+  trace: Trace,
   unhandled: Promise<never>,
   rejectUnhandled: (e: unknown) => void
 ): Promise<A> => {
@@ -65,6 +69,7 @@ const runForkLoop = async <const E, const A>(
     while (!ir.done) {
       if (Async.is(ir.value)) {
         const { run, origin } = ir.value.arg
+        const asyncTrace = prependTrace(origin, trace)
         const t = runTask(run)
         disposables.add(t)
         const promise = t.promise.finally(() => disposables.remove(t))
@@ -73,39 +78,45 @@ const runForkLoop = async <const E, const A>(
           a = await Promise.race([promise, unhandled])
         } catch (e) {
           if (e instanceof UnhandledForkError) throw e.error
-          throw new ForkError(`Awaited Async task failed`, origin, { cause: e })
+          throw new ForkError(`Awaited Async task failed`, origin, traceWithCause(asyncTrace, e), { cause: e })
         }
         // stop if the scope was disposed while we were waiting
         if (disposables.disposed) return await never()
         ir = i.next(a)
       } else if (Fork.is(ir.value)) {
         const forkOrigin = ir.value.arg.origin
-        const t = acquireAndRunFork(ir.value.arg, semaphore, context)
+        const forkTrace = prependTrace(forkOrigin, trace)
+        const t = acquireAndRunFork({ ...ir.value.arg, trace: forkTrace }, semaphore, context)
         disposables.add(t)
         t.promise
           .finally(() => disposables.remove(t))
           .catch(e => rejectUnhandled(
-            new ForkError(`Unhandled failure in forked task`, forkOrigin, { cause: e })
+            new ForkError(`Unhandled failure in forked task`, forkOrigin, traceWithCause(forkTrace, e), { cause: e })
           ))
         ir = i.next(t)
       } else if (Scoped.is(ir.value)) {
         ir = i.next(context)
-      } else if (Fail.is(ir.value))
-        throw new ForkError(`Unhandled failure in forked task`, origin, { cause: ir.value.arg })
+      } else if (Fail.is(ir.value)) {
+        const causeTrace = getTrace(ir.value.arg)
+        const failTrace = appendTrace(causeTrace ?? ir.value.trace, trace)
+        const failOrigin = causeTrace === undefined ? ir.value.origin : originFromTrace(causeTrace)
+        throw new ForkError(`Unhandled failure in forked task`, failOrigin, failTrace, { cause: ir.value.arg })
+      }
       else
-        throw new ForkError(`Unhandled failure in forked task`, origin, { cause: ir.value })
+        throw new ForkError(`Unhandled failure in forked task`, origin, traceWithCause(trace, ir.value), { cause: ir.value })
     }
     return ir.value as A
   } catch (e) {
     if (e instanceof ForkError) throw e
-    throw new ForkError(`Unhandled exception in forked task`, origin, { cause: e })
+    throw new ForkError(`Unhandled exception in forked task`, origin, traceWithCause(trace, e), { cause: e })
   }
 }
 
 class ForkError extends Error {
-  constructor(message: string, origin: Breadcrumb, options?: ErrorOptions) {
+  constructor(message: string, origin: Breadcrumb, trace: Trace, options?: ErrorOptions) {
     super(message, options)
     Object.defineProperty(this, 'stack', { get: () => origin.stack })
+    attachTrace(this, trace)
   }
 }
 
@@ -139,6 +150,18 @@ const runTask = <A>(run: (s: AbortSignal) => Promise<A>) => {
 }
 
 const never = <A>(): Promise<A> => new Promise(() => { })
+
+const traceWithCause = (trace: Trace, cause: unknown): Trace => {
+  const causeTrace = getTrace(cause)
+  return causeTrace === undefined ? trace : appendTrace(causeTrace, trace)
+}
+
+const originFromTrace = (trace: Trace): Breadcrumb => ({
+  message: trace.frame.message,
+  get stack() {
+    return trace.frame.stackSource?.stack
+  }
+})
 
 class DisposableAbortController extends AbortController {
   [Symbol.dispose]() { this.abort() }

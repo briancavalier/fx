@@ -7,6 +7,7 @@ import { Fx, flatMap, flatten, fx, map, ok } from './Fx.js'
 import { Handle } from './Handler.js'
 import { Scoped, handleScoped, scoped } from './Scoped.js'
 import { Sleep, sleep } from './Time.js'
+import { Trace, attachTrace, traceFrom } from './Trace.js'
 
 /**
  * A timeout effect. Programs yield {@link Timeout} values to request that a
@@ -30,6 +31,7 @@ export function timeout(options: DefaultTimeoutOptions): <const E, const A>(f: F
 export function timeout<const TE>(options: TimeoutOptions<TE>): <const E, const A>(f: Fx<E, A>) => Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE> | Scoped<'fx/Timeout'>, A>
 export function timeout<const TE>({ ms, onTimeout }: DefaultTimeoutOptions | TimeoutOptions<TE>) {
   const origin = at(`Timeout requested after ${ms}ms`, timeout)
+  const trace = traceFrom(origin)
   return <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE | TimeoutError> | Scoped<'fx/Timeout'>, A> =>
     scoped('fx/Timeout', f).pipe(
       flatMap(fx =>
@@ -37,6 +39,7 @@ export function timeout<const TE>({ ms, onTimeout }: DefaultTimeoutOptions | Tim
           fx,
           ms,
           origin,
+          trace,
           onTimeout: onTimeout ?? defaultTimeoutError
         }) as Fx<Timeout<ErrorsOf<E>, A, TE | TimeoutError>, Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE | TimeoutError>, A>>
       ),
@@ -73,12 +76,14 @@ export interface TimeoutOptions<TE> {
 export interface TimeoutExpired {
   readonly ms: number
   readonly origin: Breadcrumb
+  readonly trace: Trace
 }
 
 export interface TimeoutContext<_E, A, TE> {
   readonly fx: Fx<unknown, A>
   readonly ms: number
   readonly origin: Breadcrumb
+  readonly trace: Trace
   readonly onTimeout: (e: TimeoutExpired) => TE
 }
 
@@ -90,7 +95,7 @@ const runTimeout = <const E, const A, const TE>(t: TimeoutContext<E, A, TE>): Fx
   const result = yield* race([
     attempt(t.fx as Fx<Fail<E>, A>),
     sleep(t.ms).pipe(map(() => ({ type: 'timeout', failure: t.onTimeout(t) } as const)))
-  ]).pipe(firstSettled)
+  ], t.origin, t.trace).pipe(firstSettled)
 
   return result.type === 'success' ? ok(result.value) : fail(result.failure)
 })
@@ -104,7 +109,11 @@ const attempt = <const E, const A>(f: Fx<Fail<E>, A>): Fx<never, TimeoutResult<E
 type AnyTimeout = Timeout<any, any, any> | Timeout<never, any, any>
 type UnwrapFail<F> = F extends Fail<infer E> ? E : never
 
-const defaultTimeoutError = ({ ms, origin }: TimeoutExpired) => new TimeoutError(ms, { cause: origin })
+const defaultTimeoutError = ({ ms, origin, trace }: TimeoutExpired) => {
+  const error = new TimeoutError(ms, { cause: origin })
+  attachTrace(error, trace)
+  return error
+}
 
 type TimeoutResult<E, A, TE> = Success<A> | Failure<E> | TimedOut<TE>
 

@@ -7,6 +7,7 @@ import { fx, ok, run, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
 import { TimeoutError, defaultTimeout, timeout } from './Timeout.js'
 import { sleep, withClock } from './Time.js'
+import { getTrace } from './Trace.js'
 import { VirtualClock } from './internal/time.js'
 
 describe('Timeout', () => {
@@ -105,6 +106,7 @@ describe('Timeout', () => {
     assert.ok(r.arg instanceof TimeoutError)
     assert.ok(r.arg.cause instanceof Error)
     assert.match(r.arg.cause.stack ?? '', /Timeout\.test\.ts/)
+    assert.deepEqual(traceMessages(r.arg).slice(0, 1), ['Timeout requested after 50ms'])
   })
 
   it('preserves original failures when the Fx fails before the timeout', async () => {
@@ -193,3 +195,13 @@ describe('Timeout', () => {
     run(ok('ok').pipe(timeout({ ms: 1 })))
   })
 })
+
+const traceMessages = (e: unknown) => {
+  const messages: string[] = []
+  let trace = getTrace(e)
+  while (trace !== undefined) {
+    messages.push(trace.frame.message)
+    trace = trace.parent
+  }
+  return messages
+}

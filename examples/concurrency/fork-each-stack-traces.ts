@@ -3,6 +3,7 @@ import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll, fail } from "../../src/Fail"
 import { forkEach, unbounded } from "../../src/Concurrent"
 import { wait } from "../../src/Task"
+import { formatTrace, getTrace } from "../../src/Trace"
 
 const child1 = fx(function* () {
   yield* log('child1 start')
@@ -22,8 +23,15 @@ const child3 = fx(function* () {
 
 await forkEach([child1, child2, child3]).pipe(
   flatMap(([, child2]) => wait(child2)),
-  catchAll(e => error('Error!', e)),
+  catchAll(errorWithTrace),
   unbounded,
   defaultConsole,
   runPromise
 )
+
+function errorWithTrace(e: unknown) {
+  const trace = getTrace(e)
+  return trace === undefined
+    ? error('No Fx trace')
+    : error('Fx trace:\n' + formatTrace(trace))
+}

@@ -1,13 +1,28 @@
+import { Breadcrumb, at } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
 import { Fx, ok } from './Fx.js'
 import { control } from './Handler.js'
+import { Trace, traceFrom } from './Trace.js'
 
-export class Fail<const E> extends Effect('fx/Fail')<E, never> { }
+export class Fail<const E> extends Effect('fx/Fail')<E, never> {
+  readonly trace: Trace
+
+  constructor(
+    e: E,
+    readonly origin: Breadcrumb = at('fx/Fail', Fail)
+  ) {
+    super(e)
+    this.trace = traceFrom(origin)
+  }
+}
 
 /**
  * Fail with an error e.
  */
-export const fail = <const E>(e: E): Fx<Fail<E>, never> => new Fail(e)
+export const fail = <const E>(
+  e: E,
+  origin: Breadcrumb = at('fx/Fail/fail', fail)
+): Fx<Fail<E>, never> => new Fail(e, origin)
 
 /**
  * Catch failures matching a type guard and handle them with the provided function.

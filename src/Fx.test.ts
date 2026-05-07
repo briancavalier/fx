@@ -5,6 +5,7 @@ import { Effect } from './Effect.js'
 import { Fail, returnFail } from './Fail.js'
 import { assertSync, flatMap, fx, ok, run, runPromise, runTask, trySync } from './Fx.js'
 import { handle } from './Handler.js'
+import { getTrace } from './Trace.js'
 
 describe('Fx', () => {
   describe('fx', () => {
@@ -109,6 +110,8 @@ describe('Fx', () => {
         e => e instanceof Error
           && firstLine(e).includes('fx/Async/assertPromise')
           && (e.stack ?? '').includes('Fx.test.ts')
+          && traceMessages(e)[0] === 'fx/Async/assertPromise'
+          && traceMessages(e).includes('fx/runTask')
           && e.cause === cause
       )
     })
@@ -123,6 +126,8 @@ describe('Fx', () => {
         e => e instanceof Error
           && firstLine(e).includes('fx/Async/assertPromise')
           && (e.stack ?? '').includes('Fx.test.ts')
+          && traceMessages(e)[0] === 'fx/Async/assertPromise'
+          && traceMessages(e).includes('fx/runPromise')
           && e.cause === cause
       )
     })
@@ -160,3 +165,13 @@ describe('Fx', () => {
 
 const firstLine = (e: Error): string =>
   e.stack?.split('\n')[0] ?? ''
+
+const traceMessages = (e: Error) => {
+  const messages: string[] = []
+  let trace = getTrace(e)
+  while (trace !== undefined) {
+    messages.push(trace.frame.message)
+    trace = trace.parent
+  }
+  return messages
+}

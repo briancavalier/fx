@@ -1,11 +1,43 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
+import { at } from './Breadcrumb.js'
 import { fx, ok, run } from './Fx.js'
 
 import { Fail, fail, returnFail, returnIf, returnOnly } from './Fail.js'
+import { getTrace } from './Trace.js'
+import { runFork } from './internal/runFork.js'
 
 describe('Fail', () => {
+  describe('fail', () => {
+    it('reports the fail call site for unhandled failures', async () => {
+      const cause = new Error('failed')
+
+      await assert.rejects(
+        runFork(fail(cause)).promise,
+        e => e instanceof Error
+          && firstLine(e).includes('fx/Fail/fail')
+          && (e.stack ?? '').includes('Fail.test.ts')
+          && traceMessages(e)[0] === 'fx/Fail/fail'
+          && traceMessages(e).includes('fx/runFork')
+          && e.cause === cause
+      )
+    })
+
+    it('accepts an explicit origin', async () => {
+      const cause = new Error('failed')
+      const origin = at('test/fail-origin')
+
+      await assert.rejects(
+        runFork(fail(cause, origin)).promise,
+        e => e instanceof Error
+          && firstLine(e).includes('test/fail-origin')
+          && traceMessages(e)[0] === 'test/fail-origin'
+          && e.cause === cause
+      )
+    })
+  })
+
   describe('returnIf', () => {
     it('given no failures, returns result', () => {
       const expected = Math.random()
@@ -97,3 +129,16 @@ describe('Fail', () => {
     })
   })
 })
+
+const firstLine = (e: Error): string =>
+  e.stack?.split('\n')[0] ?? ''
+
+const traceMessages = (e: Error) => {
+  const messages: string[] = []
+  let trace = getTrace(e)
+  while (trace !== undefined) {
+    messages.push(trace.frame.message)
+    trace = trace.parent
+  }
+  return messages
+}

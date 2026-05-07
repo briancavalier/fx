@@ -4,6 +4,7 @@ import { fork, unbounded } from "../../src/Concurrent"
 import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll } from "../../src/Fail"
 import { wait } from "../../src/Task"
+import { formatTrace, getTrace } from "../../src/Trace"
 
 const loadUser = assertPromise(async () => {
   await Promise.resolve()
@@ -17,8 +18,15 @@ const program = fx(function* () {
 })
 
 await program.pipe(
-  catchAll(e => error('Error!', e)),
+  catchAll(errorWithTrace),
   unbounded,
   defaultConsole,
   runPromise
 )
+
+function errorWithTrace(e: unknown) {
+  const trace = getTrace(e)
+  return trace === undefined
+    ? error('No Fx trace')
+    : error('Fx trace:\n' + formatTrace(trace))
+}

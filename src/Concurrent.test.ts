@@ -7,6 +7,7 @@ import { RaceAllFailed, all, defaultAll, firstSettled, firstSuccess, fork, forkE
 import { flatMap, fx, ok, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
 import { Task, wait } from './Task.js'
+import { getTrace } from './Trace.js'
 
 const asyncValue = <A>(a: A) => assertPromise(() => Promise.resolve(a))
 
@@ -89,7 +90,7 @@ describe('Fork', () => {
       assert.equal(r, 'handled')
     })
 
-    it('preserves the all call site in indexed child task failures', async () => {
+    it('preserves the all call site in indexed child task failure traces', async () => {
       const cause = new Error('all failed')
       const bad = fx(function* () {
         yield* fail(cause)
@@ -103,12 +104,13 @@ describe('Fork', () => {
       )
 
       assert.ok(Fail.is(result))
-      assert.match(firstLine(result.arg), /fx\/Concurrent\/all\[0\]/)
+      assert.match(firstLine(result.arg), /fx\/Fail\/fail/)
       assert.match(result.arg.stack ?? '', /Concurrent\.test\.ts/)
+      assert.deepEqual(traceMessages(result.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/all[0]', 'fx/Concurrent/all'])
       assert.equal((result.arg as Error).cause, cause)
     })
 
-    it('preserves the forkEach call site in indexed child task failures', async () => {
+    it('preserves the forkEach call site in indexed child task failure traces', async () => {
       const cause = new Error('forkEach failed')
       const bad = fx(function* () {
         yield* fail(cause)
@@ -122,12 +124,13 @@ describe('Fork', () => {
       )
 
       assert.ok(Fail.is(result))
-      assert.match(firstLine(result.arg), /fx\/Concurrent\/forkEach\[0\]/)
+      assert.match(firstLine(result.arg), /fx\/Fail\/fail/)
       assert.match(result.arg.stack ?? '', /Concurrent\.test\.ts/)
+      assert.deepEqual(traceMessages(result.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/forkEach[0]', 'fx/Concurrent/forkEach'])
       assert.equal((result.arg as Error).cause, cause)
     })
 
-    it('preserves the race call site in indexed child task failures', async () => {
+    it('preserves the race call site in indexed child task failure traces', async () => {
       const cause = new Error('race failed')
       const bad = fx(function* () {
         yield* fail(cause)
@@ -141,8 +144,9 @@ describe('Fork', () => {
       )
 
       assert.ok(Fail.is(result))
-      assert.match(firstLine(result.arg), /fx\/Concurrent\/race\[0\]/)
+      assert.match(firstLine(result.arg), /fx\/Fail\/fail/)
       assert.match(result.arg.stack ?? '', /Concurrent\.test\.ts/)
+      assert.deepEqual(traceMessages(result.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/race[0]', 'fx/Concurrent/race'])
       assert.equal((result.arg as Error).cause, cause)
     })
   })
@@ -395,3 +399,13 @@ describe('Fork', () => {
 
 const firstLine = (e: unknown): string =>
   e instanceof Error ? e.stack?.split('\n')[0] ?? '' : ''
+
+const traceMessages = (e: unknown) => {
+  const messages: string[] = []
+  let trace = getTrace(e)
+  while (trace !== undefined) {
+    messages.push(trace.frame.message)
+    trace = trace.parent
+  }
+  return messages
+}

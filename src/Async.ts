@@ -2,12 +2,14 @@ import { Breadcrumb, at } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
 import { Fail, fail } from './Fail.js'
 import { Fx, flatten, ok } from './Fx.js'
+import { Trace, traceFrom } from './Trace.js'
 
 type Run<A> = (abort: AbortSignal) => Promise<A>
 
 export interface AsyncContext<A> {
   readonly run: Run<A>
   readonly origin: Breadcrumb
+  readonly trace: Trace
 }
 
 export class Async extends Effect('fx/Async')<AsyncContext<any>> { }
@@ -30,4 +32,4 @@ export const tryPromise = <const A>(f: Run<A>): Fx<Async | Fail<unknown>, A> =>
 export const assertPromise = <const A>(
   run: Run<A>,
   origin: Breadcrumb = at('fx/Async/assertPromise', assertPromise)
-) => new Async({ run, origin }) as Fx<Async, A>
+) => new Async({ run, origin, trace: traceFrom(origin) }) as Fx<Async, A>

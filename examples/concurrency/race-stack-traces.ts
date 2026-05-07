@@ -3,6 +3,7 @@ import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll, fail } from "../../src/Fail"
 import { firstSettled, race, unbounded } from "../../src/Concurrent"
 import { defaultTime, sleep } from "../../src/Time"
+import { formatTrace, getTrace } from "../../src/Trace"
 
 const child1 = fx(function* () {
   yield* log('child1 start')
@@ -24,9 +25,16 @@ const child3 = fx(function* () {
 
 await race([child1, child2, child3]).pipe(
   firstSettled,
-  catchAll(e => error('Error!', e)),
+  catchAll(errorWithTrace),
   unbounded,
   defaultTime,
   defaultConsole,
   runPromise
 )
+
+function errorWithTrace(e: unknown) {
+  const trace = getTrace(e)
+  return trace === undefined
+    ? error('No Fx trace')
+    : error('Fx trace:\n' + formatTrace(trace))
+}

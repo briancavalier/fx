@@ -1,8 +1,10 @@
+import { at } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
 import { Fail, returnFail } from './Fail.js'
 import { flatMap, flatten, Fx, fx, ok, unit } from './Fx.js'
 import { Handle } from './Handler.js'
 import { Scoped, handleScoped, scoped } from './Scoped.js'
+import { Trace, attachTrace, traceFrom } from './Trace.js'
 
 /**
  * A retry effect. Programs yield {@link Retry} values to request that a
@@ -14,16 +16,21 @@ export class Retry<const E, const A> extends Effect('fx/Retry')<RetryContext<E, 
  * Request that an Fx be retried when it fails.
  */
 export const retry = <const RE>(options: RetryOptions<RE>) =>
-  <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A> | Scoped<'fx/Retry'>, A> =>
-    scoped('fx/Retry', f).pipe(
+  <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A> | Scoped<'fx/Retry'>, A> => {
+    const origin = at('fx/Retry/retry', retry)
+    const trace = traceFrom(origin)
+
+    return scoped('fx/Retry', f).pipe(
       flatMap(fx =>
         new Retry<ErrorsOf<E>, A>({
           ...normalizeOptions(options as RetryOptions<ErrorsOf<E>>),
-          fx
+          fx,
+          trace
         }) as Fx<Retry<ErrorsOf<E>, A>, Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A>, A>>
       ),
       flatten
     )
+  }
 
 /**
  * Handle Retry by rerunning the captured Fx until it succeeds, the retry budget
@@ -56,6 +63,7 @@ export interface RetryContext<E, A> {
   readonly fx: Fx<unknown, A>
   readonly retries: number
   readonly while: (e: E, attempt: number) => boolean
+  readonly trace: Trace
 }
 
 export type RetryEvent = RetryFailure | RetrySuccess
@@ -89,7 +97,10 @@ const runRetry = <OE>(observe: (e: RetryEvent) => Fx<OE, void>) =>
 
       const retrying = attempt <= r.retries && r.while(result.arg, attempt)
       yield* observe({ type: 'failure', attempt, failure: result.arg, retrying })
-      if (!retrying) return yield* result
+      if (!retrying) {
+        if (typeof result.arg === 'object' && result.arg !== null) attachTrace(result.arg, r.trace)
+        return yield* result
+      }
 
       attempt += 1
     }

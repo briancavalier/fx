@@ -6,6 +6,7 @@ import { fx, ok, run, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
 import { RetryEvent, defaultRetry, retry } from './Retry.js'
 import { sleep, withClock } from './Time.js'
+import { getTrace } from './Trace.js'
 import { VirtualClock } from './internal/time.js'
 
 describe('Retry', () => {
@@ -59,6 +60,21 @@ describe('Retry', () => {
       { type: 'failure', attempt: 1, failure: 'nope', retrying: true },
       { type: 'failure', attempt: 2, failure: 'nope', retrying: false }
     ])
+  })
+
+  it('attaches one retry trace frame when retries are exhausted', () => {
+    const cause = new Error('nope')
+
+    const r = fail(cause).pipe(
+      retry({ retries: 5 }),
+      defaultRetry(),
+      returnFail,
+      run
+    )
+
+    assert.ok(Fail.is(r))
+    assert.equal(r.arg, cause)
+    assert.deepEqual(traceMessages(cause), ['fx/Retry/retry'])
   })
 
   it('stops retrying when the predicate rejects the failure', () => {
@@ -289,3 +305,13 @@ describe('Retry', () => {
     ])
   })
 })
+
+const traceMessages = (e: unknown) => {
+  const messages: string[] = []
+  let trace = getTrace(e)
+  while (trace !== undefined) {
+    messages.push(trace.frame.message)
+    trace = trace.parent
+  }
+  return messages
+}

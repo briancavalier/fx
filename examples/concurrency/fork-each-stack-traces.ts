@@ -3,7 +3,10 @@ import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll, fail } from "../../src/Fail"
 import { forkEach, unbounded } from "../../src/Concurrent"
 import { wait } from "../../src/Task"
-import { formatError, snapshotError } from "../../src/Trace"
+import { formatDiagnostic, formatError, snapshotError } from "../../src/Trace"
+import { nodeSourceLookup } from "../../src/TraceNode"
+
+const sourceLookup = nodeSourceLookup()
 
 const child1 = fx(function* () {
   yield* log('child1 start')
@@ -31,7 +34,10 @@ await forkEach([child1, child2, child3]).pipe(
 
 function errorWithTrace(e: unknown) {
   return error([
-    'Human-readable error:',
+    'Human-readable diagnostic:',
+    formatDiagnostic(e, { source: { lookup: sourceLookup } }),
+    '',
+    'Short human-readable error:',
     formatError(e),
     '',
     'Structured diagnostic snapshot:',

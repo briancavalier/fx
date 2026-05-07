@@ -280,6 +280,143 @@ describe('Trace', () => {
     assert.match(formatDiagnostic(error, { colors: 'never' }), /at race trace \[race child #1\]/)
   })
 
+  it('formats source snippets with default one-line context', () => {
+    const error = tracedErrorAt('source failed', 'source trace', 10, 11, { kind: 'fail' })
+    const formatted = formatDiagnostic(error, {
+      colors: 'never',
+      source: { lookup: () => sourceFixture }
+    })
+
+    assert.match(formatted, /9 \| const previous = value/)
+    assert.match(formatted, /10 \| yield\* fail\(new Error\('boom'\)\)/)
+    assert.match(formatted, /\| {11}\^/)
+    assert.match(formatted, /11 \| return previous/)
+  })
+
+  it('formats source snippets with zero context lines', () => {
+    const error = tracedErrorAt('source failed', 'source trace', 10, 11, { kind: 'fail' })
+    const formatted = formatDiagnostic(error, {
+      colors: 'never',
+      source: { lookup: () => sourceFixture, contextLines: 0 }
+    })
+
+    assert.doesNotMatch(formatted, /9 \| const previous = value/)
+    assert.match(formatted, /10 \| yield\* fail\(new Error\('boom'\)\)/)
+    assert.doesNotMatch(formatted, /11 \| return previous/)
+  })
+
+  it('falls back when source lookup is missing or throws', () => {
+    const error = tracedErrorAt('source failed', 'source trace', 10, 11, { kind: 'fail' })
+
+    assert.doesNotThrow(() => formatDiagnostic(error, {
+      colors: 'never',
+      source: { lookup: () => { throw new Error('lookup failed') } }
+    }))
+    assert.doesNotMatch(formatDiagnostic(error, {
+      colors: 'never',
+      source: { lookup: () => undefined }
+    }), /10 \|/)
+  })
+
+  it('formats one source snippet per aggregate child unique trace prefix', () => {
+    const first = tracedErrorAt('primary failed', 'fx/Fail/fail', 10, 11, { kind: 'fail' }, sharedRaceTrace(0))
+    const second = tracedErrorAt('replica failed', 'fx/Fail/fail', 10, 11, { kind: 'fail' }, sharedRaceTrace(1))
+    const aggregate = raceAllFailed([first, second])
+    const formatted = formatDiagnostic(aggregate, {
+      colors: 'never',
+      source: { lookup: () => sourceFixture }
+    })
+
+    assert.equal(countOccurrences(formatted, "10 | yield* fail(new Error('boom'))"), 2)
+    assert.match(formatted, /Shared parent trace:/)
+    assert.doesNotMatch(formatted, /19 \|/)
+  })
+
+  it('colors source snippet gutter and caret when colors are forced', () => {
+    const error = tracedErrorAt('source failed', 'source trace', 10, 11, { kind: 'fail' })
+    const formatted = formatDiagnostic(error, {
+      colors: 'always',
+      source: { lookup: () => sourceFixture }
+    })
+
+    assert.match(formatted, ansiPattern)
+    assert.match(stripAnsi(formatted), /10 \| yield\* fail\(new Error\('boom'\)\)/)
+    assert.match(stripAnsi(formatted), /\| {11}\^/)
+    const esc = String.fromCharCode(27)
+
+    assert.ok(formatted.includes(`${esc}[2m 9 |${esc}[0m ${esc}[2mconst previous = value${esc}[0m`))
+    assert.ok(formatted.includes(`${esc}[2m10 |${esc}[0m ${esc}[2myield* fai${esc}[0ml(new Error('boom'))`))
+    assert.ok(formatted.includes(`${esc}[2m11 |${esc}[0m ${esc}[2mreturn previous${esc}[0m`))
+  })
+
+  it('compacts cause traces already shown by the parent trace', () => {
+    const cause = tracedError('child failed', 'shared child trace', { kind: 'fail' })
+    const parent = new Error('wrapper failed', { cause })
+    attachTrace(parent, appendTrace(getTrace(cause) as ReturnType<typeof prependTrace>, prependTrace(breadcrumb('parent trace'))))
+
+    const formatted = formatDiagnostic(parent, { colors: 'never' })
+
+    assert.equal(countOccurrences(formatted, 'Fx trace:'), 1)
+    assert.match(formatted, /<trace already shown above>/)
+    assert.match(formatted, /Caused by:\n  Error: child failed/)
+  })
+
+  it('compacts nested fork-style wrapper traces without duplicating source snippets', () => {
+    const root = new Error('root failed')
+    const inner = new Error('Unhandled failure in forked task', { cause: root })
+    Object.defineProperty(inner, 'code', { value: 'FX_UNHANDLED_FAILURE' })
+    attachTrace(inner, prependTrace(
+      stackBreadcrumb('fx/Fail/fail', `Error: fail\n    at fail (${import.meta.filename}:10:11)`),
+      prependTrace(stackBreadcrumb('fx/Concurrent/fork', `Error: fork\n    at fork (${import.meta.filename}:20:21)`), undefined, { kind: 'fork' }),
+      { kind: 'fail' }
+    ))
+
+    const outer = new Error('Unhandled failure in forked task', { cause: inner })
+    Object.defineProperty(outer, 'code', { value: 'FX_UNHANDLED_FAILURE' })
+    attachTrace(outer, prependTrace(
+      stackBreadcrumb('fx/Fail/fail', `Error: fail\n    at fail (${import.meta.filename}:10:11)`),
+      prependTrace(
+        stackBreadcrumb('fx/Concurrent/fork', `Error: fork\n    at fork (${import.meta.filename}:20:21)`),
+        prependTrace(stackBreadcrumb('fx/Concurrent/fork', `Error: fork\n    at fork (${import.meta.filename}:30:31)`), undefined, { kind: 'fork' }),
+        { kind: 'fork' }
+      ),
+      { kind: 'fail' }
+    ))
+
+    const formatted = formatDiagnostic(outer, {
+      colors: 'never',
+      source: { lookup: () => sourceFixture }
+    })
+
+    assert.equal(countOccurrences(formatted, 'Error [FX_UNHANDLED_FAILURE]: Unhandled failure in forked task'), 2)
+    assert.equal(countOccurrences(formatted, '<trace already shown above>'), 1)
+    assert.equal(countOccurrences(formatted, "10 | yield* fail(new Error('boom'))"), 1)
+    assert.match(formatted, /Caused by:\n    Error: root failed/)
+  })
+
+  it('does not compact cause traces not shown by the parent trace', () => {
+    const cause = tracedError('child failed', 'child trace', { kind: 'fail' })
+    const parent = tracedError('wrapper failed', 'parent trace', { kind: 'fork' })
+    Object.defineProperty(parent, 'cause', { value: cause })
+
+    const formatted = formatDiagnostic(parent, { colors: 'never' })
+
+    assert.equal(countOccurrences(formatted, 'Fx trace:'), 2)
+    assert.doesNotMatch(formatted, /<trace already shown above>/)
+    assert.match(formatted, /at child trace \[fail\]/)
+  })
+
+  it('colors compacted cause trace notes when colors are forced', () => {
+    const cause = tracedError('child failed', 'shared child trace', { kind: 'fail' })
+    const parent = new Error('wrapper failed', { cause })
+    attachTrace(parent, appendTrace(getTrace(cause) as ReturnType<typeof prependTrace>, prependTrace(breadcrumb('parent trace'))))
+
+    const formatted = formatDiagnostic(parent, { colors: 'always' })
+
+    assert.match(formatted, ansiPattern)
+    assert.match(stripAnsi(formatted), /<trace already shown above>/)
+  })
+
   it('formats RaceAllFailed aggregates as failed race children with shared parent trace', () => {
     const first = tracedError('primary failed', 'fx/Fail/fail', { kind: 'fail' }, sharedRaceTrace(0))
     const second = tracedError('replica failed', 'fx/Fail/fail', { kind: 'fail' }, sharedRaceTrace(1))
@@ -356,9 +493,20 @@ const tracedError = (
   metadata = {},
   parent?: ReturnType<typeof prependTrace>
 ) => {
+  return tracedErrorAt(message, traceMessage, 10, 11, metadata, parent)
+}
+
+const tracedErrorAt = (
+  message: string,
+  traceMessage: string,
+  line: number,
+  column: number,
+  metadata = {},
+  parent?: ReturnType<typeof prependTrace>
+) => {
   const error = new Error(message)
   attachTrace(error, prependTrace(
-    stackBreadcrumb(traceMessage, `Error: ${traceMessage}\n    at fn (${import.meta.filename}:10:11)`),
+    stackBreadcrumb(traceMessage, `Error: ${traceMessage}\n    at fn (${import.meta.filename}:${line}:${column})`),
     parent,
     metadata
   ))
@@ -409,6 +557,21 @@ const restoreEnv = (name: string, value: string | undefined): void => {
   if (value === undefined) delete process.env[name]
   else process.env[name] = value
 }
+
+const sourceFixture = [
+  'const one = 1',
+  'const two = 2',
+  'const three = 3',
+  'const four = 4',
+  'const five = 5',
+  'const six = 6',
+  'const seven = 7',
+  'const value = one + two',
+  'const previous = value',
+  "yield* fail(new Error('boom'))",
+  'return previous',
+  'const done = true'
+].join('\n')
 
 function ansiRegex(flags?: string): RegExp {
   return new RegExp(`${escapeRegExp(String.fromCharCode(27))}\\[[0-9;]+m`, flags)

@@ -79,8 +79,16 @@ export interface DiagnosticSnapshot extends DiagnosticErrorSnapshot { }
 
 export type DiagnosticColorMode = 'auto' | 'always' | 'never'
 
+export type DiagnosticSourceLookup = (location: TraceLocation) => string | undefined
+
+export interface DiagnosticSourceFormatOptions {
+  readonly lookup: DiagnosticSourceLookup
+  readonly contextLines?: number
+}
+
 export interface DiagnosticFormatOptions {
   readonly colors?: DiagnosticColorMode
+  readonly source?: false | DiagnosticSourceFormatOptions
 }
 
 export const traceFrom = (origin: Breadcrumb, parent?: Trace, metadata?: TraceFrameMetadata): Trace =>
@@ -355,6 +363,7 @@ const aggregateErrors = (error: unknown): readonly unknown[] | undefined => {
 
 interface FormatContext {
   readonly style: DiagnosticStyle
+  readonly source?: SourceFormatContext
 }
 
 interface DiagnosticStyle {
@@ -363,14 +372,33 @@ interface DiagnosticStyle {
   readonly location: (s: string) => string
   readonly section: (s: string) => string
   readonly frameMetadata: (s: string) => string
+  readonly sourceGutter: (s: string) => string
+  readonly sourceContext: (s: string) => string
+  readonly sourceTargetPrefix: (s: string) => string
+  readonly sourceCaret: (s: string) => string
 }
 
 interface FormatDiagnosticErrorOptions {
   readonly omitTraceSuffix?: number
+  readonly sourceSnippets?: boolean
+  readonly parentTraceFrames?: readonly TraceSnapshotFrame[]
+}
+
+interface SourceFormatContext {
+  readonly lookup: DiagnosticSourceLookup
+  readonly contextLines: number
 }
 
 const formatContext = (options: DiagnosticFormatOptions | undefined): FormatContext => ({
-  style: colorEnabled(options?.colors ?? 'auto') ? ansiStyle : plainStyle
+  style: colorEnabled(options?.colors ?? 'auto') ? ansiStyle : plainStyle,
+  ...(options?.source === undefined || options.source === false
+    ? {}
+    : {
+        source: {
+          lookup: options.source.lookup,
+          contextLines: options.source.contextLines ?? 1
+        }
+      })
 })
 
 const formatDiagnosticError = (
@@ -386,12 +414,18 @@ const formatDiagnosticError = (
   if (error.trace !== undefined) {
     const omitTraceSuffix = options.omitTraceSuffix ?? 0
     const frames = omitTraceSuffix === 0 ? error.trace.frames : error.trace.frames.slice(0, -omitTraceSuffix)
-    formatDiagnosticTrace(frames, error.trace, lines, indent, context, omitTraceSuffix === 0)
+    if (traceAlreadyShown(frames, options.parentTraceFrames)) {
+      lines.push(`${prefix}  ${context.style.section('<trace already shown above>')}`)
+    } else {
+      formatDiagnosticTrace(frames, error.trace, lines, indent, context, omitTraceSuffix === 0, options.sourceSnippets ?? true)
+    }
   }
 
   if (error.cause !== undefined) {
     lines.push(`${prefix}${context.style.section('Caused by:')}`)
-    formatDiagnosticError(error.cause, lines, indent + 2, context)
+    formatDiagnosticError(error.cause, lines, indent + 2, context, {
+      parentTraceFrames: displayedTraceFrames(error, options.omitTraceSuffix ?? 0)
+    })
   }
 
   if (error.aggregate !== undefined) {
@@ -429,8 +463,8 @@ const formatDiagnosticAggregate = (
   if (sharedSuffixLength > 0) {
     const trace = firstTrace(errors)
     if (trace !== undefined) {
-      lines.push(`${prefix}${context.style.section('Shared parent trace:')}`)
-      formatDiagnosticTrace(trace.frames.slice(-sharedSuffixLength), trace, lines, indent + 2, context, true)
+    lines.push(`${prefix}${context.style.section('Shared parent trace:')}`)
+      formatDiagnosticTrace(trace.frames.slice(-sharedSuffixLength), trace, lines, indent + 2, context, true, false)
     }
   }
 }
@@ -441,15 +475,22 @@ const formatDiagnosticTrace = (
   lines: string[],
   indent: number,
   context: FormatContext,
-  includeStatus: boolean
+  includeStatus: boolean,
+  sourceSnippets: boolean
 ): void => {
   const prefix = ' '.repeat(indent)
+  let snippetRendered = false
 
   if (frames.length > 0) {
     lines.push(`${prefix}${context.style.section('Fx trace:')}`)
     for (const frame of frames) {
       lines.push(`${prefix}  at ${formatSnapshotFrame(frame, context)}`)
-      if (frame.location !== undefined) lines.push(`${prefix}     ${formatTraceLocation(frame.location, context)}`)
+      if (frame.location !== undefined) {
+        lines.push(`${prefix}     ${formatTraceLocation(frame.location, context)}`)
+        if (sourceSnippets && !snippetRendered && formatSourceSnippet(frame.location, lines, indent + 5, context)) {
+          snippetRendered = true
+        }
+      }
     }
   }
 
@@ -480,6 +521,68 @@ const formatTraceLocation = (location: TraceLocation, context: FormatContext): s
     : `${location.file}${location.line === undefined ? '' : `:${location.line}${location.column === undefined ? '' : `:${location.column}`}`}`
 
   return context.style.location(formatted)
+}
+
+const formatSourceSnippet = (
+  location: TraceLocation,
+  lines: string[],
+  indent: number,
+  context: FormatContext
+): boolean => {
+  if (
+    context.source === undefined
+    || location.file === undefined
+    || location.line === undefined
+    || location.column === undefined
+    || location.line < 1
+    || location.column < 1
+  ) return false
+
+  const source = lookupSource(context.source.lookup, location)
+  if (source === undefined) return false
+
+  const sourceLines = source.split(/\r\n|\n|\r/)
+  const lineIndex = location.line - 1
+  if (lineIndex < 0 || lineIndex >= sourceLines.length) return false
+
+  const contextLines = Number.isFinite(context.source.contextLines)
+    ? Math.max(0, Math.floor(context.source.contextLines))
+    : 1
+  const start = Math.max(0, lineIndex - contextLines)
+  const end = Math.min(sourceLines.length - 1, lineIndex + contextLines)
+  const lineNumberWidth = String(end + 1).length
+  const prefix = ' '.repeat(indent)
+
+  lines.push(`${prefix}${context.style.sourceGutter('|')}`)
+
+  for (let i = start; i <= end; i++) {
+    const lineNumber = String(i + 1).padStart(lineNumberWidth, ' ')
+    const line = i === lineIndex
+      ? formatTargetSourceLine(sourceLines[i], location.column, context)
+      : context.style.sourceContext(sourceLines[i])
+
+    lines.push(`${prefix}${context.style.sourceGutter(`${lineNumber} |`)} ${line}`)
+
+    if (i === lineIndex) {
+      const caretColumn = Math.min(location.column, sourceLines[i].length + 1)
+      lines.push(`${prefix}${context.style.sourceGutter(`${' '.repeat(lineNumberWidth)} |`)} ${' '.repeat(caretColumn - 1)}${context.style.sourceCaret('^')}`)
+    }
+  }
+
+  return true
+}
+
+const formatTargetSourceLine = (line: string, column: number, context: FormatContext): string => {
+  const splitIndex = Math.min(column - 1, line.length)
+  return `${context.style.sourceTargetPrefix(line.slice(0, splitIndex))}${line.slice(splitIndex)}`
+}
+
+const lookupSource = (lookup: DiagnosticSourceLookup, location: TraceLocation): string | undefined => {
+  try {
+    return lookup(location)
+  } catch {
+    return undefined
+  }
 }
 
 const sharedTraceSuffixLength = (errors: readonly DiagnosticErrorSnapshot[]): number => {
@@ -514,12 +617,30 @@ const traceFrameKey = (frame: TraceSnapshotFrame): string =>
     frame.location?.raw
   ])
 
+const displayedTraceFrames = (error: DiagnosticErrorSnapshot, omitTraceSuffix: number): readonly TraceSnapshotFrame[] | undefined => {
+  if (error.trace === undefined) return undefined
+  return omitTraceSuffix === 0 ? error.trace.frames : error.trace.frames.slice(0, -omitTraceSuffix)
+}
+
+const traceAlreadyShown = (
+  frames: readonly TraceSnapshotFrame[],
+  parentFrames: readonly TraceSnapshotFrame[] | undefined
+): boolean =>
+  frames.length > 0
+  && parentFrames !== undefined
+  && frames.length <= parentFrames.length
+  && frames.every((frame, i) => traceFrameKey(frame) === traceFrameKey(parentFrames[i]))
+
 const plainStyle: DiagnosticStyle = {
   header: identity,
   code: identity,
   location: identity,
   section: identity,
-  frameMetadata: identity
+  frameMetadata: identity,
+  sourceGutter: identity,
+  sourceContext: identity,
+  sourceTargetPrefix: identity,
+  sourceCaret: identity
 }
 
 const ansiStyle: DiagnosticStyle = {
@@ -527,7 +648,11 @@ const ansiStyle: DiagnosticStyle = {
   code: ansi(33),
   location: ansi(4, 36),
   section: ansi(2),
-  frameMetadata: ansi(35)
+  frameMetadata: ansi(35),
+  sourceGutter: ansi(2),
+  sourceContext: ansi(2),
+  sourceTargetPrefix: ansi(2),
+  sourceCaret: ansi(1, 31)
 }
 
 const colorEnabled = (mode: DiagnosticColorMode): boolean => {

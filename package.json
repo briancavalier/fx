@@ -76,6 +76,10 @@
       "types": "./dist/Trace.d.ts",
       "import": "./dist/Trace.js"
     },
+    "./TraceNode": {
+      "types": "./dist/TraceNode.d.ts",
+      "import": "./dist/TraceNode.js"
+    },
     "./Time": {
       "types": "./dist/Time.d.ts",
       "import": "./dist/Time.js"

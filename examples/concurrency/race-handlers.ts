@@ -3,6 +3,7 @@ import { RaceAllFailed, firstSettled, firstSuccess, race, unbounded } from '../.
 import { Fail, fail, returnFail } from '../../src/Fail'
 import { defaultTime, sleep } from '../../src/Time'
 import { formatDiagnostic, formatError, snapshotError } from '../../src/Trace'
+import { nodeSourceLookup } from '../../src/TraceNode'
  
 // This example builds one Race request and interprets it with two different
 // handlers. `firstSettled` is first-settled, like Promise.race: the fast failure
@@ -23,6 +24,7 @@ const slowSuccess = fx(function* () {
 // Construct a Race effect once. The handler applied later determines how this
 // same request is interpreted.
 const request = race([fastFailure, slowSuccess])
+const sourceLookup = nodeSourceLookup()
 
 const firstSettledResult = await request.pipe(
   // First-settled semantics: the fast failure wins and cancels the slow success.
@@ -75,7 +77,7 @@ if (Fail.is(allFailed) && allFailed.arg instanceof RaceAllFailed) {
 function printFailure(failure: unknown): void {
   console.log([
     'Human-readable diagnostic:',
-    formatDiagnostic(failure),
+    formatDiagnostic(failure, { source: { lookup: sourceLookup } }),
     '',
     'Short human-readable error:',
     formatError(failure),

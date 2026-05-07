@@ -3,7 +3,10 @@ import { firstSettled, race, unbounded } from "../../src/Concurrent"
 import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll, fail } from "../../src/Fail"
 import { defaultTime, sleep } from "../../src/Time"
-import { formatDiagnostic, snapshotError } from "../../src/Trace"
+import { formatDiagnostic, formatError, snapshotError } from "../../src/Trace"
+import { nodeSourceLookup } from "../../src/TraceNode"
+
+const sourceLookup = nodeSourceLookup()
 
 const child1 = fx(function* () {
   yield* log('child1 start')
@@ -34,8 +37,11 @@ await race([child1, child2, child3]).pipe(
 
 function errorWithTrace(e: unknown) {
   return error([
-    'Human-readable error:',
-    formatDiagnostic(e),
+    'Human-readable diagnostic:',
+    formatDiagnostic(e, { source: { lookup: sourceLookup } }),
+    '',
+    'Short human-readable error:',
+    formatError(e),
     '',
     'Structured diagnostic snapshot:',
     JSON.stringify(snapshotError(e), null, 2)

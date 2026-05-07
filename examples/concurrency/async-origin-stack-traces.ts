@@ -4,7 +4,10 @@ import { fork, unbounded } from "../../src/Concurrent"
 import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll } from "../../src/Fail"
 import { wait } from "../../src/Task"
-import { formatError, snapshotError } from "../../src/Trace"
+import { formatDiagnostic, formatError, snapshotError } from "../../src/Trace"
+import { nodeSourceLookup } from "../../src/TraceNode"
+
+const sourceLookup = nodeSourceLookup()
 
 const loadUser = assertPromise(async () => {
   await Promise.resolve()
@@ -26,7 +29,10 @@ await program.pipe(
 
 function errorWithTrace(e: unknown) {
   return error([
-    'Human-readable error:',
+    'Human-readable diagnostic:',
+    formatDiagnostic(e, { source: { lookup: sourceLookup } }),
+    '',
+    'Short human-readable error:',
     formatError(e),
     '',
     'Structured diagnostic snapshot:',

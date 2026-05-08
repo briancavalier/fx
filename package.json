@@ -94,7 +94,8 @@
   ],
   "scripts": {
     "build": "tsc --project ./tsconfig.build.json",
-    "benchmark": "tsx benchmarks/trace.ts",
+    "benchmark:trace": "tsx benchmarks/trace.ts",
+    "benchmark:runtime-context": "tsx benchmarks/runtime-context.ts",
     "lint": "npx --package oxlint@latest --package oxlint-tsgolint@latest oxlint --type-aware",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "test:watch": "node --import tsx --test --test-reporter=dot --watch './src/**/*.test.ts'",

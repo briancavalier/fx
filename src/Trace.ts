@@ -1,10 +1,11 @@
 import { Breadcrumb } from './Breadcrumb.js'
 import {
-  capturesTrace,
   getTraceCapturePolicy,
   setTraceCapturePolicy
 } from './internal/tracePolicy.js'
 import type { TraceCapturePolicy } from './internal/tracePolicy.js'
+import type { Fx } from './Fx.js'
+import { capturesTrace, withRuntimeContext } from './internal/runtimeContext.js'
 
 export type { TraceCapturePolicy }
 export { getTraceCapturePolicy, setTraceCapturePolicy }
@@ -95,13 +96,13 @@ export const traceFrom = (origin: Breadcrumb, parent?: Trace, metadata?: TraceFr
   prependTrace(origin, parent, metadata)
 
 export const captureTrace = (origin: Breadcrumb, parent?: Trace, metadata?: TraceFrameMetadata): Trace | undefined =>
-  capturesTrace() ? prependTrace(origin, parent, metadata) : undefined
+  captureTraceWith(origin, parent, metadata)
 
 export const prependTrace = (origin: Breadcrumb, parent?: Trace, metadata?: TraceFrameMetadata): Trace =>
   prependFrame({ message: origin.message, stackSource: origin, ...metadata }, parent)
 
 export const capturePrependTrace = (origin: Breadcrumb, parent?: Trace, metadata?: TraceFrameMetadata): Trace | undefined =>
-  capturesTrace() ? prependTrace(origin, parent, metadata) : parent
+  capturePrependTraceWith(origin, parent, metadata)
 
 export const appendTrace = (trace: Trace, parent?: Trace): Trace => {
   if (parent === undefined) return trace
@@ -133,11 +134,31 @@ export const appendTrace = (trace: Trace, parent?: Trace): Trace => {
   return fromFrames(frames, truncated)
 }
 
-export const captureAppendTrace = (trace: Trace | undefined, parent?: Trace): Trace | undefined => {
+export const captureAppendTrace = (trace: Trace | undefined, parent?: Trace): Trace | undefined =>
+  captureAppendTraceWith(trace, parent)
+
+const captureTraceWith = (origin: Breadcrumb, parent?: Trace, metadata?: TraceFrameMetadata): Trace | undefined =>
+  capturesTrace() ? prependTrace(origin, parent, metadata) : undefined
+
+const capturePrependTraceWith = (origin: Breadcrumb, parent?: Trace, metadata?: TraceFrameMetadata): Trace | undefined =>
+  capturesTrace() ? prependTrace(origin, parent, metadata) : parent
+
+const captureAppendTraceWith = (trace: Trace | undefined, parent?: Trace): Trace | undefined => {
   if (!capturesTrace()) return undefined
   if (trace === undefined) return parent
   return appendTrace(trace, parent)
 }
+
+/**
+ * Run an Fx region with the specified trace capture policy.
+ *
+ * The policy applies to trace captures performed while the returned Fx executes.
+ * Fx values constructed before entering the region keep any trace metadata they
+ * already captured.
+ */
+export const withTraceCapture = (policy: TraceCapturePolicy) =>
+  <const E, const A>(fx: Fx<E, A>): Fx<E, A> =>
+    withRuntimeContext({ traceCapturePolicy: policy }, fx)
 
 export const attachTrace = (error: object, trace: Trace): void => {
   Object.defineProperty(error, TraceTypeId, {
@@ -660,9 +681,9 @@ const colorEnabled = (mode: DiagnosticColorMode): boolean => {
   if (mode === 'never') return false
 
   const env = processEnv()
+  if (env?.NO_COLOR !== undefined) return false
   if (env?.FORCE_COLOR === '0') return false
   if (env?.FORCE_COLOR !== undefined) return true
-  if (env?.NO_COLOR !== undefined) return false
   if (env?.TERM === 'dumb') return false
 
   return processStdoutIsTty()

@@ -1,11 +1,18 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { assertPromise, tryPromise } from './Async.js'
 import { at } from './Breadcrumb.js'
-import { fail } from './Fail.js'
-import { runPromise } from './Fx.js'
-import { MaxTraceDepth, appendTrace, attachTrace, captureTrace, formatDiagnostic, formatError, formatTrace, getTrace, getTraceCapturePolicy, prependTrace, setTraceCapturePolicy, snapshotError, snapshotTrace } from './Trace.js'
+import { all, defaultAll, firstSettled, fork, race, unbounded } from './Concurrent.js'
+import { Fail, fail, returnFail } from './Fail.js'
+import { fx, runPromise } from './Fx.js'
+import { defaultRetry, retry } from './Retry.js'
+import { wait } from './Task.js'
+import { sleep, withClock } from './Time.js'
+import { TimeoutError, defaultTimeout, timeout } from './Timeout.js'
+import { MaxTraceDepth, appendTrace, attachTrace, captureTrace, formatDiagnostic, formatError, formatTrace, getTrace, getTraceCapturePolicy, prependTrace, setTraceCapturePolicy, snapshotError, snapshotTrace, withTraceCapture } from './Trace.js'
 import type { Trace } from './Trace.js'
 import type { Breadcrumb } from './Breadcrumb.js'
+import { VirtualClock } from './internal/time.js'
 
 describe('Trace', () => {
   it('defaults to full stack capture', () => {
@@ -44,6 +51,235 @@ describe('Trace', () => {
     } finally {
       setTraceCapturePolicy(previous)
     }
+  })
+
+  it('withTraceCapture off avoids attaching traces captured inside the region', async () => {
+    const f = fx(function* () {
+      yield* fail(new Error('regional off'))
+    })
+
+    await assert.rejects(
+      runPromise(f.pipe(withTraceCapture('off')) as never),
+      e => e instanceof Error && getTrace(e) === undefined
+    )
+  })
+
+  it('withTraceCapture labels captures regional frames without stack locations', async () => {
+    const f = fx(function* () {
+      yield* fail(new Error('regional labels'))
+    })
+
+    await assert.rejects(
+      runPromise(f.pipe(withTraceCapture('labels')) as never),
+      e => {
+        const trace = snapshotError(e).trace
+        return e instanceof Error
+          && trace?.frames[0]?.message === 'fx/Fail/fail'
+          && trace.frames[0].kind === 'fail'
+          && trace.frames[0].location === undefined
+      }
+    )
+  })
+
+  it('withTraceCapture uses the innermost regional policy', async () => {
+    const inner = fx(function* () {
+      yield* fail(new Error('inner labels'))
+    })
+
+    const outer = fx(function* () {
+      yield* inner.pipe(withTraceCapture('labels'))
+    })
+
+    await assert.rejects(
+      runPromise(outer.pipe(withTraceCapture('off')) as never),
+      e => {
+        const trace = snapshotError(e).trace
+        return e instanceof Error
+          && trace?.frames[0]?.message === 'fx/Fail/fail'
+          && trace.frames[0].location === undefined
+      }
+    )
+  })
+
+  it('withTraceCapture overrides the global default only inside the region', async () => {
+    const previous = setTraceCapturePolicy('off')
+    try {
+      const f = fx(function* () {
+        yield* fail(new Error('regional full'))
+      })
+
+      await assert.rejects(
+        runPromise(f.pipe(withTraceCapture('full')) as never),
+        e => e instanceof Error && getTrace(e) !== undefined
+      )
+
+      await assert.rejects(
+        runPromise(fail(new Error('global off')) as never),
+        e => e instanceof Error && getTrace(e) === undefined
+      )
+    } finally {
+      setTraceCapturePolicy(previous)
+    }
+  })
+
+  it('does not rewrite traces captured before entering a region', async () => {
+    const prebuilt = fail(new Error('prebuilt'))
+
+    await assert.rejects(
+      runPromise(prebuilt.pipe(withTraceCapture('off')) as never),
+      e => e instanceof Error && getTrace(e) !== undefined
+    )
+  })
+
+  it('propagates regional trace policy to forked children without sibling interference', async () => {
+    const previous = setTraceCapturePolicy('off')
+    try {
+      const labelsError = new Error('labels child')
+      const offChild = fx(function* () {
+        yield* fail(new Error('off child'))
+      }).pipe(withTraceCapture('off'))
+      const labelsChild = fx(function* () {
+        yield* fail(labelsError)
+      }).pipe(withTraceCapture('labels'))
+
+      const f = fx(function* () {
+        const off = yield* fork(offChild)
+        const labels = yield* fork(labelsChild)
+        const offResult = yield* wait(off).pipe(returnFail)
+        const labelsResult = yield* wait(labels).pipe(returnFail)
+        return [offResult, labelsResult] as const
+      })
+
+      const [offResult, labelsResult] = await f.pipe(unbounded, runPromise)
+
+      assert.ok(Fail.is(offResult))
+      assert.ok(Fail.is(labelsResult))
+      assert.equal(getTrace(offResult.arg), undefined)
+      assert.equal(snapshotError(labelsResult.arg).trace?.frames[0]?.location, undefined)
+    } finally {
+      setTraceCapturePolicy(previous)
+    }
+  })
+
+  it('propagates regional trace policy and frame metadata through all and race handlers', async () => {
+    const previous = setTraceCapturePolicy('off')
+    try {
+      const allError = new Error('all failed')
+      const raceError = new Error('race failed')
+      const allProgram = fx(function* () {
+        return yield* all([fx(function* () { yield* fail(allError) })]).pipe(withTraceCapture('labels'), defaultAll)
+      })
+      const raceProgram = fx(function* () {
+        return yield* race([fx(function* () { yield* fail(raceError) })]).pipe(withTraceCapture('labels'), firstSettled)
+      })
+
+      const allResult = await allProgram.pipe(returnFail, unbounded, runPromise)
+      const raceResult = await raceProgram.pipe(returnFail, unbounded, runPromise)
+
+      assert.ok(Fail.is(allResult))
+      assert.ok(Fail.is(raceResult))
+      assert.deepEqual(traceMessages(allResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/all[0]', 'fx/Concurrent/all'])
+      assert.equal(snapshotError(allResult.arg).trace?.frames[1]?.kind, 'fork')
+      assert.equal(snapshotError(allResult.arg).trace?.frames[1]?.index, 0)
+      assert.deepEqual(traceMessages(raceResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/race[0]', 'fx/Concurrent/race'])
+      assert.equal(snapshotError(raceResult.arg).trace?.frames[1]?.kind, 'fork')
+      assert.equal(snapshotError(raceResult.arg).trace?.frames[1]?.index, 0)
+    } finally {
+      setTraceCapturePolicy(previous)
+    }
+  })
+
+  it('wait converts task failures using the task runtime context', async () => {
+    const previous = setTraceCapturePolicy('off')
+    try {
+      const failingTask = await fx(function* () {
+        return yield* fork(fx(function* () {
+          yield* fail(new Error('task context'))
+        }).pipe(withTraceCapture('full')))
+      }).pipe(unbounded, runPromise)
+
+      const result = await wait(failingTask).pipe(
+        withTraceCapture('off'),
+        returnFail,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.deepEqual(traceMessages(result.arg).slice(0, 1), ['fx/Fail/fail'])
+      assert.ok(snapshotError(result.arg).trace?.frames[0]?.location !== undefined)
+    } finally {
+      setTraceCapturePolicy(previous)
+    }
+  })
+
+  it('uses regional trace policy for rejected async and synchronous exceptions', async () => {
+    await assert.rejects(
+      runPromise(fx(function* () {
+        yield* assertPromise(() => Promise.reject(new Error('async off')))
+      }).pipe(withTraceCapture('off'))),
+      e => e instanceof Error && getTrace(e) === undefined
+    )
+
+    await assert.rejects(
+      runPromise(fx(function* () {
+        throw new Error('sync off')
+      }).pipe(withTraceCapture('off'))),
+      e => e instanceof Error && getTrace(e) === undefined
+    )
+  })
+
+  it('uses regional trace policy when tryPromise converts rejection to Fail', async () => {
+    const previous = setTraceCapturePolicy('off')
+    try {
+      const result = await tryPromise(() => Promise.reject(new Error('try labels')))
+        .pipe(withTraceCapture('labels'), returnFail, runPromise)
+
+      assert.ok(Fail.is(result))
+      const trace = result.trace === undefined ? undefined : snapshotTrace(result.trace)
+      assert.equal(trace?.frames[0]?.message, 'fx/Fail/fail')
+      assert.equal(trace?.frames[0]?.kind, 'fail')
+      assert.equal(trace?.frames[0]?.location, undefined)
+    } finally {
+      setTraceCapturePolicy(previous)
+    }
+
+    const fullPrevious = setTraceCapturePolicy('full')
+    try {
+      const result = await tryPromise(() => Promise.reject(new Error('try off')))
+        .pipe(withTraceCapture('off'), returnFail, runPromise)
+
+      assert.ok(Fail.is(result))
+      assert.equal(result.trace, undefined)
+    } finally {
+      setTraceCapturePolicy(fullPrevious)
+    }
+  })
+
+  it('propagates regional trace policy through timeout and retry handlers', async () => {
+    const clock = new VirtualClock(0)
+    const timeoutProgram = fx(function* () {
+      return yield* sleep(100).pipe(timeout({ ms: 50 }), defaultTimeout())
+    })
+
+    const timeoutPromise = timeoutProgram.pipe(withTraceCapture('labels'), returnFail, unbounded, withClock(clock), runPromise)
+    await clock.step(50)
+    const timeoutResult = await timeoutPromise
+
+    assert.ok(Fail.is(timeoutResult))
+    assert.ok(timeoutResult.arg instanceof TimeoutError)
+    assert.equal(snapshotError(timeoutResult.arg).trace?.frames[0]?.kind, 'timeout')
+    assert.equal(snapshotError(timeoutResult.arg).trace?.frames[0]?.location, undefined)
+
+    const retryError = new Error('retry failed')
+    const retryProgram = fx(function* () {
+      return yield* fail(retryError).pipe(retry({ retries: 0 }), defaultRetry())
+    })
+    const retryResult = await retryProgram.pipe(withTraceCapture('labels'), returnFail, runPromise)
+
+    assert.ok(Fail.is(retryResult))
+    assert.equal(retryResult.arg, retryError)
+    assert.equal(snapshotError(retryError).trace?.frames[0]?.kind, 'retry')
+    assert.equal(snapshotError(retryError).trace?.frames[0]?.location, undefined)
   })
 
   it('prepends frames newest first', () => {
@@ -233,11 +469,13 @@ describe('Trace', () => {
     Object.defineProperty(error, 'code', { value: 'TEST_WRAPPER' })
 
     assert.equal(formatError(error), 'Error: wrapper failed')
-    assert.match(formatDiagnostic(error), /Error \[TEST_WRAPPER\]: wrapper failed/)
-    assert.match(formatDiagnostic(error), /Fx trace:/)
-    assert.match(formatDiagnostic(error), /Caused by:/)
-    assert.match(formatDiagnostic(error), /at cause trace \[async\]/)
-    assert.match(formatDiagnostic(error), new RegExp(`${escapeRegExp(import.meta.filename)}:4:5`))
+    const formatted = formatDiagnostic(error, { colors: 'never' })
+
+    assert.match(formatted, /Error \[TEST_WRAPPER\]: wrapper failed/)
+    assert.match(formatted, /Fx trace:/)
+    assert.match(formatted, /Caused by:/)
+    assert.match(formatted, /at cause trace \[async\]/)
+    assert.match(formatted, new RegExp(`${escapeRegExp(import.meta.filename)}:4:5`))
   })
 
   it('formats diagnostics without ansi escapes when colors are disabled', () => {
@@ -264,12 +502,15 @@ describe('Trace', () => {
 
   it('formats diagnostics without ansi escapes by default in non-tty test runs', () => {
     const previousNoColor = process.env.NO_COLOR
+    const previousForceColor = process.env.FORCE_COLOR
+    delete process.env.FORCE_COLOR
     process.env.NO_COLOR = '1'
     try {
       const formatted = formatDiagnostic(tracedError('default plain', 'default trace'))
 
       assert.doesNotMatch(formatted, ansiPattern)
     } finally {
+      restoreEnv('FORCE_COLOR', previousForceColor)
       restoreEnv('NO_COLOR', previousNoColor)
     }
   })
@@ -540,6 +781,11 @@ const messagesOf = (trace: ReturnType<typeof prependTrace>) => {
     current = current.parent
   }
   return messages
+}
+
+const traceMessages = (e: unknown) => {
+  const trace = getTrace(e)
+  return trace === undefined ? [] : messagesOf(trace)
 }
 
 const escapeRegExp = (s: string) =>

@@ -2,6 +2,7 @@ import { EffectType, isEffect } from '../Effect.js'
 import { Fx } from '../Fx.js'
 import type { HandlerContext } from '../Scoped.js'
 import { Pipeable, pipeThis } from './pipe.js'
+import { getRuntimeContext, withActiveRuntimeContext, withRuntimeContext } from './runtimeContext.js'
 
 export type Answer<E extends EffectType> = InstanceType<E>['R']
 export type Arg<E extends EffectType> = InstanceType<E>['arg']
@@ -23,12 +24,17 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
 
       while (!ir.done) {
         if (isEffect(ir.value)) {
-          if (effectId === ir.value._fxEffectId) {
-            ir = i.next(yield* handler(ir.value.arg) as any)
-          } else if (ir.value._fxEffectId === 'fx/Scoped') {
-            ir = i.next([this, ...(yield ir.value) as any])
+          const effect = ir.value
+          if (effectId === effect._fxEffectId) {
+            const context = getRuntimeContext(effect)
+            const handled = context === undefined
+              ? handler(effect.arg)
+              : withActiveRuntimeContext(context, () => handler(effect.arg))
+            ir = i.next(yield* withRuntimeContext(context, handled) as any)
+          } else if (effect._fxEffectId === 'fx/Scoped') {
+            ir = i.next([this, ...(yield effect) as any])
           } else {
-            ir = i.next(yield ir.value as any)
+            ir = i.next(yield effect as any)
           }
         } else {
           throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
@@ -66,13 +72,18 @@ export class Control<E, A> implements Fx<E, A>, Pipeable {
 
       while (!ir.done) {
         if (isEffect(ir.value)) {
-          if (effectId === ir.value._fxEffectId) {
-            const hr = yield* handler(k, ir.value.arg) as any
+          const effect = ir.value
+          if (effectId === effect._fxEffectId) {
+            const context = getRuntimeContext(effect)
+            const handled = context === undefined
+              ? handler(k, effect.arg)
+              : withActiveRuntimeContext(context, () => handler(k, effect.arg))
+            const hr = yield* withRuntimeContext(context, handled) as any
             if (!done) return hr
             done = false
             ir = i.next(hr)
           } else {
-            ir = i.next(yield ir.value as any)
+            ir = i.next(yield effect as any)
           }
         } else {
           throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)

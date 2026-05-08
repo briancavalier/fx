@@ -14,6 +14,18 @@ Primary commands:
 - `npm run build`
 - `npm run lint`
 
+Design preference:
+- Prefer simple, direct, explicit implementations over clever or implicit ones.
+- Keep context propagation explicit at interpreter/runtime boundaries.
+- Do not hide cross-cutting behavior in base abstractions unless it is fundamental to that abstraction.
+- Avoid broad generic infrastructure until at least two concrete uses justify it.
+- Prefer small internal helpers over framework-like dependency graphs, service containers, or ambient capability systems.
+- Preserve construction-time vs execution-time behavior clearly; tests should make that boundary explicit.
+- Start new features from the smallest public API that solves the use case.
+- Keep internal state local to the module/runtime path that owns it.
+- Prefer readable duplication over premature abstraction.
+- If an implementation requires non-obvious tagging, ambient stacks, or implicit propagation, document why and add focused tests around the boundary.
+
 Development guidance:
 - Prefer existing patterns in `src/Fx.ts`, `src/Effect.ts`, and `src/Handler.ts`.
 - Preserve strong effect typing. Changes should keep `E` unions meaningful and narrowed by handlers.

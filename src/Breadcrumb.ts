@@ -1,3 +1,5 @@
+import { capturesStack } from './internal/runtimeContext.js'
+
 /**
  * A labeled annotation with an optional stack representing a
  * specific point in execution.
@@ -54,4 +56,3 @@ const replaceStackMessage = (stack: string | undefined, current: string, next: s
 
   return `${replaced}${rest}`
 }
-import { capturesStack } from './internal/tracePolicy.js'

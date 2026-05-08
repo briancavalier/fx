@@ -111,6 +111,8 @@ function workspaceFile(worktreePath) {
     {
       folders: [{ path: resolve(worktreePath) }],
       settings: {
+        "terminal.integrated.cwd": "${workspaceFolder}",
+        "terminal.integrated.splitCwd": "workspaceRoot",
         "window.title": "${rootName} - ${activeRepositoryBranchName}",
       },
     },

@@ -45,10 +45,9 @@ export interface TraceOrigin {
   readonly trace?: Trace
 }
 
-export interface TraceOptions {
-  readonly origin?: Breadcrumb
-  readonly trace?: Trace
-}
+export type TraceOptions =
+  | { readonly origin?: Breadcrumb; readonly trace?: undefined }
+  | TraceOrigin
 
 export interface TraceLocation {
   readonly raw: string

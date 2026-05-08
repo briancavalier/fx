@@ -10,9 +10,3 @@ export const setTraceCapturePolicy = (policy: TraceCapturePolicy): TraceCaptureP
   traceCapturePolicy = policy
   return previous
 }
-
-export const capturesTrace = (): boolean =>
-  traceCapturePolicy !== 'off'
-
-export const capturesStack = (): boolean =>
-  traceCapturePolicy === 'full'

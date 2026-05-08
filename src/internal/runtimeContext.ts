@@ -32,12 +32,6 @@ export const withActiveRuntimeContext = <A>(context: RuntimeContext, f: () => A)
   }
 }
 
-export const runWithRuntimeContext = <A>(
-  context: RuntimeContext | undefined,
-  f: () => A
-): A =>
-  context === undefined ? f() : withActiveRuntimeContext(context, f)
-
 export const withRuntimeContext = <E, A>(
   context: RuntimeContext | undefined,
   fx: Fx<E, A>
@@ -91,7 +85,7 @@ class RuntimeContextFx<E, A> implements Fx<E, A>, Pipeable {
   ) { }
 
   [Symbol.iterator](): Iterator<E, A, unknown> {
-    const iterator = runWithRuntimeContext(this.context, () => this.fx[Symbol.iterator]())
+    const iterator = withActiveRuntimeContext(this.context, () => this.fx[Symbol.iterator]())
     return new RuntimeContextIterator(iterator, this.context)
   }
 }
@@ -118,7 +112,7 @@ class RuntimeContextIterator<E, A> implements Iterator<E, A, unknown> {
   }
 
   private run(f: () => IteratorResult<E, A>): IteratorResult<E, A> {
-    return runWithRuntimeContext(this.context, () => {
+    return withActiveRuntimeContext(this.context, () => {
       try {
         const result = f()
         if (!result.done && isEffect(result.value)) attachRuntimeContext(result.value)

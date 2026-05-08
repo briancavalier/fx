@@ -10,11 +10,25 @@ import { wait } from './Task.js'
 import { sleep, withClock } from './Time.js'
 import { TimeoutError, defaultTimeout, timeout } from './Timeout.js'
 import { MaxTraceDepth, appendTrace, attachTrace, captureTrace, formatDiagnostic, formatError, formatTrace, getTrace, getTraceCapturePolicy, prependTrace, setTraceCapturePolicy, snapshotError, snapshotTrace, withTraceCapture } from './Trace.js'
-import type { Trace } from './Trace.js'
+import type { Trace, TraceOptions } from './Trace.js'
 import type { Breadcrumb } from './Breadcrumb.js'
 import { VirtualClock } from './internal/time.js'
 
 describe('Trace', () => {
+  it('requires trace options with a trace to include its origin', () => {
+    const origin = at('trace/options')
+    const trace = prependTrace(origin)
+
+    const complete = { origin, trace } satisfies TraceOptions
+    const defaultTrace = { origin } satisfies TraceOptions
+    // @ts-expect-error trace options require origin when trace is supplied
+    const missingOrigin = { trace } satisfies TraceOptions
+
+    assert.equal(complete.origin, origin)
+    assert.equal(defaultTrace.origin, origin)
+    assert.equal(missingOrigin.trace, trace)
+  })
+
   it('defaults to full stack capture', () => {
     assert.equal(getTraceCapturePolicy(), 'full')
   })

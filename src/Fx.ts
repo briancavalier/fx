@@ -95,15 +95,23 @@ export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E
 /**
  * Execute all the effects of the provided Fx, and return a {@link Task} for its result.
  */
-export const runTask = <const R>(f: Fx<Async | Scoped<string>, R>, { origin = at('fx/runTask', runTask), maxConcurrency }: RunForkOptions = {}): Task<R, never> =>
-  runFork(f.pipe(provideAll({})), { origin, maxConcurrency })
+export const runTask = <const R>(f: Fx<Async | Scoped<string>, R>, options: RunForkOptions = {}): Task<R, never> => {
+  return runFork(f.pipe(provideAll({})), {
+    ...options,
+    origin: options.origin ?? at('fx/runTask', runTask)
+  })
+}
 
 /**
  * Execute all the effects of the provided Fx, and return a Promise for its result,
  * discarding the ability to cancel the computation.
  */
-export const runPromise = <const R>(f: Fx<Async | Scoped<string>, R>, { origin = at('fx/runPromise', runPromise), maxConcurrency }: RunForkOptions = {}): Promise<R> =>
-  runTask(f, { origin, maxConcurrency }).promise
+export const runPromise = <const R>(f: Fx<Async | Scoped<string>, R>, options: RunForkOptions = {}): Promise<R> => {
+  return runTask(f, {
+    ...options,
+    origin: options.origin ?? at('fx/runPromise', runPromise)
+  }).promise
+}
 
 /**
  * Execute all the effects of the provided Fx, and return its result.

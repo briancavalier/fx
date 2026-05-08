@@ -5,21 +5,23 @@ import { Fork, ForkContext } from '../Concurrent.js'
 import { Fx } from '../Fx.js'
 import { HandlerContext, Scoped, withContext } from '../Scoped.js'
 import { Task } from '../Task.js'
-import { Trace, TraceFrameMetadata, attachTrace, captureAppendTrace, capturePrependTrace, captureTrace, getTrace } from '../Trace.js'
+import { attachTrace, captureAppendTrace, capturePrependTrace, captureTrace, getTrace } from '../Trace.js'
+import type { Trace, TraceFrameMetadata, TraceOptions } from '../Trace.js'
 import { Semaphore } from './Semaphore.js'
 import { DisposableSet, dispose } from './disposable.js'
 import type { RuntimeContext } from './runtimeContext.js'
 import { currentRuntimeContext, getRuntimeContext, traceCapturePolicy, withActiveRuntimeContext } from './runtimeContext.js'
 
-export type RunForkOptions = {
-  readonly origin?: Breadcrumb
-  readonly trace?: Trace
+export type RunForkOptions = TraceOptions & {
   readonly maxConcurrency?: number
 }
 
-export const runFork = <const E extends Async | Fork | Fail<unknown> | Scoped<string>, const A>(f: Fx<E, A>, { origin = at('fx/runFork', runFork), trace = captureTraceWithContext(currentRuntimeContext(), origin, undefined, { kind: 'run' }), maxConcurrency = Infinity }: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
+export const runFork = <const E extends Async | Fork | Fail<unknown> | Scoped<string>, const A>(f: Fx<E, A>, options: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new DisposableSet()
   const runtimeContext = currentRuntimeContext()
+  const origin = options.origin ?? at('fx/runFork', runFork)
+  const trace = options.trace ?? captureTraceWithContext(runtimeContext, origin, undefined, { kind: 'run' })
+  const maxConcurrency = options.maxConcurrency ?? Infinity
 
   const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, origin, trace, runtimeContext)
     .finally(() => dispose(disposables))
@@ -106,7 +108,7 @@ const runForkLoop = async <const E, const A>(
       } else if (Fail.is(ir.value)) {
         const causeTrace = getTrace(ir.value.arg)
         const effectContext = runtimeContextOfEffect(ir.value, runtimeContext)
-        const failTrace = traceUnhandledFail(ir.value, trace, effectContext)
+        const failTrace = traceUnhandledFail(ir.value, causeTrace, trace, effectContext)
         const failOrigin = originOfUnhandledFail(ir.value, causeTrace)
         throw new ForkError('FX_UNHANDLED_FAILURE', `Unhandled failure in forked task`, failOrigin, failTrace, effectContext, { cause: ir.value.arg })
       }
@@ -218,10 +220,10 @@ const runtimeContextOfEffect = (effect: unknown, fallback?: RuntimeContext): Run
 
 const traceUnhandledFail = (
   fail: Fail<unknown>,
+  causeTrace: Trace | undefined,
   parentTrace: Trace | undefined,
   runtimeContext?: RuntimeContext
 ): Trace | undefined => {
-  const causeTrace = getTrace(fail.arg)
   if (causeTrace !== undefined) return captureAppendTraceWithContext(runtimeContext, causeTrace, parentTrace)
   if (fail.trace === undefined) return captureAppendTraceWithContext(runtimeContext, undefined, parentTrace)
   return parentTrace === undefined

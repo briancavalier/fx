@@ -170,9 +170,9 @@ const runTask = <A>(run: (s: AbortSignal) => Promise<A>, runtimeContext?: Runtim
   const s = new DisposableAbortController()
   try {
     return runtimeContext === undefined
-      ? new Task<A, unknown>(run(s.signal), s)
+      ? new Task<A, unknown>(run(s.signal), s, runtimeContext)
       : withActiveRuntimeContext(runtimeContext, () =>
-        new Task<A, unknown>(run(s.signal), s)
+        new Task<A, unknown>(run(s.signal), s, runtimeContext)
       )
   } catch (e) {
     s[Symbol.dispose]()
@@ -186,8 +186,8 @@ const taskWithRuntimeContext = <A, E>(
   runtimeContext?: RuntimeContext
 ): Task<A, E> =>
   runtimeContext === undefined
-    ? new Task<A, E>(promise, dispose)
-    : withActiveRuntimeContext(runtimeContext, () => new Task<A, E>(promise, dispose))
+    ? new Task<A, E>(promise, dispose, runtimeContext)
+    : withActiveRuntimeContext(runtimeContext, () => new Task<A, E>(promise, dispose, runtimeContext))
 
 const iteratorWithRuntimeContext = <E, A>(
   f: Fx<E, A>,

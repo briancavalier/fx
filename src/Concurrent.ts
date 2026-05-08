@@ -9,6 +9,7 @@ import { Task, wait as waitTask } from './Task.js'
 import { Trace, captureTrace } from './Trace.js'
 import { Semaphore } from './internal/Semaphore.js'
 import { acquireAndRunFork } from './internal/runFork.js'
+import { currentRuntimeContext } from './internal/runtimeContext.js'
 
 /**
  * Request that a computation be started concurrently, returning a {@link Task}
@@ -293,19 +294,19 @@ type TaskErrorsOf<Tasks extends readonly Task<unknown, unknown>[]> = {
 const taskAll = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) => {
   const d = new DisposeAll(tasks)
   const p = Promise.all(tasks.map(t => t.promise)).finally(() => { d[Symbol.dispose]() })
-  return new Task(p, d) as Task<{ readonly [K in keyof Tasks]: TaskResult<Tasks[K]> }, TaskErrors<Tasks[number]>>
+  return new Task(p, d, currentRuntimeContext()) as Task<{ readonly [K in keyof Tasks]: TaskResult<Tasks[K]> }, TaskErrors<Tasks[number]>>
 }
 
 const taskRace = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) => {
   const d = new DisposeAll(tasks)
   const p = Promise.race(tasks.map(t => t.promise)).finally(() => { d[Symbol.dispose]() })
-  return new Task(p, d) as Task<TaskResult<Tasks[number]>, TaskErrors<Tasks[number]>>
+  return new Task(p, d, currentRuntimeContext()) as Task<TaskResult<Tasks[number]>, TaskErrors<Tasks[number]>>
 }
 
 const taskFirstSuccess = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) => {
   const d = new DisposeAll(tasks)
   const p = firstSuccessfulPromise(tasks).finally(() => { d[Symbol.dispose]() })
-  return new Task(p, d) as Task<TaskResult<Tasks[number]>, RaceAllFailed<TaskErrorsOf<Tasks>>>
+  return new Task(p, d, currentRuntimeContext()) as Task<TaskResult<Tasks[number]>, RaceAllFailed<TaskErrorsOf<Tasks>>>
 }
 
 const firstSuccessfulPromise = async <Tasks extends readonly Task<unknown, unknown>[]>(

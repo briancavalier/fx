@@ -136,13 +136,13 @@ function run(command, args) {
 
 function printUsage(exitCode) {
   const output = exitCode === 0 ? console.log : console.error
-  output(`Usage: npm run worktree:create -- <short-task> [base-ref]
+  output(`Usage: pnpm worktree:create -- <short-task> [base-ref]
 
 Creates a PR-ready worktree under ${WORKTREE_ROOT}.
 When [base-ref] is omitted, fetches origin main and uses origin/main.
 
 Example:
-  npm run worktree:create -- trace-fork-context`)
+  pnpm worktree:create -- trace-fork-context`)
   process.exit(exitCode)
 }
 

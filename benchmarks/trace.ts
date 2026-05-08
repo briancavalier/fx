@@ -200,7 +200,7 @@ function formatMarkdown(results: readonly Result[]): string {
     `- Worktree: ${worktreeState()}`,
     `- Node: ${process.version}`,
     `- Platform: ${platform()} ${release()} ${arch()}`,
-    '- Command: `npm run benchmark`',
+    '- Command: `pnpm benchmark:trace`',
     '',
     '| Case | Iterations | Total ms | Ops/sec | ns/op | Relative |',
     '| --- | ---: | ---: | ---: | ---: | ---: |',

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "TypeScript algebraic effects system",
   "type": "module",
+  "packageManager": "pnpm@10.33.0",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -96,7 +97,7 @@
     "build": "tsc --project ./tsconfig.build.json",
     "benchmark:trace": "tsx benchmarks/trace.ts",
     "benchmark:runtime-context": "tsx benchmarks/runtime-context.ts",
-    "lint": "npx --package oxlint@latest --package oxlint-tsgolint@latest oxlint --type-aware",
+    "lint": "oxlint --type-aware",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "test:watch": "node --import tsx --test --test-reporter=dot --watch './src/**/*.test.ts'",
     "typecheck": "tsc --noEmit",
@@ -109,7 +110,14 @@
     "@types/node": "^25.6.0",
     "oxfmt": "^0.48.0",
     "oxlint": "^1.63.0",
+    "oxlint-tsgolint": "^0.22.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sqlite3"
+    ]
   }
 }

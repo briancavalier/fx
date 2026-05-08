@@ -130,7 +130,7 @@ function formatMarkdown(results: readonly Result[]): string {
     `- Worktree: ${worktreeState()}`,
     `- Node: ${process.version}`,
     `- Platform: ${platform()} ${release()} ${arch()}`,
-    '- Command: `npx tsx benchmarks/runtime-context.ts`',
+    '- Command: `pnpm benchmark:runtime-context`',
     `- Handled effect programs yield ${EffectsPerProgram.toLocaleString()} effects per operation.`,
     '',
     '| Case | Iterations | Total ms | Ops/sec | ns/op | Relative |',

@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
-    "start": "npx tsx ./index.ts"
+    "start": "tsx ./index.ts"
   },
   "keywords": [],
   "author": "",

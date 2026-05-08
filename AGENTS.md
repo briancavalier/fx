@@ -9,16 +9,16 @@ Core idea:
 - Keep the core minimal; avoid adding framework-like dependency graphs, schedulers, or service containers.
 
 Primary commands:
-- `npm test`
-- `npm run typecheck`
-- `npm run build`
-- `npm run lint`
+- `pnpm test`
+- `pnpm typecheck`
+- `pnpm build`
+- `pnpm lint`
 
 Git worktrees:
 - Use git worktrees by default for agent work.
 - Work in the current checkout only when the user explicitly directs it or when the task is limited to read-only inspection, planning, or answering questions.
 - Treat worktrees as PR-ready branches, not scratch space.
-- Create new worktrees with `npm run worktree:create -- <short-task> [base-ref]`.
+- Create new worktrees with `pnpm worktree:create -- <short-task> [base-ref]`.
 - Do not create worktrees with raw `git worktree add` unless the script cannot support an explicitly requested case; if bypassing the script, follow the same branch, path, status file, and workspace file conventions.
 - Create worktrees under `/private/tmp/fx-worktrees/<short-task>`.
 - Use branch names like `codex/<short-task>`.

@@ -6,9 +6,9 @@ Scope:
 Status: in progress
 
 Validation:
-- [ ] npm test
-- [ ] npm run typecheck
-- [ ] npm run build
-- [ ] npm run lint
+- [ ] pnpm test
+- [ ] pnpm typecheck
+- [ ] pnpm build
+- [ ] pnpm lint
 
 Notes:

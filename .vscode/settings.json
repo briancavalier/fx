@@ -1,4 +1,5 @@
 {
   "typescript.tsdk": "node_modules/typescript/lib",
-  "oxc.enable": true
+  "oxc.enable": true,
+  "window.title": "${rootName} - ${activeRepositoryBranchName}"
 }

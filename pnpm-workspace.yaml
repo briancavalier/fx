@@ -1,2 +1,6 @@
 packages:
   - "examples/*"
+
+allowBuilds:
+  esbuild: true
+  sqlite3: true

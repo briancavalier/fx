@@ -2,15 +2,14 @@ import { Breadcrumb, at } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
 import { Fail, fail } from './Fail.js'
 import { Fx, flatten, ok } from './Fx.js'
-import { currentRuntimeContext, withActiveRuntimeContext } from './internal/runtimeContext.js'
-import { Trace, captureTrace } from './Trace.js'
+import { currentRuntimeContext, runWithRuntimeContext } from './internal/runtimeContext.js'
+import { captureTrace } from './Trace.js'
+import type { TraceOrigin } from './Trace.js'
 
 type Run<A> = (abort: AbortSignal) => Promise<A>
 
-export interface AsyncContext<A> {
+export interface AsyncContext<A> extends TraceOrigin {
   readonly run: Run<A>
-  readonly origin: Breadcrumb
-  readonly trace?: Trace
 }
 
 export class Async extends Effect('fx/Async')<AsyncContext<any>> { }
@@ -25,7 +24,7 @@ export const tryPromise = <const A>(f: Run<A>): Fx<Async | Fail<unknown>, A> =>
       const context = currentRuntimeContext()
       return Promise.resolve(signal).then(f).then(
         ok,
-        e => context === undefined ? fail(e) : withActiveRuntimeContext(context, () => fail(e))
+        e => runWithRuntimeContext(context, () => fail(e))
       )
     },
     at('fx/Async/tryPromise', tryPromise)

@@ -3,7 +3,7 @@ import { Async, assertPromise } from './Async.js'
 import { Fail, fail } from './Fail.js'
 import { Fx, flatten, ok } from './Fx.js'
 import type { RuntimeContext } from './internal/runtimeContext.js'
-import { withActiveRuntimeContext } from './internal/runtimeContext.js'
+import { runWithRuntimeContext } from './internal/runtimeContext.js'
 
 export class Task<A, E> {
   private disposed = false
@@ -37,8 +37,8 @@ export const wait = <const A, const E>(t: Task<A, E>) =>
       return context === undefined
         ? p.then(ok, fail)
         : p.then(
-          a => withActiveRuntimeContext(context, () => ok(a)),
-          e => withActiveRuntimeContext(context, () => fail(e))
+          a => runWithRuntimeContext(context, () => ok(a)),
+          e => runWithRuntimeContext(context, () => fail(e))
         )
     })
   ) as Fx<Extract<E, Fail<any>> | Async, A>

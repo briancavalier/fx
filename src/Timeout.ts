@@ -1,5 +1,5 @@
 import { Async } from './Async.js'
-import { Breadcrumb, at } from './Breadcrumb.js'
+import { at } from './Breadcrumb.js'
 import { Fork, firstSettled, race } from './Concurrent.js'
 import { Effect } from './Effect.js'
 import { Fail, catchAll, fail } from './Fail.js'
@@ -7,7 +7,8 @@ import { Fx, flatMap, flatten, fx, map, ok } from './Fx.js'
 import { Handle } from './Handler.js'
 import { Scoped, handleScoped, scoped } from './Scoped.js'
 import { Sleep, sleep } from './Time.js'
-import { Trace, attachTrace, captureTrace } from './Trace.js'
+import { attachTrace, captureTrace } from './Trace.js'
+import type { TraceOrigin } from './Trace.js'
 
 /**
  * A timeout effect. Programs yield {@link Timeout} values to request that a
@@ -80,17 +81,13 @@ export interface TimeoutOptions<TE> {
   readonly onTimeout: (e: TimeoutExpired) => TE
 }
 
-export interface TimeoutExpired {
+export interface TimeoutExpired extends TraceOrigin {
   readonly ms: number
-  readonly origin: Breadcrumb
-  readonly trace?: Trace
 }
 
-export interface TimeoutContext<_E, A, TE> {
+export interface TimeoutContext<_E, A, TE> extends TraceOrigin {
   readonly fx: Fx<unknown, A>
   readonly ms: number
-  readonly origin: Breadcrumb
-  readonly trace?: Trace
   readonly onTimeout: (e: TimeoutExpired) => TE
 }
 
@@ -102,7 +99,7 @@ const runTimeout = <const E, const A, const TE>(t: TimeoutContext<E, A, TE>): Fx
   const result = yield* race([
     attempt(t.fx as Fx<Fail<E>, A>),
     sleep(t.ms).pipe(map(() => ({ type: 'timeout', failure: t.onTimeout(t) } as const)))
-  ], t.origin, t.trace).pipe(firstSettled)
+  ], t).pipe(firstSettled)
 
   return result.type === 'success' ? ok(result.value) : fail(result.failure)
 })

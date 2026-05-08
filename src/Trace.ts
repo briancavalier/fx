@@ -40,6 +40,16 @@ export interface Trace {
   readonly acyclic?: true
 }
 
+export interface TraceOrigin {
+  readonly origin: Breadcrumb
+  readonly trace?: Trace
+}
+
+export interface TraceOptions {
+  readonly origin?: Breadcrumb
+  readonly trace?: Trace
+}
+
 export interface TraceLocation {
   readonly raw: string
   readonly functionName?: string

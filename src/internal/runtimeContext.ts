@@ -4,6 +4,11 @@ import type { TraceCapturePolicy } from './tracePolicy.js'
 import { getTraceCapturePolicy } from './tracePolicy.js'
 import { Pipeable, pipeThis } from './pipe.js'
 
+/**
+ * Internal diagnostic runtime context. This currently carries trace capture
+ * policy across interpreter/runtime boundaries; it is not a general service
+ * or capability container.
+ */
 export interface RuntimeContext {
   readonly traceCapturePolicy?: TraceCapturePolicy
 }
@@ -27,13 +32,19 @@ export const withActiveRuntimeContext = <A>(context: RuntimeContext, f: () => A)
   }
 }
 
+export const runWithRuntimeContext = <A>(
+  context: RuntimeContext | undefined,
+  f: () => A
+): A =>
+  context === undefined ? f() : withActiveRuntimeContext(context, f)
+
 export const withRuntimeContext = <E, A>(
   context: RuntimeContext | undefined,
   fx: Fx<E, A>
 ): Fx<E, A> =>
   context === undefined ? fx : new RuntimeContextFx(fx, context)
 
-export const tagRuntimeContext = (target: unknown, context: RuntimeContext | undefined = activeRuntimeContext): void => {
+export const attachRuntimeContext = (target: unknown, context: RuntimeContext | undefined = activeRuntimeContext): void => {
   if (context === undefined || typeof target !== 'object' || target === null) return
   if (getRuntimeContext(target) !== undefined) return
 
@@ -45,7 +56,7 @@ export const tagRuntimeContext = (target: unknown, context: RuntimeContext | und
       configurable: true
     })
   } catch {
-    // Preserve the original thrown value if it cannot be tagged.
+    // Preserve the original thrown value if runtime metadata cannot be attached.
   }
 }
 
@@ -80,7 +91,7 @@ class RuntimeContextFx<E, A> implements Fx<E, A>, Pipeable {
   ) { }
 
   [Symbol.iterator](): Iterator<E, A, unknown> {
-    const iterator = withActiveRuntimeContext(this.context, () => this.fx[Symbol.iterator]())
+    const iterator = runWithRuntimeContext(this.context, () => this.fx[Symbol.iterator]())
     return new RuntimeContextIterator(iterator, this.context)
   }
 }
@@ -107,13 +118,13 @@ class RuntimeContextIterator<E, A> implements Iterator<E, A, unknown> {
   }
 
   private run(f: () => IteratorResult<E, A>): IteratorResult<E, A> {
-    return withActiveRuntimeContext(this.context, () => {
+    return runWithRuntimeContext(this.context, () => {
       try {
         const result = f()
-        if (!result.done && isEffect(result.value)) tagRuntimeContext(result.value)
+        if (!result.done && isEffect(result.value)) attachRuntimeContext(result.value)
         return result
       } catch (e) {
-        tagRuntimeContext(e)
+        attachRuntimeContext(e)
         throw e
       }
     })

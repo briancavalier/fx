@@ -29,7 +29,10 @@ Git worktrees:
 - Update `AGENT_STATUS.md` when starting work, after significant code or test changes, after validation runs, and before handing work back to the user.
 - Keep `AGENT_STATUS.md` accurate: record scope, current status, validation results, blockers, and notes a human would need to inspect or resume the worktree.
 - Create an ignored `.code-workspace` file in each worktree so it is easy to reopen in VS Code.
+- `pnpm worktree:create` installs dependencies in the new worktree with `pnpm install --frozen-lockfile`; if install fails, run it manually from the worktree before trusting editor diagnostics.
+- After dependency installation, stale VS Code TypeScript diagnostics may require restarting TS Server or reopening the generated workspace.
 - Run validation from the worktree that owns the change.
+- Treat `pnpm typecheck` as the project typecheck; direct single-file `tsc` commands can bypass `tsconfig.json` and report misleading errors.
 - Commit finished work inside the worktree with a focused commit message.
 - Push the branch and open a draft PR when the user asks to publish.
 - Do not remove PR-ready worktrees unless the branch has been merged, abandoned by explicit user instruction, or the user asks for cleanup.

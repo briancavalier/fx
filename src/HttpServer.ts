@@ -40,11 +40,13 @@ export type ServerAddress = {
 
 export type ServerListening = {
   readonly type: 'listening'
+  readonly timestamp: number
   readonly address: ServerAddress | null
 }
 
 export type ServerRequestCompleted = {
   readonly type: 'request'
+  readonly timestamp: number
   readonly method: Method
   readonly path: string
   readonly status: number
@@ -53,6 +55,7 @@ export type ServerRequestCompleted = {
 
 export type ServerRequestFailed = {
   readonly type: 'requestFailed'
+  readonly timestamp: number
   readonly method: Method
   readonly path: string
   readonly status: number
@@ -62,6 +65,7 @@ export type ServerRequestFailed = {
 
 export type ServerClosed = {
   readonly type: 'closed'
+  readonly timestamp: number
 }
 
 export type ResponseBody<_E = never> =

@@ -57,10 +57,14 @@ await server.pipe(
 function logHttpServerEvent(event: ServerEvent) {
   switch (event.type) {
     case 'listening':
-      return info('HTTP server ready', addressData(event.address))
+      return info('HTTP server ready', {
+        timestamp: event.timestamp,
+        ...addressData(event.address)
+      })
 
     case 'request':
       return info('HTTP request', {
+        timestamp: event.timestamp,
         method: event.method,
         path: event.path,
         status: event.status,
@@ -69,6 +73,7 @@ function logHttpServerEvent(event: ServerEvent) {
 
     case 'requestFailed':
       return info('HTTP request failed', {
+        timestamp: event.timestamp,
         method: event.method,
         path: event.path,
         status: event.status,
@@ -77,7 +82,7 @@ function logHttpServerEvent(event: ServerEvent) {
       })
 
     case 'closed':
-      return info('HTTP server closed')
+      return info('HTTP server closed', { timestamp: event.timestamp })
   }
 }
 

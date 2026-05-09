@@ -164,15 +164,17 @@ describe('HttpServer', () => {
     it('emits listening with the actual bound address', async () => {
       const app = route('GET', '/health', () => ok(text('ok')))
       const events: ServerEvent[] = []
+      const before = Date.now()
 
       await withServer(createServer => serve(app, {
         port: 0,
         host: '127.0.0.1',
-          observe: event => ok(void events.push(event))
+        observe: event => ok(void events.push(event))
       }).pipe(
         nodeHttp({ createServer })
       ), async port => {
         const event = await waitForEvent(events, isListening)
+        const after = Date.now()
 
         assert.equal(typeof event.address, 'object')
         if (event.address === null) {
@@ -180,6 +182,7 @@ describe('HttpServer', () => {
         }
         assert.equal(event.address.host, '127.0.0.1')
         assert.equal(event.address.port, port)
+        assertTimestamp(event.timestamp, before, after)
       })
     })
 
@@ -190,12 +193,14 @@ describe('HttpServer', () => {
       await withServer(createServer => serve(app, {
         port: 0,
         host: '127.0.0.1',
-          observe: event => ok(void events.push(event))
+        observe: event => ok(void events.push(event))
       }).pipe(
         nodeHttp({ createServer })
       ), async port => {
+        const before = Date.now()
         const response = await httpGet(port, '/health')
         const event = await waitForEvent(events, isRequest)
+        const after = Date.now()
 
         assert.equal(response.status, 200)
         assert.deepEqual(
@@ -213,6 +218,7 @@ describe('HttpServer', () => {
           }
         )
         assert.equal(event.durationMs >= 0, true)
+        assertTimestamp(event.timestamp, before, after)
       })
     })
 
@@ -361,12 +367,15 @@ describe('HttpServer', () => {
       }).pipe(
         nodeHttp({ createServer })
       ), async port => {
+        const before = Date.now()
         const response = await httpGet(port, '/fail')
         const event = await waitForEvent(events, isRequestFailed)
+        const after = Date.now()
 
         assert.equal(response.status, 500)
         assert.equal(event.status, 500)
         assert.equal(event.error, failure)
+        assertTimestamp(event.timestamp, before, after)
       })
     })
 
@@ -522,6 +531,12 @@ const isRequestFailed = (
   event: ServerEvent
 ): event is Extract<ServerEvent, { readonly type: 'requestFailed' }> =>
   event.type === 'requestFailed'
+
+const assertTimestamp = (timestamp: number, before: number, after: number): void => {
+  assert.equal(Number.isInteger(timestamp), true)
+  assert.equal(timestamp >= before, true)
+  assert.equal(timestamp <= after, true)
+}
 
 const httpGet = (
   port: number,

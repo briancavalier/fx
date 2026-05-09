@@ -83,7 +83,7 @@ const runNodeServer = <E, OE>(
         void runNodeRequest(compiled, request.context, events, incoming, outgoing)
       }),
       server => closeNodeServer(server).pipe(
-        flatMap(() => observe({ type: 'closed' }))
+        flatMap(() => observe({ type: 'closed', timestamp: eventTimestamp() }))
       ),
       server => drainNodeHttpEvents(events, server, observe)
     )
@@ -139,7 +139,11 @@ const startNodeServer = (
         onAbort()
         return
       }
-      events.enqueue({ type: 'listening', address: toServerAddress(server.address?.() ?? null) })
+      events.enqueue({
+        type: 'listening',
+        timestamp: eventTimestamp(),
+        address: toServerAddress(server.address?.() ?? null)
+      })
       resolve({ server, cleanup })
     })
 
@@ -243,6 +247,7 @@ const runNodeRequest = async <E>(
     const finalStatus = outgoing.headersSent ? outgoing.statusCode : status
     const event = failure ? {
       type: 'requestFailed' as const,
+      timestamp: eventTimestamp(),
       method: request.method,
       path: request.path,
       status: finalStatus,
@@ -250,6 +255,7 @@ const runNodeRequest = async <E>(
       error: failure.error
     } : {
       type: 'request' as const,
+      timestamp: eventTimestamp(),
       method: request.method,
       path: request.path,
       status: finalStatus,
@@ -270,6 +276,9 @@ const writeInternalServerError = (
       headers: [['content-type', 'text/plain; charset=utf-8']],
       body: { type: 'text', value: 'Internal Server Error' }
     })
+
+const eventTimestamp = (): number =>
+  Date.now()
 
 const toServerRequest = (request: IncomingMessage): ServerRequest => {
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)

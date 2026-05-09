@@ -27,6 +27,33 @@ export type ServerResponse<E = never> = {
   readonly body?: ResponseBody<E>
 }
 
+export type ServerEvent =
+  | ServerListening
+  | ServerRequestCompleted
+  | ServerClosed
+
+export type ServerAddress = {
+  readonly host: string
+  readonly port: number
+}
+
+export type ServerListening = {
+  readonly type: 'listening'
+  readonly address: ServerAddress | null
+}
+
+export type ServerRequestCompleted = {
+  readonly type: 'request'
+  readonly method: Method
+  readonly path: string
+  readonly status: number
+  readonly durationMs: number
+}
+
+export type ServerClosed = {
+  readonly type: 'closed'
+}
+
 export type ResponseBody<_E = never> =
   | { readonly type: 'empty' }
   | { readonly type: 'text'; readonly value: string }
@@ -153,25 +180,26 @@ export const ServeScope = 'fx/HttpServer/Serve'
 /**
  * Request that an HTTP server run the provided routes.
  */
-export class Serve<const E = never> extends Effect('fx/HttpServer/Serve')<ServeRequest<E>, void> { }
+export class Serve<const E = never, const OE = never> extends Effect('fx/HttpServer/Serve')<ServeRequest<E, OE>, void> { }
 
-export type ServeRequest<E = never> = {
+export type ServeRequest<E = never, OE = never> = {
   readonly routes: Routes<E>
-  readonly options: ServeOptions
+  readonly options: ServeOptions<OE>
   readonly context: readonly HandlerContext[]
 }
 
-export type ServeOptions = {
+export type ServeOptions<OE = never> = {
   readonly port: number
   readonly host?: string
+  readonly observe?: (event: ServerEvent) => Fx<OE, void>
 }
 
-export const serve = <E>(
+export const serve = <E, OE = never>(
   routes: Routes<E>,
-  options: ServeOptions
-): Fx<Exclude<E, ServerRouteEffects> | Serve<E> | Scoped<typeof ServeScope>, void> =>
+  options: ServeOptions<OE>
+): Fx<Exclude<E, ServerRouteEffects> | OE | Serve<E, OE> | Scoped<typeof ServeScope>, void> =>
   captureScoped(ServeScope).pipe(
-    flatMap(context => new Serve<E>({ routes, options, context }))
+    flatMap(context => new Serve<E, OE>({ routes, options, context }))
   )
 
 export type CompiledRoutes<E> = {

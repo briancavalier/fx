@@ -2,21 +2,25 @@ import { IncomingMessage, ServerResponse as NodeServerResponse, createServer } f
 import { Readable } from 'node:stream'
 import { finished, pipeline } from 'node:stream/promises'
 import { Async, tryPromise } from './Async.js'
-import { Fail, catchAll, fail } from './Fail.js'
-import { Fx, flatMap, flatten, fx, ok, runPromise, trySync } from './Fx.js'
+import { Fail, catchAll, fail, returnFail } from './Fail.js'
+import { Fx, assertSync, bracket, flatMap, flatten, fx, ok, runPromise, trySync, unit } from './Fx.js'
 import { Handle } from './Handler.js'
 import { type Headers, type Method } from './HttpClient.js'
 import {
   CompiledRoutes,
   Serve,
+  ServeOptions,
   ServeRequest,
   ServeScope,
+  ServerAddress,
+  ServerEvent,
   ServerRequest,
   ServerResponse,
   compileRoutes,
   dispatch
 } from './HttpServer.js'
 import { Scoped, handleScoped, scoped, withContext } from './Scoped.js'
+import * as Queue from './internal/Queue.js'
 
 export type NodeHttpOptions = {
   readonly createServer?: NodeHttpServerFactory
@@ -61,30 +65,57 @@ export const nodeHttp = ({
     ) as Fx<NodeHttpHandled<E>, A>
 
 export type NodeHttpHandled<E> =
-  Handle<Handle<E, Serve<any>, Async | Fail<NodeHttpError>>, Scoped<typeof ServeScope>>
+  Handle<Handle<E, Serve<any, any>, Async | Fail<NodeHttpError>>, Scoped<typeof ServeScope>>
   | Scoped<typeof ServeScope>
 
-const runNodeServer = <E>(
-  request: ServeRequest<E>,
+const runNodeServer = <E, OE>(
+  request: ServeRequest<E, OE>,
   createServer: NodeHttpServerFactory
-): Fx<Async | Fail<NodeHttpError>, void> => {
+): Fx<OE | Async | Fail<NodeHttpError>, void> => {
   const compiled = compileRoutes(request.routes)
+  const observe = request.options.observe ?? ignoreServerEvent as (event: ServerEvent) => Fx<OE, void>
 
-  return startNodeServer(request.options, createServer, (incoming, outgoing) => {
-    void runNodeRequest(compiled, request.context, incoming, outgoing)
-  })
+  return bracket(
+    assertSync(() => new Queue.UnboundedQueue<ServerInternalEvent>()),
+    events => ok(events[Symbol.dispose]()),
+    events => bracket(
+      startNodeServer(request.options, createServer, events, (incoming, outgoing) => {
+        void runNodeRequest(compiled, request.context, events, incoming, outgoing)
+      }),
+      server => closeNodeServer(server).pipe(
+        flatMap(() => observe({ type: 'closed' }))
+      ),
+      server => drainNodeHttpEvents(events, server, observe)
+    )
+  ).pipe(
+    flatMap(rethrowObservedFail)
+  ) as Fx<OE | Async | Fail<NodeHttpError>, void>
+}
+
+type ServerInternalEvent =
+  | ServerEvent
+  | { readonly type: 'error'; readonly error: Error }
+
+type StartedNodeHttpServer = {
+  readonly server: NodeHttpServer
+  readonly cleanup: () => void
 }
 
 const startNodeServer = (
-  options: ServeRequest['options'],
+  options: ServeOptions<any>,
   createServer: NodeHttpServerFactory,
+  events: Queue.Enqueue<ServerInternalEvent>,
   listener: NodeRequestListener
-): Fx<Async | Fail<NodeHttpError>, void> =>
-  tryPromise(signal => new Promise<void>((resolve, reject) => {
+): Fx<Async | Fail<NodeHttpError>, StartedNodeHttpServer> =>
+  tryPromise(signal => new Promise<StartedNodeHttpServer>((resolve, reject) => {
     const server = createServer(listener)
     let listening = false
     let closed = false
     const onError = (error: Error) => {
+      if (listening) {
+        events.enqueue({ type: 'error', error })
+        return
+      }
       cleanup()
       reject(error)
     }
@@ -92,7 +123,7 @@ const startNodeServer = (
       if (closed) return
       closed = true
       cleanup()
-      server.close(error => error ? reject(error) : resolve())
+      server.close(error => error ? reject(error) : resolve({ server, cleanup }))
     }
     const cleanup = () => {
       server.off?.('error', onError)
@@ -103,7 +134,13 @@ const startNodeServer = (
     server.on('error', onError)
     server.listen(options.port, options.host, () => {
       listening = true
-      if (signal.aborted) onAbort()
+      signal.removeEventListener('abort', onAbort)
+      if (signal.aborted) {
+        onAbort()
+        return
+      }
+      events.enqueue({ type: 'listening', address: toServerAddress(server.address?.() ?? null) })
+      resolve({ server, cleanup })
     })
 
     if (!listening && signal.aborted) onAbort()
@@ -111,15 +148,80 @@ const startNodeServer = (
     catchAll(failNodeHttp('Node HTTP server failed'))
   )
 
+const closeNodeServer = (
+  started: StartedNodeHttpServer
+): Fx<Async | Fail<NodeHttpError>, void> =>
+  tryPromise(() => new Promise<void>((resolve, reject) => {
+    started.cleanup()
+    started.server.close(error => error ? reject(error) : resolve())
+  })).pipe(
+    catchAll(failNodeHttp('Node HTTP server failed'))
+  )
+
+const drainNodeHttpEvents = <E>(
+  events: Queue.Dequeue<ServerInternalEvent>,
+  server: StartedNodeHttpServer,
+  observe: (event: ServerEvent) => Fx<E, void>
+): Fx<Exclude<E, Fail<any>> | Async | Fail<NodeHttpError>, void | Extract<E, Fail<any>>> => fx(function* () {
+    const dequeue = dequeueNodeHttpEvent(events, server)
+
+    while (!events.disposed) {
+      const next = yield* dequeue
+      if (next.tag === 'fx/Queue/Disposed') return
+
+      if (next.value.type === 'error') {
+        return yield* failNodeHttp('Node HTTP server failed')(next.value.error)
+      }
+
+      const observed = yield* observe(next.value).pipe(returnFail)
+      if (Fail.is(observed)) return observed
+    }
+  })
+
+const dequeueNodeHttpEvent = (
+  events: Queue.Dequeue<ServerInternalEvent>,
+  started: StartedNodeHttpServer
+): Fx<Async | Fail<NodeHttpError>, Queue.Dequeued<ServerInternalEvent> | Queue.Disposed> =>
+  tryPromise(signal => new Promise<Queue.Dequeued<ServerInternalEvent> | Queue.Disposed>((resolve, reject) => {
+    let settled = false
+    const done = (next: Queue.Dequeued<ServerInternalEvent> | Queue.Disposed) => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', onAbort)
+      resolve(next)
+    }
+    const onAbort = () => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', onAbort)
+      started.cleanup()
+      events[Symbol.dispose]()
+      started.server.close(error =>
+        error ? reject(error) : resolve({ tag: 'fx/Queue/Disposed' } as Queue.Disposed)
+      )
+    }
+
+    signal.addEventListener('abort', onAbort)
+    void events.dequeue().then(done, reject)
+    if (signal.aborted) onAbort()
+  })).pipe(
+    catchAll(failNodeHttp('Node HTTP server failed'))
+  )
+
 const runNodeRequest = async <E>(
   compiled: CompiledRoutes<E>,
   context: ServeRequest<E>['context'],
+  events: Queue.Enqueue<ServerInternalEvent>,
   incoming: IncomingMessage,
   outgoing: NodeServerResponse
 ): Promise<void> => {
+  const request = toServerRequest(incoming)
+  const start = performance.now()
+  let status = 500
+
   const program = fx(function* () {
-    const request = toServerRequest(incoming)
     const response = yield* dispatch(compiled, request)
+    status = response.status
     yield* writeNodeResponse(outgoing, response)
   })
 
@@ -130,6 +232,14 @@ const runNodeRequest = async <E>(
     )
   } catch {
     outgoing.destroy()
+  } finally {
+    events.enqueue({
+      type: 'request',
+      method: request.method,
+      path: request.path,
+      status: outgoing.headersSent ? outgoing.statusCode : status,
+      durationMs: performance.now() - start
+    })
   }
 }
 
@@ -257,6 +367,18 @@ const end = (
 
 const failNodeHttp = (message: string) =>
   <E>(cause: E) => fail(new NodeHttpError(message, { cause }))
+
+const ignoreServerEvent = (_event: ServerEvent): Fx<never, void> => unit
+
+const toServerAddress = (address: NodeListenAddress | string | null): ServerAddress | null =>
+  address === null || typeof address === 'string'
+    ? null
+    : { host: address.address, port: address.port }
+
+const rethrowObservedFail = <E>(
+  result: void | Extract<E, Fail<any>>
+): Fx<E, void> =>
+  Fail.is(result) ? result as unknown as Fx<E, void> : unit as Fx<E, void>
 
 const toUint8Array = (chunk: unknown): Uint8Array =>
   chunk instanceof Uint8Array

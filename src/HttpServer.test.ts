@@ -18,11 +18,13 @@ import {
   type EffectsOfRoutes,
   type ResponseBody,
   type Routes,
+  type ServerEvent,
   type ServerRequest,
   type ServerResponse
 } from './HttpServer.js'
 import { NodeHttpError, nodeHttp, type NodeHttpServerFactory } from './HttpServerNode.js'
 import { Scoped } from './Scoped.js'
+import { emit, Stream } from './Stream.js'
 import { dispose } from './Task.js'
 
 describe('HttpServer', () => {
@@ -159,6 +161,61 @@ describe('HttpServer', () => {
       })
     })
 
+    it('emits listening with the actual bound address', async () => {
+      const app = route('GET', '/health', () => ok(text('ok')))
+      const events: ServerEvent[] = []
+
+      await withServer(createServer => serve(app, {
+        port: 0,
+        host: '127.0.0.1',
+          observe: event => ok(void events.push(event))
+      }).pipe(
+        nodeHttp({ createServer })
+      ), async port => {
+        const event = await waitForEvent(events, isListening)
+
+        assert.equal(typeof event.address, 'object')
+        if (event.address === null) {
+          throw new Error('Expected Node listen address')
+        }
+        assert.equal(event.address.host, '127.0.0.1')
+        assert.equal(event.address.port, port)
+      })
+    })
+
+    it('emits completed request summaries', async () => {
+      const app = route('GET', '/health', () => ok(text('ok')))
+      const events: ServerEvent[] = []
+
+      await withServer(createServer => serve(app, {
+        port: 0,
+        host: '127.0.0.1',
+          observe: event => ok(void events.push(event))
+      }).pipe(
+        nodeHttp({ createServer })
+      ), async port => {
+        const response = await httpGet(port, '/health')
+        const event = await waitForEvent(events, isRequest)
+
+        assert.equal(response.status, 200)
+        assert.deepEqual(
+          {
+            type: event.type,
+            method: event.method,
+            path: event.path,
+            status: event.status
+          },
+          {
+            type: 'request',
+            method: 'GET',
+            path: '/health',
+            status: 200
+          }
+        )
+        assert.equal(event.durationMs >= 0, true)
+      })
+    })
+
     it('passes request details to route handlers', async () => {
       const app = route('GET', '/users/:id', req => ok(text(JSON.stringify({
         method: req.method,
@@ -291,6 +348,77 @@ describe('HttpServer', () => {
         assert.equal(response.body, 'Internal Server Error')
       })
     })
+
+    it('emits 500 request summaries for route failures', async () => {
+      const app = route('GET', '/fail', () => fail(new Error('failed')))
+      const events: ServerEvent[] = []
+
+      await withServer(createServer => serve(app, {
+        port: 0,
+        host: '127.0.0.1',
+          observe: event => ok(void events.push(event))
+      }).pipe(
+        nodeHttp({ createServer })
+      ), async port => {
+        const response = await httpGet(port, '/fail')
+        const event = await waitForEvent(events, isRequest)
+
+        assert.equal(response.status, 500)
+        assert.equal(event.status, 500)
+      })
+    })
+
+    it('keeps observer stream effects visible until handled', () => {
+      const app = route('GET', '/health', () => ok(text('ok')))
+
+      const observed = serve(app, {
+        port: 3000,
+        observe: event => emit(event)
+      }).pipe(
+        nodeHttp(),
+        assertNoFail
+      )
+
+      const _: Fx<Async | Scoped<string> | Stream<ServerEvent>, void> = observed
+      void _
+    })
+
+    it('fails fast and closes the server when observation fails', async () => {
+      const app = route('GET', '/health', () => ok(text('ok')))
+      const failure = new Error('observation failed')
+      let closeCalled = false
+
+      const task = serve(app, {
+        port: 0,
+        host: '127.0.0.1',
+        observe: event => event.type === 'listening' ? fail(failure) : ok(undefined)
+      }).pipe(
+        nodeHttp({
+          createServer: listener => {
+            const server = createServer(listener)
+            return {
+              listen: (port, host, callback) => server.listen(port, host, callback),
+              close: callback => {
+                closeCalled = true
+                return server.close(callback)
+              },
+              on: (event, listener) => server.on(event, listener),
+              off: (event, listener) => server.off(event, listener),
+              address: () => server.address()
+            }
+          }
+        }),
+        assertNoFail,
+        runTask
+      )
+
+      try {
+        await assert.rejects(task.promise, error => error instanceof Error && error.cause === failure)
+        assert.equal(closeCalled, true)
+      } finally {
+        dispose(task)
+      }
+    })
   })
 })
 
@@ -365,6 +493,28 @@ const withServer = async (
     await new Promise(resolve => setTimeout(resolve, 1))
   }
 }
+
+const waitForEvent = async <E extends ServerEvent>(
+  events: readonly ServerEvent[],
+  match: (event: ServerEvent) => event is E
+): Promise<E> => {
+  for (let i = 0; i < 100; i++) {
+    const event = events.find(match)
+    if (event) return event
+    await new Promise(resolve => setTimeout(resolve, 1))
+  }
+  throw new Error('Timed out waiting for Node HTTP event')
+}
+
+const isListening = (
+  event: ServerEvent
+): event is Extract<ServerEvent, { readonly type: 'listening' }> =>
+  event.type === 'listening'
+
+const isRequest = (
+  event: ServerEvent
+): event is Extract<ServerEvent, { readonly type: 'request' }> =>
+  event.type === 'request'
 
 const httpGet = (
   port: number,

@@ -40,6 +40,7 @@ Git worktrees:
 
 Design preference:
 - Prefer simple, direct, explicit implementations over clever or implicit ones.
+- Prefer eta reduction when it is semantically safe: pass an existing function directly instead of adding a lambda that only forwards the same arguments. Keep the wrapper when it changes arity, argument order, `this` binding, laziness/evaluation timing, error boundaries, overload/generic inference, variadic/spread behavior, or readability.
 - Keep context propagation explicit at interpreter/runtime boundaries.
 - Do not hide cross-cutting behavior in base abstractions unless it is fundamental to that abstraction.
 - Avoid broad generic infrastructure until at least two concrete uses justify it.

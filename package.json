@@ -41,6 +41,14 @@
       "types": "./dist/HttpClient.d.ts",
       "import": "./dist/HttpClient.js"
     },
+    "./HttpServer": {
+      "types": "./dist/HttpServer.d.ts",
+      "import": "./dist/HttpServer.js"
+    },
+    "./HttpServerNode": {
+      "types": "./dist/HttpServerNode.d.ts",
+      "import": "./dist/HttpServerNode.js"
+    },
     "./Log": {
       "types": "./dist/Log.d.ts",
       "import": "./dist/Log.js"

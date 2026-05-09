@@ -1,5 +1,5 @@
-import { Fx, handle, ok } from '../../src'
-import { Next } from './counter'
+import { Fx, handle, ok } from '../../src/index.js'
+import { Next } from './counter.js'
 
 // A simple in-memory Counter backed by a Map
 

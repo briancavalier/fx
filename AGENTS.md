@@ -50,6 +50,8 @@ Design preference:
 Development guidance:
 - Prefer existing patterns in `src/Fx.ts`, `src/Effect.ts`, and `src/Handler.ts`.
 - Preserve strong effect typing. Changes should keep `E` unions meaningful and narrowed by handlers.
+- Use `Fail<E>` for recoverable errors. In fx code, JS `throw` is reserved for intentionally hard-crashing the program, enforcing internal invariants, or clearly named unsafe/assert APIs such as `Fail.assert`.
+- At runtime and platform boundaries, convert rejected promises, thrown platform errors, and recoverable exceptional states into `Fail` with `tryPromise`, `trySync`, or `fail`. Recover with `catchAll`, `catchOnly`, or `catchIf` rather than throwing from handlers.
 - Organize source modules from higher-level public constructs to lower-level implementation details: effect declarations first, public constructors/handlers next, exported support types after that, and internal helpers last.
 - Document public effect declarations succinctly. Effect docs should describe the request represented by the effect, not the behavior of any particular handler.
 - Keep handler behavior docs on the handler that provides that behavior.

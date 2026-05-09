@@ -1,7 +1,7 @@
 import Keyv from 'keyv'
-import { Fx, assertSync, bracket, fx, handle } from '../../src'
-import { assertPromise } from '../../src/Async'
-import { Next } from './counter'
+import { Fx, assertSync, bracket, fx, handle } from '../../src/index.js'
+import { assertPromise } from '../../src/Async.js'
+import { Next } from './counter.js'
 
 // Not transactional or parameterized, but just to show how to implement
 // another handler for the Counter effect

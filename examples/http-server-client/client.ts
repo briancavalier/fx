@@ -1,5 +1,5 @@
 import { flatMap, fx, runPromise } from '../../src/index.js'
-import { get, provide } from '../../src/Env.js'
+import { provide } from '../../src/Env.js'
 import { assert as assertNoFail } from '../../src/Fail.js'
 import { expectSuccess, request, text, w3cFetch } from '../../src/HttpClient.js'
 
@@ -7,8 +7,7 @@ type ClientConfig = {
   readonly port: number
 }
 
-const client = fx(function* () {
-  const { port } = yield* get<ClientConfig>()
+const client = fx(function* ({ port }: ClientConfig) {
   const base = `http://127.0.0.1:${port}`
 
   yield* request({ url: new URL('/api/health', base) }).pipe(

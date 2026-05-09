@@ -1,6 +1,5 @@
 import { Effect, fx, ok } from '../../src'
 import { abort, orReturn } from '../../src/Abort'
-import { get } from '../../src/Env'
 
 // -------------------------------------------------------------------
 // The number guessing game example from
@@ -36,11 +35,9 @@ export const checkAnswer = (secret: number, guess: number): boolean =>
   secret === guess
 
 // Main game loop. Play round after round until the user chooses to quit
-export const main = fx(function* () {
+export const main = fx(function* ({ max }: { readonly max: number }) {
   const name = yield* read(`What's your name? `)
   yield* print(`Hello, ${name}. Welcome to the game!`)
-
-  const { max } = yield* get<{ max: number }>()
 
   do
     yield* play(name, max)

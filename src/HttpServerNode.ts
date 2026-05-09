@@ -2,7 +2,7 @@ import { IncomingMessage, ServerResponse as NodeServerResponse, createServer } f
 import { Readable } from 'node:stream'
 import { finished, pipeline } from 'node:stream/promises'
 import { Async, tryPromise } from './Async.js'
-import { Fail, catchAll, fail, returnFail } from './Fail.js'
+import { Fail, catchAll, fail, returnFail, returnAll } from './Fail.js'
 import { Fx, assertSync, bracket, flatMap, flatten, fx, ok, runPromise, trySync, unit } from './Fx.js'
 import { Handle } from './Handler.js'
 import { type Headers, type Method } from './HttpClient.js'
@@ -218,6 +218,7 @@ const runNodeRequest = async <E>(
   const request = toServerRequest(incoming)
   const start = performance.now()
   let status = 500
+  let failure: { readonly error: unknown } | undefined
 
   const program = fx(function* () {
     const response = yield* dispatch(compiled, request)
@@ -227,19 +228,35 @@ const runNodeRequest = async <E>(
 
   try {
     await withContext(context, program as Fx<unknown, void>).pipe(
-      catchAll(() => writeInternalServerError(outgoing)),
+      catchAll(cause => {
+        failure = { error: cause }
+        return writeInternalServerError(outgoing)
+      }),
+      returnAll,
       f => runPromise(f as Fx<Async | Scoped<string>, void>)
     )
-  } catch {
+  } catch (cause) {
+    failure ??= { error: cause }
     outgoing.destroy()
   } finally {
-    events.enqueue({
-      type: 'request',
+    const durationMs = performance.now() - start
+    const finalStatus = outgoing.headersSent ? outgoing.statusCode : status
+    const event = failure ? {
+      type: 'requestFailed' as const,
       method: request.method,
       path: request.path,
-      status: outgoing.headersSent ? outgoing.statusCode : status,
-      durationMs: performance.now() - start
-    })
+      status: finalStatus,
+      durationMs,
+      error: failure.error
+    } : {
+      type: 'request' as const,
+      method: request.method,
+      path: request.path,
+      status: finalStatus,
+      durationMs
+    }
+
+    events.enqueue(event)
   }
 }
 

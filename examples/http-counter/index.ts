@@ -67,6 +67,15 @@ function logHttpServerEvent(event: ServerEvent) {
         durationMs: Math.round(event.durationMs)
       })
 
+    case 'requestFailed':
+      return info('HTTP request failed', {
+        method: event.method,
+        path: event.path,
+        status: event.status,
+        durationMs: Math.round(event.durationMs),
+        error: event.error
+      })
+
     case 'closed':
       return info('HTTP server closed')
   }

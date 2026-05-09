@@ -349,22 +349,24 @@ describe('HttpServer', () => {
       })
     })
 
-    it('emits 500 request summaries for route failures', async () => {
-      const app = route('GET', '/fail', () => fail(new Error('failed')))
+    it('emits failed request summaries for route failures', async () => {
+      const failure = new Error('failed')
+      const app = route('GET', '/fail', () => fail(failure))
       const events: ServerEvent[] = []
 
       await withServer(createServer => serve(app, {
         port: 0,
         host: '127.0.0.1',
-          observe: event => ok(void events.push(event))
+        observe: event => ok(void events.push(event))
       }).pipe(
         nodeHttp({ createServer })
       ), async port => {
         const response = await httpGet(port, '/fail')
-        const event = await waitForEvent(events, isRequest)
+        const event = await waitForEvent(events, isRequestFailed)
 
         assert.equal(response.status, 500)
         assert.equal(event.status, 500)
+        assert.equal(event.error, failure)
       })
     })
 
@@ -515,6 +517,11 @@ const isRequest = (
   event: ServerEvent
 ): event is Extract<ServerEvent, { readonly type: 'request' }> =>
   event.type === 'request'
+
+const isRequestFailed = (
+  event: ServerEvent
+): event is Extract<ServerEvent, { readonly type: 'requestFailed' }> =>
+  event.type === 'requestFailed'
 
 const httpGet = (
   port: number,

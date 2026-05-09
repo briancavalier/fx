@@ -30,6 +30,7 @@ export type ServerResponse<E = never> = {
 export type ServerEvent =
   | ServerListening
   | ServerRequestCompleted
+  | ServerRequestFailed
   | ServerClosed
 
 export type ServerAddress = {
@@ -48,6 +49,15 @@ export type ServerRequestCompleted = {
   readonly path: string
   readonly status: number
   readonly durationMs: number
+}
+
+export type ServerRequestFailed = {
+  readonly type: 'requestFailed'
+  readonly method: Method
+  readonly path: string
+  readonly status: number
+  readonly durationMs: number
+  readonly error: unknown
 }
 
 export type ServerClosed = {

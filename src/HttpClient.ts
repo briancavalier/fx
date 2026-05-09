@@ -241,7 +241,7 @@ export class TransportError extends Error {
     readonly request: Request,
     options?: ErrorOptions
   ) {
-    super(`HTTP request failed: ${request.method ?? 'GET'} ${request.url}`, options)
+    super(`HTTP request failed: ${request.method ?? 'GET'} ${String(request.url)}`, options)
   }
 }
 

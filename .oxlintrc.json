@@ -2,5 +2,15 @@
   "rules": {
     "no-async-promise-executor": "off",
     "require-yield": "off"
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/*.test.ts"
+      ],
+      "rules": {
+        "typescript/no-floating-promises": "off"
+      }
+    }
+  ]
 }

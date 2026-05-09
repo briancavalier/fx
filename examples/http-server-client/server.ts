@@ -1,39 +1,22 @@
-import { flatMap, fx, runPromise } from '../../src/index.js'
+import { runPromise } from '../../src/index.js'
+import { unbounded } from '../../src/Concurrent.js'
 import { get, provide } from '../../src/Env.js'
 import { assert as assertNoFail } from '../../src/Fail.js'
-import { unbounded } from '../../src/Concurrent.js'
-import { console as logConsole, info } from '../../src/Log.js'
-import { defaultTime } from '../../src/Time.js'
-import { route, serve, type ServerEvent, type ServerListening } from '../../src/HttpServer.js'
+import { flatMap } from '../../src/Fx.js'
+import { serve, type ServerEvent, type ServerListening } from '../../src/HttpServer.js'
 import { nodeHttp } from '../../src/HttpServerNode.js'
+import { console as logConsole, info } from '../../src/Log.js'
 import { emit, forEach as forEachStream } from '../../src/Stream.js'
+import { defaultTime } from '../../src/Time.js'
+import { appRoutes, memoryNotes } from './api.js'
 
-import { next } from './counter.js'
-import { mapCounter } from './counter-map.js'
-//import { keyvCounter } from './counter-keyv.js'
+type ServerConfig = {
+  readonly port: number
+}
 
-// ----------------------------------------------------------------------
-// Define the routes
-
-const appRoutes = route('GET', '/*', request => fx(function* () {
-  const key = request.path
-  const value = yield* next(key)
-
-  yield* info('Incremented', { key, value })
-
-  return {
-    status: 200,
-    body: { type: 'json', value: { key, value } }
-  }
-}))
-
-// ----------------------------------------------------------------------
-// #region Run the server
-
-const port = Number(process.env.PORT ?? process.env.port ?? 3000)
-
-const server = get<{ port: number }>().pipe(
+const server = get<ServerConfig>().pipe(
   flatMap(({ port }) => serve(appRoutes, {
+    host: '127.0.0.1',
     port,
     observe: event => emit(event)
   }))
@@ -42,17 +25,14 @@ const server = get<{ port: number }>().pipe(
 await server.pipe(
   nodeHttp(),
   f => forEachStream(f, logHttpServerEvent),
-  mapCounter,
+  memoryNotes(),
   logConsole,
   defaultTime,
   assertNoFail,
-  provide({ port }),
-  // keyvCounter,
+  provide({ port: Number(process.env.PORT ?? 3000) }),
   unbounded,
   runPromise
 )
-
-//#endregion
 
 function logHttpServerEvent(event: ServerEvent) {
   switch (event.type) {

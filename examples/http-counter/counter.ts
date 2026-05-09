@@ -1,4 +1,4 @@
-import { Effect } from '../../src'
+import { Effect } from '../../src/index.js'
 
 // A Counter effect with a Next operation that increments
 // a named counter and returns the new value

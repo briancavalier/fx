@@ -29,7 +29,10 @@ Git worktrees:
 - Update `AGENT_STATUS.md` when starting work, after significant code or test changes, after validation runs, and before handing work back to the user.
 - Keep `AGENT_STATUS.md` accurate: record scope, current status, validation results, blockers, and notes a human would need to inspect or resume the worktree.
 - Create an ignored `.code-workspace` file in each worktree so it is easy to reopen in VS Code.
+- `pnpm worktree:create` installs dependencies in the new worktree with `pnpm install --frozen-lockfile`; if install fails, run it manually from the worktree before trusting editor diagnostics.
+- After dependency installation, stale VS Code TypeScript diagnostics may require restarting TS Server or reopening the generated workspace.
 - Run validation from the worktree that owns the change.
+- Treat `pnpm typecheck` as the project typecheck; direct single-file `tsc` commands can bypass `tsconfig.json` and report misleading errors.
 - Commit finished work inside the worktree with a focused commit message.
 - Push the branch and open a draft PR when the user asks to publish.
 - Do not remove PR-ready worktrees unless the branch has been merged, abandoned by explicit user instruction, or the user asks for cleanup.
@@ -37,6 +40,7 @@ Git worktrees:
 
 Design preference:
 - Prefer simple, direct, explicit implementations over clever or implicit ones.
+- Prefer eta reduction when it is semantically safe: pass an existing function directly instead of adding a lambda that only forwards the same arguments. Keep the wrapper when it changes arity, argument order, `this` binding, laziness/evaluation timing, error boundaries, overload/generic inference, variadic/spread behavior, or readability.
 - Keep context propagation explicit at interpreter/runtime boundaries.
 - Do not hide cross-cutting behavior in base abstractions unless it is fundamental to that abstraction.
 - Avoid broad generic infrastructure until at least two concrete uses justify it.
@@ -50,6 +54,8 @@ Design preference:
 Development guidance:
 - Prefer existing patterns in `src/Fx.ts`, `src/Effect.ts`, and `src/Handler.ts`.
 - Preserve strong effect typing. Changes should keep `E` unions meaningful and narrowed by handlers.
+- Use `Fail<E>` for recoverable errors. In fx code, JS `throw` is reserved for intentionally hard-crashing the program, enforcing internal invariants, or clearly named unsafe/assert APIs such as `Fail.assert`.
+- At runtime and platform boundaries, convert rejected promises, thrown platform errors, and recoverable exceptional states into `Fail` with `tryPromise`, `trySync`, or `fail`. Recover with `catchAll`, `catchOnly`, or `catchIf` rather than throwing from handlers.
 - Organize source modules from higher-level public constructs to lower-level implementation details: effect declarations first, public constructors/handlers next, exported support types after that, and internal helpers last.
 - Document public effect declarations succinctly. Effect docs should describe the request represented by the effect, not the behavior of any particular handler.
 - Keep handler behavior docs on the handler that provides that behavior.

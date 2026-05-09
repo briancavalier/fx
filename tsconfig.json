@@ -9,6 +9,9 @@
     "lib": [
       "ES2024"
     ],
+    "types": [
+      "node"
+    ],
     "checkJs": false,
     "allowJs": false,
     "declaration": true,

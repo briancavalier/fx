@@ -92,7 +92,7 @@ describe('Env', () => {
     const authenticate = (request: Request) =>
       new Authenticate(request)
 
-    it('given unused context, does not compute context', () => {
+    it('given unused context, computes context eagerly', () => {
       let runs = 0
 
       const f = fx(function* () {
@@ -103,7 +103,7 @@ describe('Env', () => {
       const actual = run(ok('done').pipe(provideFrom(f)))
 
       assert.equal(actual, 'done')
-      assert.equal(runs, 0)
+      assert.equal(runs, 1)
     })
 
     it('given context Fx, computes context once per run', () => {
@@ -173,7 +173,7 @@ describe('Env', () => {
       assert.equal(actual, 'request:user:request')
     })
 
-    it('given captured context handler, computes context once per replayed execution', () => {
+    it('given captured context handler, computes context once when captured', () => {
       let runs = 0
 
       const withValue = provideFrom(fx(function* ({ seed }: { readonly seed: number }) {
@@ -183,7 +183,8 @@ describe('Env', () => {
 
       const context = run(captureScoped('test/Env/provideFrom').pipe(
         withValue,
-        closeScoped('test/Env/provideFrom')
+        closeScoped('test/Env/provideFrom'),
+        provideAll({ seed: 1 })
       ) as Fx<never, readonly HandlerContext[]>)
 
       const f = fx(function* ({ value }: { readonly value: string }) {
@@ -193,14 +194,12 @@ describe('Env', () => {
         ]
       })
 
-      const runWithContext = () => run(
-        (withContext(context as readonly HandlerContext[], f as Fx<unknown, unknown>) as Fx<Get<{ readonly seed: number }>, readonly [string, string]>)
-          .pipe(provideAll({ seed: 1 }))
-      )
+      const runWithContext = () =>
+        run(withContext(context as readonly HandlerContext[], f as Fx<unknown, unknown>) as Fx<never, readonly [string, string]>)
 
       assert.deepEqual(runWithContext(), ['1:1', '1:1'])
-      assert.deepEqual(runWithContext(), ['1:2', '1:2'])
-      assert.equal(runs, 2)
+      assert.deepEqual(runWithContext(), ['1:1', '1:1'])
+      assert.equal(runs, 1)
     })
   })
 })

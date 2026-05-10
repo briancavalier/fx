@@ -1,11 +1,12 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { Fx, fx, run } from './Fx.js'
+import { Fx, fx, ok, run } from './Fx.js'
 
 import { Effect } from './Effect.js'
 import { Get, get, provide, provideAll, provideFrom } from './Env.js'
 import { handle } from './Handler.js'
+import { captureScoped, closeScoped, withContext, type HandlerContext } from './Scoped.js'
 
 describe('Env', () => {
   describe('get', () => {
@@ -91,6 +92,20 @@ describe('Env', () => {
     const authenticate = (request: Request) =>
       new Authenticate(request)
 
+    it('given unused context, does not compute context', () => {
+      let runs = 0
+
+      const f = fx(function* () {
+        runs += 1
+        return { value: runs }
+      })
+
+      const actual = run(ok('done').pipe(provideFrom(f)))
+
+      assert.equal(actual, 'done')
+      assert.equal(runs, 0)
+    })
+
     it('given context Fx, computes context once per run', () => {
       let runs = 0
 
@@ -156,6 +171,36 @@ describe('Env', () => {
       ))
 
       assert.equal(actual, 'request:user:request')
+    })
+
+    it('given captured context handler, computes context once per replayed execution', () => {
+      let runs = 0
+
+      const withValue = provideFrom(fx(function* ({ seed }: { readonly seed: number }) {
+        runs += 1
+        return { value: `${seed}:${runs}` }
+      }))
+
+      const context = run(captureScoped('test/Env/provideFrom').pipe(
+        withValue,
+        closeScoped('test/Env/provideFrom')
+      ) as Fx<never, readonly HandlerContext[]>)
+
+      const f = fx(function* ({ value }: { readonly value: string }) {
+        return [
+          value,
+          (yield* get<{ readonly value: string }>()).value
+        ]
+      })
+
+      const runWithContext = () => run(
+        (withContext(context as readonly HandlerContext[], f as Fx<unknown, unknown>) as Fx<Get<{ readonly seed: number }>, readonly [string, string]>)
+          .pipe(provideAll({ seed: 1 }))
+      )
+
+      assert.deepEqual(runWithContext(), ['1:1', '1:1'])
+      assert.deepEqual(runWithContext(), ['1:2', '1:2'])
+      assert.equal(runs, 2)
     })
   })
 })

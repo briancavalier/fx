@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Fail, returnFail } from './Fail.js'
 import { runPromise } from './Fx.js'
+import { snapshotTrace } from './Trace.js'
 import {
   DecodeError,
   TransportError,
@@ -273,6 +274,10 @@ describe('HttpClient', () => {
       assert.equal(actual.arg.request, expectedRequest)
       assert.equal(actual.arg.cause, cause)
       assert.equal(actual.arg.message, 'HTTP request failed: GET https://example.com/users')
+      assert.ok(actual.trace !== undefined)
+      const trace = snapshotTrace(actual.trace)
+      assert.equal(trace.frames[0]?.message, 'fx/HttpClient/request')
+      assert.match(trace.frames[0]?.location?.file ?? '', /HttpClient\.test\.ts$/)
     })
 
     it('converts thrown init errors to TransportError failure', async () => {

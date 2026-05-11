@@ -478,6 +478,31 @@ describe('Trace', () => {
     assert.equal(snapshot.aggregate?.errors[1].message, 'plain failure')
   })
 
+  it('snapshots enumerable error fields without duplicating standard fields', () => {
+    const error = new Error('lookup failed') as Error & {
+      errno: number
+      code: string
+      syscall: string
+      hostname: string
+      request: { readonly url: URL }
+    }
+    error.errno = -3008
+    error.code = 'ENOTFOUND'
+    error.syscall = 'getaddrinfo'
+    error.hostname = 'jsonplaceholderx.typicode.com'
+    error.request = { url: new URL('https://jsonplaceholderx.typicode.com/users/1') }
+
+    const snapshot = snapshotError(error)
+
+    assert.equal(snapshot.code, 'ENOTFOUND')
+    assert.deepEqual(snapshot.fields, [
+      { key: 'errno', value: '-3008' },
+      { key: 'syscall', value: 'getaddrinfo' },
+      { key: 'hostname', value: 'jsonplaceholderx.typicode.com' },
+      { key: 'request', value: '{ url: https://jsonplaceholderx.typicode.com/users/1 }' }
+    ])
+  })
+
   it('formats expanded diagnostics without changing compact error formatting', () => {
     const cause = new Error('root failed')
     attachTrace(cause, prependTrace(stackBreadcrumb('cause trace', `Error: cause\n    at fn (${import.meta.filename}:4:5)`), undefined, { kind: 'async' }))
@@ -492,6 +517,32 @@ describe('Trace', () => {
     assert.match(formatted, /Caused by:/)
     assert.match(formatted, /at cause trace \[async\]/)
     assert.match(formatted, new RegExp(`${escapeRegExp(import.meta.filename)}:4:5`))
+  })
+
+  it('formats enumerable error fields in expanded diagnostics', () => {
+    const error = new Error('HTTP request failed') as Error & {
+      request: { readonly method: string, readonly url: URL }
+      cause: Error & { readonly code: string, readonly syscall: string, readonly hostname: string }
+    }
+    error.request = {
+      method: 'GET',
+      url: new URL('https://jsonplaceholderx.typicode.com/users/1')
+    }
+    Object.defineProperty(error, 'cause', {
+      value: Object.assign(new TypeError('fetch failed'), {
+        code: 'ENOTFOUND',
+        syscall: 'getaddrinfo',
+        hostname: 'jsonplaceholderx.typicode.com'
+      })
+    })
+
+    const formatted = formatDiagnostic(error, { colors: 'never' })
+
+    assert.match(formatted, /Error: HTTP request failed/)
+    assert.match(formatted, /request: \{ method: GET, url: https:\/\/jsonplaceholderx\.typicode\.com\/users\/1 \}/)
+    assert.match(formatted, /Caused by:\n  TypeError \[ENOTFOUND\]: fetch failed/)
+    assert.match(formatted, /syscall: getaddrinfo/)
+    assert.match(formatted, /hostname: jsonplaceholderx\.typicode\.com/)
   })
 
   it('formats diagnostics without ansi escapes when colors are disabled', () => {

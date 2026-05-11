@@ -40,8 +40,8 @@ export const sleep = (ms: number) => new Sleep(ms)
 export const withClock = (c: Clock) => <E, A>(f: Fx<E, A>): Fx<Handle<Handle<E, Sleep, Async>, Now | Monotonic>, A> => f.pipe(
   handle(Now, () => ok(c.now())),
   handle(Monotonic, () => ok(c.monotonic())),
-  handle(Sleep, ms => assertPromise(signal => new Promise(resolve => {
-    const d = c.schedule(ms, () => {
+  handle(Sleep, sleep => assertPromise(signal => new Promise(resolve => {
+    const d = c.schedule(sleep.arg, () => {
       signal.removeEventListener('abort', disposeOnAbort)
       resolve()
     })

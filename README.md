@@ -66,7 +66,7 @@ const getUser = fx(function* () {
 
 const program =
   getUser.pipe(
-    handle(DbQuery, ({ sql, params }) => runQuery(sql, params)),
+    handle(DbQuery, ({ arg: { sql, params } }) => runQuery(sql, params)),
     defaultConsole,
     runPromise
   )

@@ -34,8 +34,8 @@ export const catchIf = <const E1, const E extends ExtractFail<E1>, const E2, con
   handle: (e: E) => Fx<E2, B>
 ) => <const A>(f: Fx<E1, A>): Fx<Exclude<E1, Fail<E>> | E2, A | B> =>
     f.pipe(
-      control(Fail<ExtractFail<E>>, (_, e) =>
-        (match(e) ? handle(e) : fail(e)) as Fx<Exclude<E1, Fail<E>> | E2, A | B>)
+      control(Fail<ExtractFail<E>>, (_, failure) =>
+        (match(failure.arg) ? handle(failure.arg) : failure) as Fx<Exclude<E1, Fail<E>> | E2, A | B>)
     ) as Fx<Exclude<E1, Fail<E>> | E2, A | B>
 
 type AnyConstructor = abstract new (...args: any[]) => any
@@ -91,14 +91,14 @@ export const returnAll = <const E, const A>(f: Fx<E, A>) => f.pipe(catchAll(ok))
  *   const resultOrFail = computation.pipe(returnFail)
  */
 export const returnFail = <const E, const A>(f: Fx<E, A>) =>
-  f.pipe(catchAll(e => ok(fail(e)))) as Fx<Exclude<E, Fail<any>>, A | Extract<E, Fail<any>>>
+  f.pipe(control(Fail<any>, (_, failure) => ok(failure))) as Fx<Exclude<E, Fail<any>>, A | Extract<E, Fail<any>>>
 
 /**
  * Assert that an Fx does not fail, throwing the error if it does.
  * @example
  *   const result = trySync(f).pipe(assert) // Crashes if f fails
  */
-export const assert = control(Fail<any>, (_, e) => { throw e })
+export const assert = control(Fail<any>, (_, failure) => { throw failure.arg })
 
 type UnwrapFail<F> = F extends Fail<infer E> ? E : never
 type ExtractFail<F> = UnwrapFail<Extract<F, Fail<any>>>

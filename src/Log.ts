@@ -27,7 +27,7 @@ export interface LogMessage {
   readonly data?: { readonly [key: string]: unknown }
 }
 
-export const console = handle(Log, ({ level, component, ...m }) => fx(function* () {
+export const console = handle(Log, ({ arg: { level, component, ...m } }) => fx(function* () {
   const console = globalThis.console
   const l = Level[level].padEnd(5, ' ')
   const t = new Date(yield* now).toISOString()
@@ -44,13 +44,17 @@ export const console = handle(Log, ({ level, component, ...m }) => fx(function* 
 export const collect = <const E, const A>(f: Fx<E | Log, A>) => fx(function* () {
   const log = [] as LogMessage[]
   return yield* f.pipe(
-    handle(Log, m => ok(void log.push(m))),
+    handle(Log, message => ok(void log.push(message.arg))),
     mapFx(a => [a, log as readonly LogMessage[]])
   )
 })
 
 export const minLevel = (min: Level) =>
-  handle(Log, m => m.level < min ? unit : log(m))
+  handle(Log, message => message.arg.level < min ? unit : log(message.arg))
 
 export const child = <C extends { readonly [key: string]: unknown }>(component: string, context?: C) =>
-  handle(Log, m => log({ ...m, component: [component, ...m.component], data: { ...context, ...m.data } }))
+  handle(Log, message => log({
+    ...message.arg,
+    component: [component, ...message.arg.component],
+    data: { ...context, ...message.arg.data }
+  }))

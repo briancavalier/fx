@@ -6,7 +6,8 @@ import { fx, ok, run, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
 import { RetryEvent, defaultRetry, retry } from './Retry.js'
 import { sleep, withClock } from './Time.js'
-import { getTrace, snapshotError } from './Trace.js'
+import { formatDiagnostic, getTrace, setTraceCapturePolicy, snapshotError, withTraceCapture } from './Trace.js'
+import { nodeSourceLookup } from './TraceNode.js'
 import { VirtualClock } from './internal/time.js'
 
 describe('Retry', () => {
@@ -62,20 +63,82 @@ describe('Retry', () => {
     ])
   })
 
-  it('attaches one retry trace frame when retries are exhausted', () => {
-    const cause = new Error('nope')
+  it('attaches failure and retry trace frames when retries are exhausted', () => {
+    const previous = setTraceCapturePolicy('full')
+    try {
+      const cause = new Error('nope')
 
-    const r = fail(cause).pipe(
-      retry({ retries: 5 }),
-      defaultRetry(),
-      returnFail,
-      run
-    )
+      const r = fail(cause).pipe(
+        retry({ retries: 5 }),
+        defaultRetry(),
+        returnFail,
+        run
+      )
+
+      assert.ok(Fail.is(r))
+      assert.equal(r.arg, cause)
+      assert.equal(r.trace?.frame.message, 'fx/Fail/fail')
+      assert.equal(r.trace?.parent, undefined)
+      assert.deepEqual(traceMessages(cause), ['fx/Fail/fail', 'fx/Retry/retry'])
+
+      const frames = snapshotError(cause).trace?.frames ?? []
+      assert.equal(frames[0]?.kind, 'fail')
+      assert.ok(frames[0]?.location?.file?.endsWith('Retry.test.ts'))
+      assert.doesNotMatch(frames[0]?.location?.file ?? '', /\/Fail\.ts$/)
+      assert.equal(frames[1]?.kind, 'retry')
+      assert.ok(frames[1]?.location?.file?.endsWith('Retry.test.ts'))
+      assert.equal(typeof frames[1]?.location?.line, 'number')
+      assert.equal(typeof frames[1]?.location?.column, 'number')
+      assert.doesNotMatch(frames[1]?.location?.file ?? '', /internal\/pipe/)
+    } finally {
+      setTraceCapturePolicy(previous)
+    }
+  })
+
+  it('preserves label-only retry traces without locations', async () => {
+    const cause = new Error('nope')
+    const program = fx(function* () {
+      return yield* fail(cause).pipe(retry({ retries: 0 }), defaultRetry())
+    })
+
+    const r = await program.pipe(withTraceCapture('labels'), returnFail, runPromise)
 
     assert.ok(Fail.is(r))
     assert.equal(r.arg, cause)
-    assert.deepEqual(traceMessages(cause), ['fx/Retry/retry'])
-    assert.equal(snapshotError(cause).trace?.frames[0].kind, 'retry')
+    assert.deepEqual(traceMessages(cause), ['fx/Fail/fail', 'fx/Retry/retry'])
+    assert.equal(snapshotError(cause).trace?.frames[0]?.location, undefined)
+    assert.equal(snapshotError(cause).trace?.frames[1]?.location, undefined)
+  })
+
+  it('formats source snippets for retry-only traces', () => {
+    const cause = new Error('nope')
+    const previous = setTraceCapturePolicy('off')
+    const failed = fail(cause)
+
+    try {
+      setTraceCapturePolicy('full')
+      const r = failed.pipe(
+        retry({ retries: 0 }),
+        defaultRetry(),
+        returnFail,
+        run
+      )
+
+      assert.ok(Fail.is(r))
+      assert.equal(r.arg, cause)
+
+      const formatted = formatDiagnostic(cause, {
+        colors: 'never',
+        source: { lookup: nodeSourceLookup() }
+      })
+
+      assert.match(formatted, /at fx\/Retry\/retry \[retry\]/)
+      assert.match(formatted, /src\/Retry\.test\.ts:\d+:\d+/)
+      assert.match(formatted, /\d+ \|/)
+      assert.match(formatted, /\| +\^/)
+    } finally {
+      setTraceCapturePolicy(previous)
+    }
   })
 
   it('stops retrying when the predicate rejects the failure', () => {

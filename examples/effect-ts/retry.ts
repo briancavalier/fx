@@ -1,8 +1,12 @@
-import { flatMap, runPromise, tap } from "../../src"
+import { flatMap, runPromise, setTraceCapturePolicy, tap } from "../../src"
 import { defaultConsole, error, log } from "../../src/Console"
 import { catchAll } from "../../src/Fail"
 import { expectSuccess, json, request, w3cFetch } from "../../src/HttpClient"
 import { defaultRetry, retry } from "../../src/Retry"
+import { formatDiagnostic } from '../../src/Trace'
+import { nodeSourceLookup } from '../../src/TraceNode'
+
+setTraceCapturePolicy('full')
 
 const findUserById = (id: number) => request({
   url: new URL(`https://jsonplaceholderx.typicode.com/users/${id}`)
@@ -22,7 +26,7 @@ await main.pipe(
   defaultRetry({ // with attempt logging
     observe: event => log(`Attempt ${event.attempt}`, event)
   }),
-  catchAll(e => error(`Error fetching user`, e)),
+  catchAll(e => error(`Error fetching user`, formatDiagnostic(e, { source: { lookup: nodeSourceLookup() } }))),
   defaultConsole,
   runPromise
 )

@@ -272,7 +272,7 @@ export const w3cFetch = ({
 }: W3CFetchOptions = {}) =>
   <const E, const A>(f: Fx<E, A>) =>
     f.pipe(
-      handle(HttpRequest, r =>
+      handle(HttpRequest, ({ arg: r }) =>
         tryPromise(signal =>
           fetch(r.url, init(r, toFetchRequest(r, signal))).then(toResponse)
         ).pipe(

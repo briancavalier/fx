@@ -36,8 +36,8 @@ export function memoryNotes() {
   return <E, A>(program: Fx<E, A>) =>
     program.pipe(
       handle(ListNotes, () => ok(notes)),
-      handle(AddNote, (text: string) => {
-        const note = { id: String(nextId++), text }
+      handle(AddNote, addNote => {
+        const note = { id: String(nextId++), text: addNote.arg }
         notes.push(note)
         return ok(note)
       })

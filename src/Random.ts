@@ -61,11 +61,11 @@ export const defaultRandom = (seed: number = generateSeed()) =>
   xoroshiro128plus(seed)
 
 const runXoroShiro128Plus = <const E, const A>(gen: XoroShiro128Plus, f: Fx<E, A>): Fx<Exclude<E, Random>, A> => f.pipe(
-  handle(Int, max => ok(uniformIntMax(max, gen))),
+  handle(Int, max => ok(uniformIntMax(max.arg, gen))),
   handle(Float, _ => ok(uniformFloat(gen))),
   handle(Split, f => {
     const gen2 = gen.clone()
     gen2.unsafeJump()
-    return ok(runXoroShiro128Plus(gen2, f))
+    return ok(runXoroShiro128Plus(gen2, f.arg))
   })
 ) as Fx<Exclude<E, Random>, A>

@@ -14,6 +14,6 @@ export const error = (...args: readonly unknown[]) => new Error(args)
 
 export const defaultConsole = <const E, const A>(f: Fx<E, A>) =>
   f.pipe(
-    handle(Log, args => ok(globalThis.console.log(...args))),
-    handle(Error, args => ok(globalThis.console.error(...args)))
+    handle(Log, log => ok(globalThis.console.log(...log.arg))),
+    handle(Error, error => ok(globalThis.console.error(...error.arg)))
   )

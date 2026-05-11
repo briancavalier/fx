@@ -13,7 +13,7 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
   constructor(
     public readonly fx: Fx<E, A>,
     public readonly effectId: unknown,
-    public readonly handler: (e: unknown) => Fx<unknown, unknown>
+    public readonly handler: (effect: any) => Fx<unknown, unknown>
   ) { }
 
   wrap(fx: Fx<unknown, unknown>): Fx<unknown, unknown> {
@@ -32,8 +32,8 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
           if (effectId === effect._fxEffectId) {
             const context = getRuntimeContext(effect)
             const handled = context === undefined
-              ? handler(effect.arg)
-              : withActiveRuntimeContext(context, () => handler(effect.arg))
+              ? handler(effect)
+              : withActiveRuntimeContext(context, () => handler(effect))
             ir = i.next(yield* withRuntimeContext(context, handled) as any)
           } else if (Scoped.is(effect)) {
             ir = i.next([this, ...(yield effect) as any])
@@ -58,7 +58,7 @@ export class Control<E, A> implements Fx<E, A>, Pipeable {
   constructor(
     public readonly fx: Fx<E, A>,
     public readonly effectId: unknown,
-    public readonly handler: (resume: (a: any) => unknown, e: unknown) => Fx<unknown, unknown>
+    public readonly handler: (resume: (a: any) => unknown, effect: any) => Fx<unknown, unknown>
   ) { }
 
   *[Symbol.iterator](): Iterator<E, A> {
@@ -80,8 +80,8 @@ export class Control<E, A> implements Fx<E, A>, Pipeable {
           if (effectId === effect._fxEffectId) {
             const context = getRuntimeContext(effect)
             const handled = context === undefined
-              ? handler(k, effect.arg)
-              : withActiveRuntimeContext(context, () => handler(k, effect.arg))
+              ? handler(k, effect)
+              : withActiveRuntimeContext(context, () => handler(k, effect))
             const hr = yield* withRuntimeContext(context, handled) as any
             if (!done) return hr
             done = false

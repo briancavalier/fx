@@ -223,8 +223,8 @@ export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A
 export const unbounded = bounded(Infinity)
 
 const runForkWith = (s: Semaphore) =>
-  (f: ForkContext): Fx<never, Task<unknown, unknown>> =>
-    ok(acquireAndRunFork(f, s))
+  (fork: Fork): Fx<never, Task<unknown, unknown>> =>
+    ok(acquireAndRunFork(fork.arg, s))
 
 const childFrameKind = (trace: Trace | undefined) =>
   trace?.frame.kind === 'all' || trace?.frame.kind === 'race' ? trace.frame.kind : 'fork'
@@ -246,27 +246,27 @@ const childTraceOrigin = (parent: TraceOrigin, index: number, kind: TraceFrameKi
 }
 
 const runAll = <const Fxs extends readonly Fx<unknown, unknown>[]>(
-  a: ConcurrentContext<Fxs>
+  all: All<Fxs>
 ): Fx<Fork | Async | ErrorsOf<EffectsOf<Fxs[number]>>, {
   readonly [K in keyof Fxs]: ResultOf<Fxs[K]>
 }> =>
-  forkEach(a.fxs, a).pipe(
+  forkEach(all.arg.fxs, all.arg).pipe(
     flatMap(tasks => waitTask(taskAll(tasks)))
   ) as Fx<Fork | Async | ErrorsOf<EffectsOf<Fxs[number]>>, {
     readonly [K in keyof Fxs]: ResultOf<Fxs[K]>
   }>
 
 const runRace = <const Fxs extends readonly Fx<unknown, unknown>[]>(
-  r: ConcurrentContext<Fxs>
+  race: Race<Fxs>
 ): Fx<Fork | Async | ErrorsOf<EffectsOf<Fxs[number]>>, ResultOf<Fxs[number]>> =>
-  forkEach(r.fxs, r).pipe(
+  forkEach(race.arg.fxs, race.arg).pipe(
     flatMap(tasks => waitTask(taskRace(tasks)))
   ) as Fx<Fork | Async | ErrorsOf<EffectsOf<Fxs[number]>>, ResultOf<Fxs[number]>>
 
 const runFirstSuccessRace = <const Fxs extends readonly Fx<unknown, unknown>[]>(
-  r: ConcurrentContext<Fxs>
+  race: Race<Fxs>
 ): Fx<Fork | Async | FirstSuccessRaceFailure<Race<Fxs>>, ResultOf<Fxs[number]>> =>
-  forkEach(r.fxs, r).pipe(
+  forkEach(race.arg.fxs, race.arg).pipe(
     flatMap(tasks => waitTask(taskFirstSuccess(tasks)))
   ) as Fx<Fork | Async | FirstSuccessRaceFailure<Race<Fxs>>, ResultOf<Fxs[number]>>
 

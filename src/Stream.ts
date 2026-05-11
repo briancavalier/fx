@@ -37,17 +37,17 @@ export const repeat = <const E, const A>(f: Fx<E, A>): Fx<E | Stream<A>, void> =
  * Apply an effectful function to each value in a stream
  */
 export const forEach = <E, R, E2>(f: Fx<E, R>, each: (a: Event<E>) => Fx<E2, void>): Fx<ExcludeStream<E, E2>, R> =>
-  f.pipe(handle(Stream, a => each(a as Event<E>)))
+  f.pipe(handle(Stream, stream => each(stream.arg as Event<E>)))
 
 /**
  * Take the first n values from a stream
  */
 export const take = (n: number) => <const E, const A, const R>(f: Fx<E | Stream<A>, R>) => {
   let i = n
-  return f.pipe(control(Stream, (resume, a) => gen(function* () {
+  return f.pipe(control(Stream, (resume, stream) => gen(function* () {
     if (i > 0) {
       --i
-      return resume(yield* emit(a))
+      return resume(yield* emit(stream.arg))
     } else {
       return yield* abort
     }

@@ -15,7 +15,7 @@ export const finalize = <E>(f: Fx<E, void>) =>
 export const scope = <const E, const A>(f: Fx<E, A>) => fx(function* () {
   const finalizers = [] as Fx<unknown, unknown>[]
   const result = yield* f.pipe(
-    handle(Finalize, f => ok(void finalizers.push(f))),
+    handle(Finalize, finalize => ok(void finalizers.push(finalize.arg))),
     returnFail
   )
 

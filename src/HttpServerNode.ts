@@ -59,7 +59,7 @@ export const nodeHttp = ({
   <const E, const A>(f: Fx<E, A>): Fx<NodeHttpHandled<E>, A> =>
     scoped(ServeScope, f).pipe(
       flatMap(fx =>
-        ok(fx.pipe(handleScoped(ServeScope, Serve, r => runNodeServer(r, makeServer))))
+        ok(fx.pipe(handleScoped(ServeScope, Serve, serve => runNodeServer(serve.arg, makeServer))))
       ),
       flatten
     ) as Fx<NodeHttpHandled<E>, A>

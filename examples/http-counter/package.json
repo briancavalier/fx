@@ -12,7 +12,7 @@
   "license": "MIT",
   "description": "",
   "dependencies": {
-    "@keyv/sqlite": "^3.6.7",
+    "@keyv/sqlite": "^4.0.8",
     "keyv": "^4.5.4"
   },
   "overrides": {

@@ -1,6 +1,7 @@
 import { Async, tryPromise } from './Async.js'
-import { Effect } from './Effect.js'
-import { Fail, catchAll, fail } from './Fail.js'
+import { at } from './Breadcrumb.js'
+import { Effect, withOrigin } from './Effect.js'
+import { Fail, catchAll, fail, failFrom } from './Fail.js'
 import { Fx, flatMap, map, ok } from './Fx.js'
 import { handle } from './Handler.js'
 
@@ -26,7 +27,8 @@ export class HttpRequest extends Effect('fx/HttpClient/HttpRequest')<Request, Re
  *     body: { type: 'json', value: { name: 'Ada' } }
  *   })
  */
-export const request = (r: Request) => new HttpRequest(r)
+export const request = (r: Request) =>
+  withOrigin(new HttpRequest(r), at('fx/HttpClient/request', request))
 
 /**
  * A transport-neutral HTTP request description.
@@ -272,13 +274,14 @@ export const w3cFetch = ({
 }: W3CFetchOptions = {}) =>
   <const E, const A>(f: Fx<E, A>) =>
     f.pipe(
-      handle(HttpRequest, ({ arg: r }) =>
-        tryPromise(signal =>
+      handle(HttpRequest, httpRequest => {
+        const r = httpRequest.arg
+        return tryPromise(signal =>
           fetch(r.url, init(r, toFetchRequest(r, signal))).then(toResponse)
         ).pipe(
-          catchAll(cause => fail(new TransportError(r, { cause })))
+          catchAll(cause => failFrom(httpRequest, new TransportError(r, { cause })))
         )
-      )
+      })
     )
 
 

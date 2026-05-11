@@ -2,9 +2,10 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
 import { at } from './Breadcrumb.js'
+import { Effect } from './Effect.js'
 import { fx, ok, run } from './Fx.js'
 
-import { Fail, fail, returnFail, returnIf, returnOnly } from './Fail.js'
+import { Fail, fail, failFrom, returnFail, returnIf, returnOnly } from './Fail.js'
 import { getTrace } from './Trace.js'
 import { runFork } from './internal/runFork.js'
 
@@ -33,6 +34,22 @@ describe('Fail', () => {
         e => e instanceof Error
           && firstLine(e).includes('test/fail-origin')
           && traceMessages(e)[0] === 'test/fail-origin'
+          && e.cause === cause
+      )
+    })
+  })
+
+  describe('failFrom', () => {
+    it('uses its fallback origin when the effect has no trace origin', async () => {
+      class TestEffect extends Effect('test/Effect')<void, void> { }
+      const cause = new Error('failed')
+      const origin = at('test/fail-from-fallback')
+
+      await assert.rejects(
+        runFork(failFrom(new TestEffect(), cause, origin)).promise,
+        e => e instanceof Error
+          && firstLine(e).includes('test/fail-from-fallback')
+          && traceMessages(e)[0] === 'test/fail-from-fallback'
           && e.cause === cause
       )
     })

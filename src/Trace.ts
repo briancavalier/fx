@@ -75,10 +75,16 @@ export interface DiagnosticErrorSnapshot {
   readonly name?: string
   readonly message: string
   readonly code?: string
+  readonly fields?: readonly DiagnosticFieldSnapshot[]
   readonly trace?: TraceSnapshot
   readonly cause?: DiagnosticErrorSnapshot
   readonly aggregate?: DiagnosticAggregateSnapshot
   readonly cycleDetected?: true
+}
+
+export interface DiagnosticFieldSnapshot {
+  readonly key: string
+  readonly value: string
 }
 
 export interface DiagnosticAggregateSnapshot {
@@ -393,8 +399,19 @@ const snapshotErrorObject = (error: Error): DiagnosticErrorSnapshot => ({
   type: error.constructor.name,
   name: error.name,
   message: error.message,
-  ...('code' in error ? { code: String((error as { readonly code: unknown }).code) } : {})
+  ...('code' in error ? { code: String((error as { readonly code: unknown }).code) } : {}),
+  ...snapshotErrorFields(error)
 })
+
+const snapshotErrorFields = (error: Error): Pick<DiagnosticErrorSnapshot, 'fields'> => {
+  const fields = Object.keys(error)
+    .filter(key => !excludedErrorFields.has(key))
+    .map(key => ({ key, value: formatDiagnosticFieldValue((error as unknown as Record<string, unknown>)[key], new Set([error])) }))
+
+  return fields.length === 0 ? {} : { fields }
+}
+
+const excludedErrorFields = new Set(['name', 'message', 'stack', 'cause', 'errors', 'code'])
 
 const aggregateErrors = (error: unknown): readonly unknown[] | undefined => {
   if (error instanceof AggregateError) return Array.from(error.errors)
@@ -458,6 +475,7 @@ const formatDiagnosticError = (
 ): void => {
   const prefix = ' '.repeat(indent)
   lines.push(`${prefix}${formatDiagnosticHeader(error, context)}`)
+  formatDiagnosticFields(error.fields, lines, indent, context)
 
   if (error.trace !== undefined) {
     const omitTraceSuffix = options.omitTraceSuffix ?? 0
@@ -486,6 +504,20 @@ const formatDiagnosticHeader = (error: DiagnosticErrorSnapshot, context: FormatC
   const name = error.name ?? error.type
   const message = error.message === '' ? '' : `: ${error.message}`
   return context.style.header(`${name}${code}${message}`)
+}
+
+const formatDiagnosticFields = (
+  fields: readonly DiagnosticFieldSnapshot[] | undefined,
+  lines: string[],
+  indent: number,
+  context: FormatContext
+): void => {
+  if (fields === undefined || fields.length === 0) return
+
+  const prefix = ' '.repeat(indent + 2)
+  for (const field of fields) {
+    lines.push(`${prefix}${context.style.code(field.key)}: ${field.value}`)
+  }
 }
 
 const formatDiagnosticAggregate = (
@@ -754,6 +786,69 @@ const formatErrorValue = (error: unknown): string => {
   }
 
   return String(error)
+}
+
+const formatDiagnosticFieldValue = (value: unknown, seen: Set<unknown>): string => {
+  if (value === null) return 'null'
+
+  switch (typeof value) {
+    case 'string':
+      return value
+
+    case 'number':
+    case 'bigint':
+    case 'boolean':
+    case 'undefined':
+      return String(value)
+
+    case 'symbol':
+      return value.description === undefined ? String(value) : `Symbol(${value.description})`
+
+    case 'function':
+      return `[Function${value.name === '' ? '' : `: ${value.name}`}]`
+
+    case 'object':
+      return formatDiagnosticFieldObject(value, seen)
+  }
+
+  return '[unknown]'
+}
+
+const formatDiagnosticFieldObject = (value: object, seen: Set<unknown>): string => {
+  if (seen.has(value)) return '[cycle]'
+  if (value instanceof Error) return formatErrorValue(value)
+  if (value instanceof URL) return String(value)
+
+  seen.add(value)
+  try {
+    if (Array.isArray(value)) {
+      return `[${formatFieldEntries(value.slice(0, MaxDiagnosticFieldEntries).map(v => formatDiagnosticFieldValue(v, seen)), value.length)}]`
+    }
+
+    if (isPlainObject(value)) {
+      const keys = Object.keys(value)
+      const entries = keys.slice(0, MaxDiagnosticFieldEntries).map(key =>
+        `${key}: ${formatDiagnosticFieldValue((value as Record<string, unknown>)[key], seen)}`
+      )
+      return `{ ${formatFieldEntries(entries, keys.length)} }`
+    }
+
+    return Object.prototype.toString.call(value)
+  } finally {
+    seen.delete(value)
+  }
+}
+
+const formatFieldEntries = (entries: readonly string[], total: number): string => {
+  const suffix = total > entries.length ? `, ... ${total - entries.length} more` : ''
+  return `${entries.join(', ')}${suffix}`
+}
+
+const MaxDiagnosticFieldEntries = 6
+
+const isPlainObject = (value: object): boolean => {
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
 }
 
 const formatAggregateErrorValue = (error: unknown, aggregate: readonly unknown[]): string =>

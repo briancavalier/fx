@@ -1,6 +1,6 @@
 import { Async } from './Async.js'
 import { at } from './Breadcrumb.js'
-import { provideAll } from './Env.js'
+import { Get, get, provideAll } from './Env.js'
 import { Fail, assert } from './Fail.js'
 import { Scoped } from './Scoped.js'
 import { Task } from './Task.js'
@@ -19,14 +19,25 @@ export interface Fx<E, A> extends Pipeable {
 
 /**
  * Construct an Fx from a generator that uses `yield*` to produce effects.
+ * A generator with a declared runtime parameter receives contextual parameters
+ * from {@link Get}; defaulted contextual parameters are not supported because
+ * they have runtime arity 0.
  */
 export const fx: {
   <const E, const A>(f: () => Generator<E, A>): Fx<E, A>
+  <const Ctx extends Record<PropertyKey, unknown>, const E, const A>(f: (ctx: Ctx) => Generator<E, A>): Fx<E | Get<Ctx>, A>
   <const T, const E, const A>(self: T, f: (this: T) => Generator<E, A>): Fx<E, A>
+  <const T, const Ctx extends Record<PropertyKey, unknown>, const E, const A>(self: T, f: (this: T, ctx: Ctx) => Generator<E, A>): Fx<E | Get<Ctx>, A>
 } = function () {
-  return arguments.length === 1
-    ? new generator.Gen(undefined, arguments[0])
-    : new generator.Gen(arguments[0], arguments[1])
+  const self = arguments.length === 1 ? undefined : arguments[0]
+  const f = arguments.length === 1 ? arguments[0] : arguments[1]
+
+  return f.length === 0
+    ? new generator.Gen(self, f)
+    : new generator.Gen(self, function* (this: unknown) {
+      const ctx = yield* get()
+      return yield* f.call(this, ctx)
+    })
 }
 
 /**

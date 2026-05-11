@@ -1,6 +1,6 @@
 import { EffectType, isEffect } from '../Effect.js'
 import { Fx } from '../Fx.js'
-import type { HandlerContext } from '../Scoped.js'
+import { Scoped, type HandlerContext } from '../Scoped.js'
 import { Pipeable, pipeThis } from './pipe.js'
 import { getRuntimeContext, withActiveRuntimeContext, withRuntimeContext } from './runtimeContext.js'
 
@@ -15,6 +15,10 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
     public readonly effectId: unknown,
     public readonly handler: (e: unknown) => Fx<unknown, unknown>
   ) { }
+
+  wrap(fx: Fx<unknown, unknown>): Fx<unknown, unknown> {
+    return new Handler(fx, this.effectId, this.handler)
+  }
 
   *[Symbol.iterator](): Iterator<E, A> {
     const { effectId, handler, fx } = this
@@ -31,7 +35,7 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, HandlerContext {
               ? handler(effect.arg)
               : withActiveRuntimeContext(context, () => handler(effect.arg))
             ir = i.next(yield* withRuntimeContext(context, handled) as any)
-          } else if (effect._fxEffectId === 'fx/Scoped') {
+          } else if (Scoped.is(effect)) {
             ir = i.next([this, ...(yield effect) as any])
           } else {
             ir = i.next(yield effect as any)

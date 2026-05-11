@@ -1,9 +1,9 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Effect } from './Effect.js'
-import { Fx, ok, run } from './Fx.js'
+import { Fx, fx, ok, run } from './Fx.js'
 import { handle } from './Handler.js'
-import { captureScoped, closeScoped, withContext } from './Scoped.js'
+import { captureScoped, closeScoped, withContext, type HandlerContext } from './Scoped.js'
 
 describe('Scoped', () => {
   it('allows user code to capture and apply a named handler scope', () => {
@@ -74,6 +74,29 @@ describe('Scoped', () => {
 
       assert.equal(context.length, 1)
       assert.equal(result, 'local')
+    })
+
+    it('applies captured context by wrapping target Fx', () => {
+      let wraps = 0
+
+      const context: readonly HandlerContext[] = [{
+        wrap(f: Fx<unknown, unknown>): Fx<unknown, unknown> {
+          wraps += 1
+          return fx(function* () {
+            const value = yield* f
+            return `${wraps}:${String(value)}`
+          })
+        }
+      }]
+
+      const f = ok('value')
+
+      const runWithContext = () =>
+        run(withContext(context, f) as Fx<never, string>)
+
+      assert.equal(runWithContext(), '1:value')
+      assert.equal(runWithContext(), '2:value')
+      assert.equal(wraps, 2)
     })
 
     it('does not capture scope boundaries as handler context', () => {

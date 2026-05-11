@@ -1,5 +1,5 @@
 import { Effect } from './Effect.js'
-import { Fx, map, ok } from './Fx.js'
+import { Fx, flatMap, map, ok } from './Fx.js'
 import { handle } from './Handler.js'
 
 export class Get<E extends Record<PropertyKey, unknown>> extends Effect('fx/Env')<void, E> { }
@@ -19,6 +19,13 @@ export const provide = <const S extends Record<PropertyKey, unknown>>(s: S) => <
   f.pipe(
     handle(Get, _ => get().pipe(map(e => ({ ...e, ...s }))))
   ) as Fx<ExcludeEnv<E, S>, A>
+
+export const provideFrom =
+  <const PE, const C extends Record<PropertyKey, unknown>>(context: Fx<PE, C>) =>
+    <const E, const A>(f: Fx<E, A>) =>
+      context.pipe(
+        flatMap(c => f.pipe(provide(c)))
+      ) as Fx<PE | ExcludeEnv<E, C>, A>
 
 export type EnvOf<E> = U2I<EachEnv<E>>
 type EachEnv<E> = E extends Get<infer A> ? A : never

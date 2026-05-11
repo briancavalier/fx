@@ -1,5 +1,5 @@
-import { flatMap, fx, runPromise } from '../../src/index.js'
-import { get, provide } from '../../src/Env.js'
+import { fx, runPromise } from '../../src/index.js'
+import { provide } from '../../src/Env.js'
 import { assert as assertNoFail } from '../../src/Fail.js'
 import { unbounded } from '../../src/Concurrent.js'
 import { console as logConsole, info } from '../../src/Log.js'
@@ -32,12 +32,12 @@ const appRoutes = route('GET', '/*', request => fx(function* () {
 
 const port = Number(process.env.PORT ?? process.env.port ?? 3000)
 
-const server = get<{ port: number }>().pipe(
-  flatMap(({ port }) => serve(appRoutes, {
+const server = fx(function* ({ port }: { readonly port: number }) {
+  return yield* serve(appRoutes, {
     port,
     observe: event => emit(event)
-  }))
-)
+  })
+})
 
 await server.pipe(
   nodeHttp(),

@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
+import { provideAll } from './Env.js'
 import { Fail, returnFail } from './Fail.js'
 import { assertSync, flatMap, fx, ok, run, runPromise, runTask, trySync } from './Fx.js'
 import { handle } from './Handler.js'
@@ -9,6 +10,30 @@ import { getTrace } from './Trace.js'
 
 describe('Fx', () => {
   describe('fx', () => {
+    it('given contextual parameter, receives environment', () => {
+      const actual = fx(function* ({ name }: { readonly name: string }) {
+        return `hello ${name}`
+      }).pipe(
+        provideAll({ name: 'Brian' }),
+        run
+      )
+
+      assert.equal(actual, 'hello Brian')
+    })
+
+    it('given this arg and contextual parameter, receives both', () => {
+      const self = { greeting: 'hello' }
+
+      const actual = fx(self, function* (this: typeof self, { name }: { readonly name: string }) {
+        return `${this.greeting} ${name}`
+      }).pipe(
+        provideAll({ name: 'Brian' }),
+        run
+      )
+
+      assert.equal(actual, 'hello Brian')
+    })
+
     it('given this arg, executes generator with it', () => {
       const expected = { foo: 'bar' }
       const actual = fx(expected, function* () {

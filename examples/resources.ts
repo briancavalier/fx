@@ -1,4 +1,4 @@
-import { nodeSourceLookup } from "../../../../../Users/brian/dev/@briancavalier/fx/src/TraceNode"
+import { nodeSourceLookup } from "../src/TraceNode"
 import { assertSync, formatDiagnostic, fx, runPromise } from "../src"
 import { all, defaultAll, unbounded } from "../src/Concurrent"
 import { defaultConsole, error } from "../src/Console"

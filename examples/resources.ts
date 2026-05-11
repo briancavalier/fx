@@ -1,20 +1,21 @@
-import { assertSync, fx, runPromise } from "../src"
-import { assert, fail } from "../src/Fail"
+import { nodeSourceLookup } from "../../../../../Users/brian/dev/@briancavalier/fx/src/TraceNode"
+import { assertSync, formatDiagnostic, fx, runPromise } from "../src"
 import { all, defaultAll, unbounded } from "../src/Concurrent"
-import { finalize, scope } from "../src/Scope"
-import { sleep, defaultTime } from "../src/Time"
+import { defaultConsole, error } from "../src/Console"
+import { catchAll, fail } from "../src/Fail"
+import { managed, usingManaged, withFinalization } from "../src/Finalization"
+import { defaultTime, sleep } from "../src/Time"
 
 const myResource = (name: string) => fx(function* () {
   yield* sleep(100)
-  return [
+  return managed(
     name,
-    assertSync(() => console.log(`releasing resource: ${name}`))
-  ]
+    exit => assertSync(() => console.log(`releasing resource: ${name} after ${exit.type}`))
+  )
 })
 
-const f = fx(function* () {
-  const [resource, release] = yield* myResource('my-resource')
-  yield* finalize(release)
+const f = (n: number) => fx(function* () {
+  const resource = yield* usingManaged(myResource(`my-resource-${n}`))
 
   console.log(`using resource: ${resource}`)
 
@@ -24,11 +25,12 @@ const f = fx(function* () {
   console.log(`done using resource: ${resource}`)
 })
 
-await all([f, f]).pipe(
+await all([f(1), f(2)]).pipe(
   defaultAll,
-  scope,
+  withFinalization,
   defaultTime,
   unbounded,
-  assert,
+  catchAll(e => error('failed', formatDiagnostic(e, { source: { lookup: nodeSourceLookup() } }))),
+  defaultConsole,
   runPromise
 )

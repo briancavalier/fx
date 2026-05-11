@@ -65,9 +65,9 @@
       "types": "./dist/Ref.d.ts",
       "import": "./dist/Ref.js"
     },
-    "./Scope": {
-      "types": "./dist/Scope.d.ts",
-      "import": "./dist/Scope.js"
+    "./Finalization": {
+      "types": "./dist/Finalization.d.ts",
+      "import": "./dist/Finalization.js"
     },
     "./Sink": {
       "types": "./dist/Sink.d.ts",

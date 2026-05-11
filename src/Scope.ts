@@ -32,7 +32,8 @@ export const scope = <const E, const A>(f: Fx<E, A>) => fx(function* () {
 
 const releaseSafely = (resources: readonly Fx<unknown, unknown>[]) => fx(function* () {
   const failures = [] as unknown[]
-  for (const release of resources) {
+  for (let i = resources.length - 1; i >= 0; --i) {
+    const release = resources[i]
     const r = yield* returnFail(release)
     if (Fail.is(r)) failures.push(r.arg)
   }

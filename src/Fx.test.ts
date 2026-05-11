@@ -5,7 +5,7 @@ import { Effect } from './Effect.js'
 import { provideAll } from './Env.js'
 import { Fail, returnFail } from './Fail.js'
 import { assertSync, flatMap, fx, ok, run, runPromise, runTask, trySync } from './Fx.js'
-import { handle } from './Handler.js'
+import { control, handle } from './Handler.js'
 import { getTrace } from './Trace.js'
 
 describe('Fx', () => {
@@ -65,12 +65,54 @@ describe('Fx', () => {
 
       const r = new E1(1).pipe(
         flatMap(a => new E2(`${a}`)),
-        handle(E1, ok),
-        handle(E2, ok),
+        handle(E1, e => ok(e.arg)),
+        handle(E2, e => ok(e.arg)),
         run
       )
 
       assert.equal(r, '1')
+    })
+
+    it('handler callbacks receive the original effect instance', () => {
+      class Request extends Effect('Request')<number, number> {
+        readonly metadata = 'request metadata'
+      }
+
+      let handled: Request | undefined
+      const request = new Request(1)
+
+      const actual = request.pipe(
+        handle(Request, effect => {
+          handled = effect
+          return ok(effect.arg + 1)
+        }),
+        run
+      )
+
+      assert.equal(actual, 2)
+      assert.equal(handled, request)
+      assert.equal(handled.metadata, 'request metadata')
+    })
+
+    it('control callbacks receive the original effect instance', () => {
+      class Request extends Effect('ControlledRequest')<number, number> {
+        readonly metadata = 'controlled metadata'
+      }
+
+      let handled: Request | undefined
+      const request = new Request(1)
+
+      const actual = request.pipe(
+        control(Request, (resume, effect) => {
+          handled = effect
+          return ok(resume(effect.arg + 1))
+        }),
+        run
+      )
+
+      assert.equal(actual, 2)
+      assert.equal(handled, request)
+      assert.equal(handled.metadata, 'controlled metadata')
     })
 
     it('has ok as left identity', () => {

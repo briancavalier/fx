@@ -12,17 +12,17 @@ import { int, defaultRandom } from '../../src/Random'
 
 import { GenerateSecret, Print, Read, main } from './main'
 
-const handlePrint = handle(Print, s => ok(console.log(s)))
+const handlePrint = handle(Print, print => ok(console.log(print.arg)))
 
 const handleRead = <E, A>(f: Fx<E, A>) => bracket(
   assertSync(() => createInterface({ input: process.stdin, output: process.stdout })),
   readline => ok(readline.close()),
   readline => f.pipe(
-    handle(Read, prompt => assertPromise(signal => readline.question(prompt, { signal })))
+    handle(Read, read => assertPromise(signal => readline.question(read.arg, { signal })))
   ))
 
 const handleGenerateSecret = handle(GenerateSecret, max => fx(function* () {
-  return 1 + (yield* int(max))
+  return 1 + (yield* int(max.arg))
 }))
 
 const { max = 10 } = process.env

@@ -1,6 +1,6 @@
 import { Effect, EffectType, isEffect } from './Effect.js'
 import { Fx, map } from './Fx.js'
-import { Answer, Arg, Handler } from './internal/Handler.js'
+import { Answer, Handler } from './internal/Handler.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 
 export interface HandlerContext {
@@ -37,7 +37,7 @@ export const closeScoped = <const Name extends string>(name: Name) =>
 export const handleScoped = <const Name extends string, T extends EffectType, HandlerEffects>(
   name: Name,
   e: T,
-  f: (e: Arg<T>) => Fx<HandlerEffects, Answer<T>>
+  f: (effect: InstanceType<T>) => Fx<HandlerEffects, Answer<T>>
 ) => <const E, const A>(
   fx: Fx<E, A>
 ): Fx<Handle<Handle<E, InstanceType<T>, HandlerEffects>, Scoped<Name>>, A> =>

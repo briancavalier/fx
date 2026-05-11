@@ -18,7 +18,7 @@ const withState = <const E, const A, const S = State<E>>(s: S, f: Fx<E, A>) => {
   return f.pipe(
     handle(Get, _ => ok(state)),
     handle(Set, newState => {
-      state = newState as S
+      state = newState.arg as S
       return ok(undefined)
     }),
     map(a => [a, state])

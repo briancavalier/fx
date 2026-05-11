@@ -14,7 +14,7 @@ import { GenerateSecret, Print, Read, checkAnswer, main } from './main'
 const handlePrint = <E, A>(f: Fx<E, A>) => {
   const printed = [] as string[]
   return f.pipe(
-    handle(Print, s => ok(void printed.push(s))),
+    handle(Print, print => ok(void printed.push(print.arg))),
     map(_ => printed)
   )
 }
@@ -23,7 +23,7 @@ const handleRead = ([...inputs]: readonly string[]) =>
   handle(Read, _ => ok(inputs.shift()!))
 
 const handleGenerateSecret = ([...values]: readonly number[]) =>
-  handle(GenerateSecret, max => ok(Math.min(max, values.shift()!)))
+  handle(GenerateSecret, max => ok(Math.min(max.arg, values.shift()!)))
 
 // #endregion
 // -------------------------------------------------------------------

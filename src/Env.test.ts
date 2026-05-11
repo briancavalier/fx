@@ -128,7 +128,7 @@ describe('Env', () => {
         withUser,
         provideAll({ request }),
         handle(Authenticate, request => fx(function* () {
-          return { id: `user:${request.id}` }
+          return { id: `user:${request.arg.id}` }
         }))
       ))
 
@@ -157,7 +157,7 @@ describe('Env', () => {
 
       // @ts-expect-error request remains required
       const _missingRequest: Fx<never, string> = secured.pipe(handle(Authenticate, request => fx(function* () {
-        return { id: `user:${request.id}` }
+        return { id: `user:${request.arg.id}` }
       })))
 
       // @ts-expect-error Authenticate remains required
@@ -166,7 +166,7 @@ describe('Env', () => {
       const actual = run(secured.pipe(
         provideAll({ request }),
         handle(Authenticate, request => fx(function* () {
-          return { id: `user:${request.id}` }
+          return { id: `user:${request.arg.id}` }
         }))
       ))
 

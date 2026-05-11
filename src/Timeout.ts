@@ -95,7 +95,8 @@ export type ErrorsOf<E> = UnwrapFail<Extract<E, Fail<any>>>
 export type ErrorsOfTimeout<E> = E extends Timeout<infer R, any, any> ? R : never
 export type TimeoutErrorOf<E> = E extends Timeout<any, any, infer TE> ? TE : never
 
-const runTimeout = <const E, const A, const TE>(t: TimeoutContext<E, A, TE>): Fx<Fork | Sleep | Async, Fx<Fail<E | TE>, A>> => fx(function* () {
+const runTimeout = <const E, const A, const TE>(timeout: Timeout<E, A, TE>): Fx<Fork | Sleep | Async, Fx<Fail<E | TE>, A>> => fx(function* () {
+  const t = timeout.arg
   const result = yield* race([
     attempt(t.fx as Fx<Fail<E>, A>),
     sleep(t.ms).pipe(map(() => ({ type: 'timeout', failure: t.onTimeout(t) } as const)))

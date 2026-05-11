@@ -303,7 +303,15 @@ const firstStackLocation = (stack: string | undefined): TraceLocation | undefine
   if (stack === undefined) return undefined
 
   const lines = stack.split('\n')
-  return lines.length > 1 ? parseStackLocation(lines[1].trim()) : undefined
+  let fallback: TraceLocation | undefined
+
+  for (let i = 1; i < lines.length; i++) {
+    const location = parseStackLocation(lines[i].trim())
+    fallback ??= location
+    if (!isTraceTrampolineLocation(location)) return location
+  }
+
+  return fallback
 }
 
 const parseStackLocation = (raw: string): TraceLocation => {
@@ -330,6 +338,16 @@ const parseStackLocation = (raw: string): TraceLocation => {
   }
 
   return { raw }
+}
+
+const isTraceTrampolineLocation = (location: TraceLocation): boolean => {
+  if (location.file === undefined) return false
+
+  const file = location.file.replaceAll('\\', '/')
+  if (file.endsWith('/src/internal/pipe.ts') || file.endsWith('/dist/internal/pipe.js')) return true
+
+  const isGeneratorPipe = location.functionName?.endsWith('.pipe') ?? false
+  return isGeneratorPipe && (file.endsWith('/src/internal/generator.ts') || file.endsWith('/dist/internal/generator.js'))
 }
 
 const snapshotFrame = (frame: TraceFrame): TraceSnapshotFrame => {

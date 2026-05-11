@@ -10,9 +10,9 @@ export const keyvCounter = <E, A>(f: Fx<E, A>) => bracket(
   assertSync(() => new Keyv<number>('sqlite://http-counter.sqlite')),
   db => assertPromise(() => db.disconnect()),
   db => f.pipe(
-    handle(Next, key => fx(function* () {
-      const value = (yield* get(db, key)) + 1
-      yield* set(db, key, value)
+    handle(Next, next => fx(function* () {
+      const value = (yield* get(db, next.arg)) + 1
+      yield* set(db, next.arg, value)
       return value
     })
     ))

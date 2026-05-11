@@ -36,7 +36,7 @@ const ProgramIterations = 25_000
 const EffectsPerProgram = 100
 const context: RuntimeContext = { traceCapturePolicy: 'off' }
 
-const pingHandler = handle(Ping, n => ok(n + 1))
+const pingHandler = handle(Ping, ping => ok(ping.arg + 1))
 const program = pingProgram(EffectsPerProgram)
 const programOff = program.pipe(withTraceCapture('off'))
 const programLabels = program.pipe(withTraceCapture('labels'))

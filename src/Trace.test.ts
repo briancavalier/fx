@@ -292,8 +292,10 @@ describe('Trace', () => {
 
     assert.ok(Fail.is(retryResult))
     assert.equal(retryResult.arg, retryError)
-    assert.equal(snapshotError(retryError).trace?.frames[0]?.kind, 'retry')
+    assert.equal(snapshotError(retryError).trace?.frames[0]?.kind, 'fail')
     assert.equal(snapshotError(retryError).trace?.frames[0]?.location, undefined)
+    assert.equal(snapshotError(retryError).trace?.frames[1]?.kind, 'retry')
+    assert.equal(snapshotError(retryError).trace?.frames[1]?.location, undefined)
   })
 
   it('prepends frames newest first', () => {

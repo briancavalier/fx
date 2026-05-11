@@ -4,7 +4,7 @@ import { Fail, returnFail } from './Fail.js'
 import { flatMap, flatten, Fx, fx, ok, unit } from './Fx.js'
 import { Handle } from './Handler.js'
 import { Scoped, handleScoped, scoped } from './Scoped.js'
-import { Trace, attachTrace, captureTrace } from './Trace.js'
+import { Trace, appendTrace, attachTrace, captureTrace } from './Trace.js'
 
 /**
  * A retry effect. Programs yield {@link Retry} values to request that a
@@ -15,9 +15,9 @@ export class Retry<const E, const A> extends Effect('fx/Retry')<RetryContext<E, 
 /**
  * Request that an Fx be retried when it fails.
  */
-export const retry = <const RE>(options: RetryOptions<RE>) =>
-  <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A> | Scoped<'fx/Retry'>, A> => {
-    const origin = at('fx/Retry/retry', retry)
+export const retry = <const RE>(options: RetryOptions<RE>) => {
+  function retryWith<const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A> | Scoped<'fx/Retry'>, A> {
+    const origin = at('fx/Retry/retry', retryWith)
     const trace = captureTrace(origin, undefined, { kind: 'retry' })
 
     return scoped('fx/Retry', f).pipe(
@@ -31,6 +31,9 @@ export const retry = <const RE>(options: RetryOptions<RE>) =>
       flatten
     )
   }
+
+  return retryWith
+}
 
 /**
  * Handle Retry by rerunning the captured Fx until it succeeds, the retry budget
@@ -84,7 +87,8 @@ export type ErrorsOf<E> = UnwrapFail<Extract<E, Fail<any>>>
 export type ErrorsOfRetry<E> = E extends Retry<infer R, any> ? R : never
 
 const runRetry = <OE>(observe: (e: RetryEvent) => Fx<OE, void>) =>
-  <const E, const A>(r: RetryContext<E, A>): Fx<never, Fx<Fail<E> | OE, A>> => ok(fx(function* () {
+  <const E, const A>(retry: Retry<E, A>): Fx<never, Fx<Fail<E> | OE, A>> => ok(fx(function* () {
+    const r = retry.arg
     let attempt = 1
 
     while (true) {
@@ -98,7 +102,9 @@ const runRetry = <OE>(observe: (e: RetryEvent) => Fx<OE, void>) =>
       const retrying = attempt <= r.retries && r.while(result.arg, attempt)
       yield* observe({ type: 'failure', attempt, failure: result.arg, retrying })
       if (!retrying) {
-        if (typeof result.arg === 'object' && result.arg !== null && r.trace !== undefined) attachTrace(result.arg, r.trace)
+        if (typeof result.arg === 'object' && result.arg !== null && r.trace !== undefined) {
+          attachTrace(result.arg, result.trace === undefined ? r.trace : appendTrace(result.trace, r.trace))
+        }
         return yield* result
       }
 

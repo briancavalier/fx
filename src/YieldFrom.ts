@@ -11,10 +11,6 @@ export type Yielding<Out, In = void> = {
   }
 }
 
-export const brand = <Brand>() =>
-  <const Name extends string>(name: Name): Name & Brand =>
-    name as Name & Brand
-
 export type YieldOutput<Scope> =
   Scope extends Yielding<infer Out, unknown> ? Out : never
 

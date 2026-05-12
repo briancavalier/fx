@@ -3,8 +3,8 @@ import { defaultConsole, log } from '../../src/Console'
 import { assert as assertNoFail } from '../../src/Fail'
 import { managed, usingManaged } from '../../src/Finalization'
 import { returnFrom } from '../../src/ReturnFrom'
-import { scope } from '../../src/Scope'
-import { brand, handleYieldFrom, yieldFrom, type YieldFrom, type Yielding } from '../../src/YieldFrom'
+import { brand, scope } from '../../src/Scope'
+import { handleYieldFrom, yieldFrom, type YieldFrom, type Yielding } from '../../src/YieldFrom'
 
 const ImportCsv = 'examples/scope/ImportCsv' as const
 

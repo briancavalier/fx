@@ -3,8 +3,8 @@ import { describe, it } from 'node:test'
 import { abort, orReturn } from './Abort.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope } from './Scope.js'
-import { brand, collectFrom, handleYieldFrom, YieldFrom, yieldFrom } from './YieldFrom.js'
+import { brand, scope } from './Scope.js'
+import { collectFrom, handleYieldFrom, YieldFrom, yieldFrom } from './YieldFrom.js'
 import type { Yielding } from './YieldFrom.js'
 
 describe('YieldFrom', () => {

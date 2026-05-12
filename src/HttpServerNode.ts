@@ -19,7 +19,7 @@ import {
   compileRoutes,
   dispatch
 } from './HttpServer.js'
-import { Scoped, handleScoped, scoped, withContext } from './Scoped.js'
+import { HandlerCapture, handleCaptured, withCapturedHandlers, withHandlerContext } from './HandlerCapture.js'
 import * as Queue from './internal/Queue.js'
 
 export type NodeHttpOptions = {
@@ -57,16 +57,16 @@ export const nodeHttp = ({
   createServer: makeServer = createServer
 }: NodeHttpOptions = {}) =>
   <const E, const A>(f: Fx<E, A>): Fx<NodeHttpHandled<E>, A> =>
-    scoped(ServeScope, f).pipe(
+    withCapturedHandlers(ServeScope, f).pipe(
       flatMap(fx =>
-        ok(fx.pipe(handleScoped(ServeScope, Serve, serve => runNodeServer(serve.arg, makeServer))))
+        ok(fx.pipe(handleCaptured(ServeScope, Serve, serve => runNodeServer(serve.arg, makeServer))))
       ),
       flatten
     ) as Fx<NodeHttpHandled<E>, A>
 
 export type NodeHttpHandled<E> =
-  Handle<Handle<E, Serve<any, any>, Async | Fail<NodeHttpError>>, Scoped<typeof ServeScope>>
-  | Scoped<typeof ServeScope>
+  Handle<Handle<E, Serve<any, any>, Async | Fail<NodeHttpError>>, HandlerCapture<typeof ServeScope>>
+  | HandlerCapture<typeof ServeScope>
 
 const runNodeServer = <E, OE>(
   request: ServeRequest<E, OE>,
@@ -231,13 +231,13 @@ const runNodeRequest = async <E>(
   })
 
   try {
-    await withContext(context, program as Fx<unknown, void>).pipe(
+    await withHandlerContext(context, program as Fx<unknown, void>).pipe(
       catchAll(cause => {
         failure = { error: cause }
         return writeInternalServerError(outgoing)
       }),
       returnAll,
-      f => runPromise(f as Fx<Async | Scoped<string>, void>)
+      f => runPromise(f as Fx<Async | HandlerCapture<string>, void>)
     )
   } catch (cause) {
     failure ??= { error: cause }

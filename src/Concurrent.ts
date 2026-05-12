@@ -4,7 +4,7 @@ import { Effect } from './Effect.js'
 import { Fail } from './Fail.js'
 import { Fx, flatMap, flatten, fx, ok } from './Fx.js'
 import { Handle } from './Handler.js'
-import { Scoped, handleScoped, mapScoped, scoped } from './Scoped.js'
+import { HandlerCapture, handleCaptured, mapCapturedHandlers, withCapturedHandlers } from './HandlerCapture.js'
 import { Task, wait as waitTask } from './Task.js'
 import type { TraceFrameKind, TraceOptions, TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
@@ -63,11 +63,11 @@ export interface ConcurrentContext<Fxs extends readonly Fx<unknown, unknown>[]> 
 export const fork = <const E, const A>(
   f: Fx<E, A>,
   options?: TraceOptions
-): Fx<Exclude<E, Async | Fail<any>> | Fork | Scoped<'fx/Concurrent/Fork'>, Task<A, ErrorsOf<E>>> => {
+): Fx<Exclude<E, Async | Fail<any>> | Fork | HandlerCapture<'fx/Concurrent/Fork'>, Task<A, ErrorsOf<E>>> => {
   const trace = traceOrigin(options, 'fx/Concurrent/fork', fork, 'fork')
-  return scoped('fx/Concurrent/Fork', f).pipe(
+  return withCapturedHandlers('fx/Concurrent/Fork', f).pipe(
     flatMap(fx => new Fork({ fx, ...trace }) as Fx<Fork, Task<A, ErrorsOf<E>>>)
-  ) as Fx<Exclude<E, Async | Fail<any>> | Fork | Scoped<'fx/Concurrent/Fork'>, Task<A, ErrorsOf<E>>>
+  ) as Fx<Exclude<E, Async | Fail<any>> | Fork | HandlerCapture<'fx/Concurrent/Fork'>, Task<A, ErrorsOf<E>>>
 }
 
 /**
@@ -104,12 +104,12 @@ export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   options?: TraceOptions
 ) => {
   const trace = traceOrigin(options, 'fx/Concurrent/all', all, 'all')
-  return mapScoped('fx/Concurrent/All', fxs).pipe(
+  return mapCapturedHandlers('fx/Concurrent/All', fxs).pipe(
     flatMap(fxs => new All({
       fxs: fxs as unknown as Fxs,
       ...trace
     }))
-  ) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | All<Fxs> | Scoped<'fx/Concurrent/All'>, {
+  ) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | All<Fxs> | HandlerCapture<'fx/Concurrent/All'>, {
     readonly [K in keyof Fxs]: ResultOf<Fxs[K]>
   }>
 }
@@ -126,12 +126,12 @@ export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   options?: TraceOptions
 ) => {
   const trace = traceOrigin(options, 'fx/Concurrent/race', race, 'race')
-  return mapScoped('fx/Concurrent/Race', fxs).pipe(
+  return mapCapturedHandlers('fx/Concurrent/Race', fxs).pipe(
     flatMap(fxs => new Race({
       fxs: fxs as unknown as Fxs,
       ...trace
     }))
-  ) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | Race<Fxs> | Scoped<'fx/Concurrent/Race'>, ResultOf<Fxs[number]>>
+  ) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | Race<Fxs> | HandlerCapture<'fx/Concurrent/Race'>, ResultOf<Fxs[number]>>
 }
 
 /**
@@ -145,8 +145,8 @@ export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(
  *   runPromise
  * )
  */
-export const defaultAll = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyAll, DefaultAllEffects<E>>, Scoped<'fx/Concurrent/All'>>, A> =>
-  f.pipe(handleScoped('fx/Concurrent/All', All, runAll)) as Fx<Handle<Handle<E, AnyAll, DefaultAllEffects<E>>, Scoped<'fx/Concurrent/All'>>, A>
+export const defaultAll = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyAll, DefaultAllEffects<E>>, HandlerCapture<'fx/Concurrent/All'>>, A> =>
+  f.pipe(handleCaptured('fx/Concurrent/All', All, runAll)) as Fx<Handle<Handle<E, AnyAll, DefaultAllEffects<E>>, HandlerCapture<'fx/Concurrent/All'>>, A>
 
 /**
  * Handle Race by running child computations concurrently in a structured scope.
@@ -159,8 +159,8 @@ export const defaultAll = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, A
  *   runPromise
  * )
  */
-export const firstSettled = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyRace, DefaultRaceEffects<E>>, Scoped<'fx/Concurrent/Race'>>, A> =>
-  f.pipe(handleScoped('fx/Concurrent/Race', Race, runRace)) as Fx<Handle<Handle<E, AnyRace, DefaultRaceEffects<E>>, Scoped<'fx/Concurrent/Race'>>, A>
+export const firstSettled = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyRace, DefaultRaceEffects<E>>, HandlerCapture<'fx/Concurrent/Race'>>, A> =>
+  f.pipe(handleCaptured('fx/Concurrent/Race', Race, runRace)) as Fx<Handle<Handle<E, AnyRace, DefaultRaceEffects<E>>, HandlerCapture<'fx/Concurrent/Race'>>, A>
 
 /**
  * Handle Race by running child computations concurrently and returning the
@@ -174,8 +174,8 @@ export const firstSettled = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E,
  *   runPromise
  * )
  */
-export const firstSuccess = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyRace, FirstSuccessRaceEffects<E>>, Scoped<'fx/Concurrent/Race'>>, A> =>
-  f.pipe(handleScoped('fx/Concurrent/Race', Race, runFirstSuccessRace)) as Fx<Handle<Handle<E, AnyRace, FirstSuccessRaceEffects<E>>, Scoped<'fx/Concurrent/Race'>>, A>
+export const firstSuccess = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyRace, FirstSuccessRaceEffects<E>>, HandlerCapture<'fx/Concurrent/Race'>>, A> =>
+  f.pipe(handleCaptured('fx/Concurrent/Race', Race, runFirstSuccessRace)) as Fx<Handle<Handle<E, AnyRace, FirstSuccessRaceEffects<E>>, HandlerCapture<'fx/Concurrent/Race'>>, A>
 
 /**
  * Failure returned by {@link firstSuccess} when every raced child fails.
@@ -209,13 +209,13 @@ export class RaceAllFailed<Errors extends readonly unknown[]> extends Error {
  * elaborate into Fork requests, so `bounded` also limits their child
  * concurrency.
  */
-export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, Fork>, Scoped<'fx/Concurrent/Fork'>> | Scoped<'fx/Concurrent/Fork'>, A> =>
-  scoped('fx/Concurrent/Fork', f).pipe(
+export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, Fork>, HandlerCapture<'fx/Concurrent/Fork'>> | HandlerCapture<'fx/Concurrent/Fork'>, A> =>
+  withCapturedHandlers('fx/Concurrent/Fork', f).pipe(
     flatMap(fx =>
-      ok(fx.pipe(handleScoped('fx/Concurrent/Fork', Fork, runForkWith(new Semaphore(maxConcurrency)))))
+      ok(fx.pipe(handleCaptured('fx/Concurrent/Fork', Fork, runForkWith(new Semaphore(maxConcurrency)))))
     ),
     flatten
-  ) as Fx<Handle<Handle<E, Fork>, Scoped<'fx/Concurrent/Fork'>> | Scoped<'fx/Concurrent/Fork'>, A>
+  ) as Fx<Handle<Handle<E, Fork>, HandlerCapture<'fx/Concurrent/Fork'>> | HandlerCapture<'fx/Concurrent/Fork'>, A>
 
 /**
  * Handle Fork by running forked computations without a concurrency limit.

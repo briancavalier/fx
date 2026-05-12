@@ -5,7 +5,7 @@ import { Effect } from './Effect.js'
 import { Fail, catchAll, fail } from './Fail.js'
 import { Fx, flatMap, flatten, fx, map, ok } from './Fx.js'
 import { Handle } from './Handler.js'
-import { Scoped, handleScoped, scoped } from './Scoped.js'
+import { HandlerCapture, handleCaptured, withCapturedHandlers } from './HandlerCapture.js'
 import { Sleep, sleep } from './Time.js'
 import { attachTrace, captureTrace } from './Trace.js'
 import type { TraceOrigin } from './Trace.js'
@@ -28,13 +28,13 @@ export class Timeout<const E, const A, const TE> extends Effect('fx/Timeout')<Ti
  *   runPromise
  * )
  */
-export function timeout(options: DefaultTimeoutOptions): <const E, const A>(f: Fx<E, A>) => Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TimeoutError> | Scoped<'fx/Timeout'>, A>
-export function timeout<const TE>(options: TimeoutOptions<TE>): <const E, const A>(f: Fx<E, A>) => Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE> | Scoped<'fx/Timeout'>, A>
+export function timeout(options: DefaultTimeoutOptions): <const E, const A>(f: Fx<E, A>) => Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TimeoutError> | HandlerCapture<'fx/Timeout'>, A>
+export function timeout<const TE>(options: TimeoutOptions<TE>): <const E, const A>(f: Fx<E, A>) => Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE> | HandlerCapture<'fx/Timeout'>, A>
 export function timeout<const TE>({ ms, onTimeout }: DefaultTimeoutOptions | TimeoutOptions<TE>) {
   const origin = at(`Timeout requested after ${ms}ms`, timeout)
   const trace = captureTrace(origin, undefined, { kind: 'timeout' })
-  return <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE | TimeoutError> | Scoped<'fx/Timeout'>, A> =>
-    scoped('fx/Timeout', f).pipe(
+  return <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE | TimeoutError> | HandlerCapture<'fx/Timeout'>, A> =>
+    withCapturedHandlers('fx/Timeout', f).pipe(
       flatMap(fx =>
         new Timeout<ErrorsOf<E>, A, TE | TimeoutError>({
           fx,
@@ -53,8 +53,8 @@ export function timeout<const TE>({ ms, onTimeout }: DefaultTimeoutOptions | Tim
  * complete within the requested time.
  */
 export const defaultTimeout = () =>
-  <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyTimeout, Fork | Sleep | Async | Fail<ErrorsOfTimeout<E> | TimeoutErrorOf<E>>>, Scoped<'fx/Timeout'>>, A> =>
-    f.pipe(handleScoped('fx/Timeout', Timeout, runTimeout)) as Fx<Handle<Handle<E, AnyTimeout, Fork | Sleep | Async | Fail<ErrorsOfTimeout<E> | TimeoutErrorOf<E>>>, Scoped<'fx/Timeout'>>, A>
+  <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyTimeout, Fork | Sleep | Async | Fail<ErrorsOfTimeout<E> | TimeoutErrorOf<E>>>, HandlerCapture<'fx/Timeout'>>, A> =>
+    f.pipe(handleCaptured('fx/Timeout', Timeout, runTimeout)) as Fx<Handle<Handle<E, AnyTimeout, Fork | Sleep | Async | Fail<ErrorsOfTimeout<E> | TimeoutErrorOf<E>>>, HandlerCapture<'fx/Timeout'>>, A>
 
 export class TimeoutError extends Error {
   readonly name = 'TimeoutError'

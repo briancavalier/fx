@@ -246,7 +246,7 @@ This leads to:
 
 The design of `fx` follows a few active threads in the algebraic effects literature:
 separating effect syntax from handler semantics, keeping effect requirements visible
-in types, and using scoped handler regions for higher-order effects such as retry,
+in types, and using explicit handler capture for higher-order effects such as retry,
 forking, resource management, and local interpretation.
 
 - Gordon Plotkin and Matija Pretnar, [Handlers of Algebraic Effects](https://doi.org/10.1007/978-3-642-00590-9_7), ESOP 2009.  
@@ -291,7 +291,7 @@ forking, resource management, and local interpretation.
 
 - Marius Müller, Philipp Schuster, Jonathan Lindegaard Starup, Klaus Ostermann, and Jonathan Immanuel Brachthäuser, [From Capabilities to Regions: Enabling Efficient Compilation of Lexical Effect Handlers](https://doi.org/10.1145/3622831), OOPSLA 2023.  
   Connects capability-based handlers with explicit regions, supporting the
-  direction of named handler scopes and region-local interpretation.
+  direction of named handler capture and region-local interpretation.
 
 - Cristina Matache, Sam Lindley, Sean Moss, Sam Staton, Nicolas Wu, and Zhixuan Yang, [Scoped Effects, Scoped Operations, and Parameterized Algebraic Theories](https://doi.org/10.1145/3731678), ACM Transactions on Programming Languages and Systems, 2025.  
   Recent state of the art on scoped effects, including dynamically allocated

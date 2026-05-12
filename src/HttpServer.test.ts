@@ -23,7 +23,7 @@ import {
   type ServerResponse
 } from './HttpServer.js'
 import { NodeHttpError, nodeHttp, type NodeHttpServerFactory } from './HttpServerNode.js'
-import { Scoped } from './Scoped.js'
+import { HandlerCapture } from './HandlerCapture.js'
 import { emit, Stream } from './Stream.js'
 import { dispose } from './Task.js'
 
@@ -82,11 +82,11 @@ describe('HttpServer', () => {
         assertNoFail
       )
       // @ts-expect-error route effects remain visible until a handler eliminates them
-      const _: Fx<Async | Scoped<string>, void> = unhandled
+      const _: Fx<Async | HandlerCapture<string>, void> = unhandled
       void _
 
       const handled = unhandled.pipe(handle(CurrentValue, () => ok('handled')))
-      const runnable: Fx<Async | Scoped<string>, void> = handled
+      const runnable: Fx<Async | HandlerCapture<string>, void> = handled
       void runnable
     })
   })
@@ -390,7 +390,7 @@ describe('HttpServer', () => {
         assertNoFail
       )
 
-      const _: Fx<Async | Scoped<string> | Stream<ServerEvent>, void> = observed
+      const _: Fx<Async | HandlerCapture<string> | Stream<ServerEvent>, void> = observed
       void _
     })
 
@@ -481,7 +481,7 @@ const readBody = async (body: ResponseBody<any> | undefined): Promise<string> =>
 }
 
 const withServer = async (
-  program: (createServer: NodeHttpServerFactory) => Fx<Async | Scoped<string> | Fail<NodeHttpError>, void>,
+  program: (createServer: NodeHttpServerFactory) => Fx<Async | HandlerCapture<string> | Fail<NodeHttpError>, void>,
   test: (port: number) => Promise<void>
 ) => {
   let port = 0

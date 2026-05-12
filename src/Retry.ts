@@ -3,7 +3,7 @@ import { Effect } from './Effect.js'
 import { Fail, returnFail } from './Fail.js'
 import { flatMap, flatten, Fx, fx, ok, unit } from './Fx.js'
 import { Handle } from './Handler.js'
-import { Scoped, handleScoped, scoped } from './Scoped.js'
+import { HandlerCapture, handleCaptured, withCapturedHandlers } from './HandlerCapture.js'
 import { Trace, appendTrace, attachTrace, captureTrace } from './Trace.js'
 
 /**
@@ -16,11 +16,11 @@ export class Retry<const E, const A> extends Effect('fx/Retry')<RetryContext<E, 
  * Request that an Fx be retried when it fails.
  */
 export const retry = <const RE>(options: RetryOptions<RE>) => {
-  function retryWith<const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A> | Scoped<'fx/Retry'>, A> {
+  function retryWith<const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Retry<ErrorsOf<E>, A> | HandlerCapture<'fx/Retry'>, A> {
     const origin = at('fx/Retry/retry', retryWith)
     const trace = captureTrace(origin, undefined, { kind: 'retry' })
 
-    return scoped('fx/Retry', f).pipe(
+    return withCapturedHandlers('fx/Retry', f).pipe(
       flatMap(fx =>
         new Retry<ErrorsOf<E>, A>({
           ...normalizeOptions(options as RetryOptions<ErrorsOf<E>>),
@@ -40,8 +40,8 @@ export const retry = <const RE>(options: RetryOptions<RE>) => {
  * is exhausted, or the retry predicate rejects the failure.
  */
 export const defaultRetry = <const OE = never>(options: DefaultRetryOptions<OE> = {}) =>
-  <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyRetry, Fail<ErrorsOfRetry<E>>> | OE, Scoped<'fx/Retry'>>, A> =>
-    f.pipe(handleScoped('fx/Retry', Retry, runRetry(normalizeObserve(options)))) as Fx<Handle<Handle<E, AnyRetry, Fail<ErrorsOfRetry<E>>> | OE, Scoped<'fx/Retry'>>, A>
+  <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyRetry, Fail<ErrorsOfRetry<E>>> | OE, HandlerCapture<'fx/Retry'>>, A> =>
+    f.pipe(handleCaptured('fx/Retry', Retry, runRetry(normalizeObserve(options)))) as Fx<Handle<Handle<E, AnyRetry, Fail<ErrorsOfRetry<E>>> | OE, HandlerCapture<'fx/Retry'>>, A>
 
 export interface RetryOptions<E> {
   /**

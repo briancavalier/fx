@@ -6,7 +6,7 @@ import { Fx, fx, ok, run } from './Fx.js'
 import { Effect } from './Effect.js'
 import { Get, get, provide, provideAll, provideFrom } from './Env.js'
 import { handle } from './Handler.js'
-import { captureScoped, closeScoped, withContext, type HandlerContext } from './Scoped.js'
+import { captureHandlers, closeHandlerCapture, withHandlerContext, type CapturedHandler } from './HandlerCapture.js'
 
 describe('Env', () => {
   describe('get', () => {
@@ -181,11 +181,11 @@ describe('Env', () => {
         return { value: `${seed}:${runs}` }
       }))
 
-      const context = run(captureScoped('test/Env/provideFrom').pipe(
+      const context = run(captureHandlers('test/Env/provideFrom').pipe(
         withValue,
-        closeScoped('test/Env/provideFrom'),
+        closeHandlerCapture('test/Env/provideFrom'),
         provideAll({ seed: 1 })
-      ) as Fx<never, readonly HandlerContext[]>)
+      ) as Fx<never, readonly CapturedHandler[]>)
 
       const f = fx(function* ({ value }: { readonly value: string }) {
         return [
@@ -195,7 +195,7 @@ describe('Env', () => {
       })
 
       const runWithContext = () =>
-        run(withContext(context as readonly HandlerContext[], f as Fx<unknown, unknown>) as Fx<never, readonly [string, string]>)
+        run(withHandlerContext(context as readonly CapturedHandler[], f as Fx<unknown, unknown>) as Fx<never, readonly [string, string]>)
 
       assert.deepEqual(runWithContext(), ['1:1', '1:1'])
       assert.deepEqual(runWithContext(), ['1:1', '1:1'])

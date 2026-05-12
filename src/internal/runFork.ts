@@ -3,7 +3,7 @@ import { Breadcrumb, at } from '../Breadcrumb.js'
 import { Fail } from '../Fail.js'
 import { Fork, ForkContext } from '../Concurrent.js'
 import { Fx } from '../Fx.js'
-import { HandlerContext, Scoped, withContext } from '../Scoped.js'
+import { CapturedHandler, HandlerCapture, withHandlerContext } from '../HandlerCapture.js'
 import { Task } from '../Task.js'
 import { attachTrace, captureAppendTrace, capturePrependTrace, captureTrace, getTrace } from '../Trace.js'
 import type { Trace, TraceFrameMetadata, TraceOptions } from '../Trace.js'
@@ -16,7 +16,7 @@ export type RunForkOptions = TraceOptions & {
   readonly maxConcurrency?: number
 }
 
-export const runFork = <const E extends Async | Fork | Fail<unknown> | Scoped<string>, const A>(f: Fx<E, A>, options: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
+export const runFork = <const E extends Async | Fork | Fail<unknown> | HandlerCapture<string>, const A>(f: Fx<E, A>, options: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new DisposableSet()
   const runtimeContext = currentRuntimeContext()
   const origin = options.origin ?? at('fx/runFork', runFork)
@@ -29,11 +29,11 @@ export const runFork = <const E extends Async | Fork | Fail<unknown> | Scoped<st
   return taskWithRuntimeContext(promise, disposables, runtimeContext)
 }
 
-export const acquireAndRunFork = (f: ForkContext, s: Semaphore, context: readonly HandlerContext[] = [], runtimeContext: RuntimeContext | undefined = currentRuntimeContext()): Task<unknown, unknown> => {
+export const acquireAndRunFork = (f: ForkContext, s: Semaphore, context: readonly CapturedHandler[] = [], runtimeContext: RuntimeContext | undefined = currentRuntimeContext()): Task<unknown, unknown> => {
   const disposables = new DisposableSet()
 
   const promise = acquire(s, disposables,
-    () => runForkInternal(withContext(context, f.fx), context, s, disposables, f.origin, f.trace, runtimeContext)
+    () => runForkInternal(withHandlerContext(context, f.fx), context, s, disposables, f.origin, f.trace, runtimeContext)
       .finally(() => dispose(disposables)))
 
   return taskWithRuntimeContext(promise, disposables, runtimeContext)
@@ -41,7 +41,7 @@ export const acquireAndRunFork = (f: ForkContext, s: Semaphore, context: readonl
 
 const runForkInternal = <const E, const A>(
   f: Fx<E, A>,
-  context: readonly HandlerContext[],
+  context: readonly CapturedHandler[],
   semaphore: Semaphore,
   disposables: DisposableSet,
   origin: Breadcrumb,
@@ -59,7 +59,7 @@ const runForkInternal = <const E, const A>(
 
 const runForkLoop = async <const E, const A>(
   f: Fx<E, A>,
-  context: readonly HandlerContext[],
+  context: readonly CapturedHandler[],
   semaphore: Semaphore,
   disposables: DisposableSet,
   origin: Breadcrumb,
@@ -103,7 +103,7 @@ const runForkLoop = async <const E, const A>(
             new ForkError('FX_UNHANDLED_FORK_FAILURE', `Unhandled failure in forked task`, forkOrigin, traceWithCause(forkTrace, e, effectContext), effectContext, { cause: e })
           ))
         ir = resumeWithRuntimeContext(i, effectContext, t)
-      } else if (Scoped.is(ir.value)) {
+      } else if (HandlerCapture.is(ir.value)) {
         ir = resumeWithRuntimeContext(i, runtimeContext, context)
       } else if (Fail.is(ir.value)) {
         const causeTrace = getTrace(ir.value.arg)

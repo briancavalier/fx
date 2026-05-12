@@ -3,7 +3,7 @@ import { Effect } from './Effect.js'
 import { Fail } from './Fail.js'
 import { Fx, flatMap, ok } from './Fx.js'
 import { type Headers, type Method } from './HttpClient.js'
-import { Scoped, captureScoped, type HandlerContext } from './Scoped.js'
+import { HandlerCapture, captureHandlers, type CapturedHandler } from './HandlerCapture.js'
 
 /**
  * A transport-neutral HTTP server request.
@@ -187,7 +187,7 @@ export const handleRoutes = <E1, E2>(
     mapRoutes(routes, handleRequest => request =>
       transform(handleRequest(request)))
 
-export type ServerRouteEffects = Async | Fail<any> | Scoped<string>
+export type ServerRouteEffects = Async | Fail<any> | HandlerCapture<string>
 
 export const ServeScope = 'fx/HttpServer/Serve'
 
@@ -199,7 +199,7 @@ export class Serve<const E = never, const OE = never> extends Effect('fx/HttpSer
 export type ServeRequest<E = never, OE = never> = {
   readonly routes: Routes<E>
   readonly options: ServeOptions<OE>
-  readonly context: readonly HandlerContext[]
+  readonly context: readonly CapturedHandler[]
 }
 
 export type ServeOptions<OE = never> = {
@@ -211,8 +211,8 @@ export type ServeOptions<OE = never> = {
 export const serve = <E, OE = never>(
   routes: Routes<E>,
   options: ServeOptions<OE>
-): Fx<Exclude<E, ServerRouteEffects> | OE | Serve<E, OE> | Scoped<typeof ServeScope>, void> =>
-  captureScoped(ServeScope).pipe(
+): Fx<Exclude<E, ServerRouteEffects> | OE | Serve<E, OE> | HandlerCapture<typeof ServeScope>, void> =>
+  captureHandlers(ServeScope).pipe(
     flatMap(context => new Serve<E, OE>({ routes, options, context }))
   )
 

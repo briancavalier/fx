@@ -1,11 +1,11 @@
-import { Fx, Scoped, fx, ok, runPromise } from '../../src'
+import { Fx, HandlerCapture, fx, ok, runPromise } from '../../src'
 import { Async } from '../../src/Async'
 import { All, all, defaultAll, unbounded } from '../../src/Concurrent'
 import { sleep, defaultTime } from '../../src/Time'
 
 // Concurrent map-reduce
 // Splits the input in half and runs mapReduce on each half concurrently
-const mapReduce = <A, B, EM, ER>(inputs: readonly A[], map: (a: A) => Fx<EM, B>, reduce: (b1: B, b2: B) => Fx<ER, B>, init: B): Fx<Async | All<any> | Scoped<'fx/Concurrent/All'> | EM | ER, B> => fx(function* () {
+const mapReduce = <A, B, EM, ER>(inputs: readonly A[], map: (a: A) => Fx<EM, B>, reduce: (b1: B, b2: B) => Fx<ER, B>, init: B): Fx<Async | All<any> | HandlerCapture<'fx/Concurrent/All'> | EM | ER, B> => fx(function* () {
   if (inputs.length === 0) return init
   if (inputs.length === 1) return yield* map(inputs[0])
 

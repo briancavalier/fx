@@ -160,7 +160,7 @@ describe('Finalization', () => {
     assert.deepEqual(released, [])
   })
 
-  it('using runs cleanup when later scoped work fails', () => {
+  it('using runs cleanup when later work fails', () => {
     const released = [] as string[]
     const programFailure = new Error('program failed')
 

@@ -7,6 +7,10 @@ import { CapturedHandler, HandlerCapture } from './HandlerCapture.js'
 import { ReturnFrom } from './ReturnFrom.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 
+export const brand = <Brand>() =>
+  <const Name extends string>(name: Name): Name & Brand =>
+    name as Name & Brand
+
 export type Exit<
   Scope extends string = string,
   A = unknown,

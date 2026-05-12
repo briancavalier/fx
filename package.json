@@ -97,6 +97,10 @@
       "types": "./dist/Trace.d.ts",
       "import": "./dist/Trace.js"
     },
+    "./YieldFrom": {
+      "types": "./dist/YieldFrom.d.ts",
+      "import": "./dist/YieldFrom.js"
+    },
     "./TraceNode": {
       "types": "./dist/TraceNode.d.ts",
       "import": "./dist/TraceNode.js"

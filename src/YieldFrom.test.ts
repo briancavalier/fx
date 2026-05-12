@@ -10,6 +10,7 @@ import type { Yielding } from './YieldFrom.js'
 describe('YieldFrom', () => {
   const NumberScope = 'test/YieldFrom/numbers' as 'test/YieldFrom/numbers' & Yielding<number>
   const ItemScope = 'test/YieldFrom/item' as 'test/YieldFrom/item' & Yielding<'item'>
+  const DecisionScope = 'test/YieldFrom/decision' as 'test/YieldFrom/decision' & Yielding<string, boolean>
 
   it('collects one-way yields from the matching scope', () => {
     const result = fx(function* () {
@@ -44,11 +45,11 @@ describe('YieldFrom', () => {
       return 'done'
     }).pipe(handleYieldFrom(NumberScope, () => ok(undefined)))
 
-    const _: typeof f extends Fx<YieldFrom<typeof OtherScope, 'other'>, string> ? true : false = true
+    const _: typeof f extends Fx<YieldFrom<typeof OtherScope>, string> ? true : false = true
     const next = f[Symbol.iterator]().next()
 
     assert.equal(YieldFrom.is(next.value), true)
-    const effect = next.value as YieldFrom<typeof OtherScope, 'other'>
+    const effect = next.value as YieldFrom<typeof OtherScope>
     assert.deepEqual(effect.arg, { scope: OtherScope, value: 'other' })
   })
 
@@ -81,6 +82,18 @@ describe('YieldFrom', () => {
     const _: typeof f extends Fx<never, boolean> ? true : false = true
 
     assert.equal(f.pipe(run), true)
+  })
+
+  it('resumes with the branded input type', () => {
+    const f = fx(function* () {
+      const accepted = yield* yieldFrom(DecisionScope, 'item')
+      const _: boolean = accepted
+      return accepted ? 'accepted' : 'rejected'
+    }).pipe(handleYieldFrom(DecisionScope, value => ok(value === 'item')))
+
+    const _: typeof f extends Fx<never, 'accepted' | 'rejected'> ? true : false = true
+
+    assert.equal(f.pipe(run), 'accepted')
   })
 
   it('requires yielded values to match the scope brand', () => {

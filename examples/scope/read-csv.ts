@@ -53,7 +53,7 @@ const readCsvRows = (file: CsvFile) => fx(function* () {
   }
 })
 
-const withIndex = <E>(rows: Fx<E | YieldFrom<typeof CsvRows, CsvRow>, void>) => fx(function* () {
+const withIndex = <E>(rows: Fx<E | YieldFrom<typeof CsvRows>, void>) => fx(function* () {
   let index = 0
 
   yield* rows.pipe(handleYieldFrom(CsvRows, row => fx(function* () {

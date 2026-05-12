@@ -1,8 +1,10 @@
-import { fx, run } from '../../src'
+import { fx, run, type Fx } from '../../src'
 import { defaultConsole, log } from '../../src/Console'
+import { assert as assertNoFail } from '../../src/Fail'
 import { managed, usingManaged } from '../../src/Finalization'
 import { returnFrom } from '../../src/ReturnFrom'
 import { scope } from '../../src/Scope'
+import { emit, forEach, type Stream } from '../../src/Stream'
 
 const ImportCsv = 'examples/scope/ImportCsv' as const
 
@@ -14,6 +16,8 @@ type CsvFile = {
   readonly path: string
   readonly text: string
 }
+
+type CsvRow = string[]
 
 const stopImport = (reason: string) =>
   returnFrom(ImportCsv, { type: 'skipped', reason } satisfies ImportResult)
@@ -27,46 +31,61 @@ const openCsv = (path: string, text: string) => fx(function* () {
   )
 })
 
-const readCsv = (file: CsvFile) => fx(function* () {
-  yield* log(`reading ${file.path}`)
-
-  return file.text
+const parseCsvRows = (text: string): CsvRow[] =>
+  text
     .trim()
     .split('\n')
     .map(line => line.split(',').map(cell => cell.trim()))
+
+const readCsvRows = (file: CsvFile) => fx(function* () {
+  yield* log(`reading ${file.path}`)
+
+  for (const row of parseCsvRows(file.text)) {
+    yield* emit(row)
+  }
+})
+
+const withIndex = <E>(stream: Fx<E | Stream<CsvRow>, void>) => fx(function* () {
+  let index = 0
+
+  yield* forEach(stream, value => fx(function* () {
+    yield* emit({ index, value })
+    index += 1
+  }))
 })
 
 const validateHeader = (header: readonly string[] | undefined) => fx(function* () {
   if (header === undefined) {
-    yield* stopImport('CSV is empty')
+    return yield* stopImport('CSV is empty')
   }
 
   if (!header.includes('email')) {
-    yield* stopImport('CSV is missing email column')
+    return yield* stopImport('CSV is missing email column')
   }
 })
 
-const importRows = (rows: readonly (readonly string[])[]) => fx(function* () {
+const importRows = (file: CsvFile) => fx(function* () {
   let count = 0
 
-  for (const row of rows) {
+  yield* forEach(readCsvRows(file).pipe(withIndex), ({ index, value: row }) => fx(function* () {
+    if (index === 0) {
+      return yield* validateHeader(row)
+    }
+
     if (row.every(cell => cell === '')) {
-      yield* stopImport(`Encountered empty row after ${count} imports`)
+      return yield* stopImport(`Encountered empty row after ${count} imports`)
     }
 
     yield* log(`importing ${row.join(' | ')}`)
     count += 1
-  }
+  }))
 
   return count
 })
 
 const importCsv = (path: string, text: string) => fx(function* () {
   const file = yield* usingManaged(ImportCsv, openCsv(path, text))
-  const [header, ...rows] = yield* readCsv(file)
-
-  yield* validateHeader(header)
-  const count = yield* importRows(rows)
+  const count = yield* importRows(file)
 
   return { type: 'imported', count } satisfies ImportResult
 }).pipe(scope(ImportCsv))
@@ -92,4 +111,4 @@ const main = fx(function* () {
   }
 })
 
-run(main.pipe(defaultConsole))
+run(main.pipe(defaultConsole, assertNoFail))

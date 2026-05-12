@@ -4,13 +4,13 @@ import { abort, orReturn } from './Abort.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { returnFrom } from './ReturnFrom.js'
 import { scope } from './Scope.js'
-import { collectFrom, handleYieldFrom, YieldFrom, yieldFrom } from './YieldFrom.js'
+import { brand, collectFrom, handleYieldFrom, YieldFrom, yieldFrom } from './YieldFrom.js'
 import type { Yielding } from './YieldFrom.js'
 
 describe('YieldFrom', () => {
-  const NumberScope = 'test/YieldFrom/numbers' as 'test/YieldFrom/numbers' & Yielding<number>
-  const ItemScope = 'test/YieldFrom/item' as 'test/YieldFrom/item' & Yielding<'item'>
-  const DecisionScope = 'test/YieldFrom/decision' as 'test/YieldFrom/decision' & Yielding<string, boolean>
+  const NumberScope = brand<Yielding<number>>()('test/YieldFrom/numbers')
+  const ItemScope = brand<Yielding<'item'>>()('test/YieldFrom/item')
+  const DecisionScope = brand<Yielding<string, boolean>>()('test/YieldFrom/decision')
 
   it('collects one-way yields from the matching scope', () => {
     const result = fx(function* () {
@@ -38,7 +38,7 @@ describe('YieldFrom', () => {
   })
 
   it('propagates yields from a different scope', () => {
-    const OtherScope = 'test/YieldFrom/other' as 'test/YieldFrom/other' & Yielding<'other'>
+    const OtherScope = brand<Yielding<'other'>>()('test/YieldFrom/other')
 
     const f = fx(function* () {
       yield* yieldFrom(OtherScope, 'other')
@@ -54,7 +54,7 @@ describe('YieldFrom', () => {
   })
 
   it('handles nested named yield scopes independently', () => {
-    const InnerScope = 'test/YieldFrom/inner' as 'test/YieldFrom/inner' & Yielding<'inner'>
+    const InnerScope = brand<Yielding<'inner'>>()('test/YieldFrom/inner')
     const outer = [] as number[]
     const inner = [] as string[]
 

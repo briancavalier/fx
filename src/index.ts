@@ -5,5 +5,6 @@ export * from './HandlerCapture.js'
 export * from './ReturnFrom.js'
 export * from './Scope.js'
 export * from './Trace.js'
+export * from './YieldFrom.js'
 
 export * from './runtime.js'

@@ -20,7 +20,7 @@ export const scoped = <const Name extends string, const E, const A>(
     map(context => withContext(context, fx) as Fx<unknown, A>)
   )
 
-export const scopedEach = <const Name extends string, const Fxs extends readonly Fx<unknown, unknown>[]>(
+export const mapScoped = <const Name extends string, const Fxs extends readonly Fx<unknown, unknown>[]>(
   name: Name,
   fxs: Fxs
 ): Fx<Scoped<Name>, ScopedFxs<Fxs>> =>

@@ -4,10 +4,10 @@ import { Effect } from './Effect.js'
 import { Fail } from './Fail.js'
 import { Fx, flatMap, flatten, fx, ok } from './Fx.js'
 import { Handle } from './Handler.js'
-import { Scoped, handleScoped, scoped, scopedEach } from './Scoped.js'
+import { Scoped, handleScoped, mapScoped, scoped } from './Scoped.js'
 import { Task, wait as waitTask } from './Task.js'
-import { Trace, captureTrace } from './Trace.js'
 import type { TraceFrameKind, TraceOptions, TraceOrigin } from './Trace.js'
+import { Trace, captureTrace } from './Trace.js'
 import { Semaphore } from './internal/Semaphore.js'
 import { acquireAndRunFork } from './internal/runFork.js'
 import { currentRuntimeContext } from './internal/runtimeContext.js'
@@ -104,7 +104,7 @@ export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   options?: TraceOptions
 ) => {
   const trace = traceOrigin(options, 'fx/Concurrent/all', all, 'all')
-  return scopedEach('fx/Concurrent/All', fxs).pipe(
+  return mapScoped('fx/Concurrent/All', fxs).pipe(
     flatMap(fxs => new All({
       fxs: fxs as unknown as Fxs,
       ...trace
@@ -126,7 +126,7 @@ export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   options?: TraceOptions
 ) => {
   const trace = traceOrigin(options, 'fx/Concurrent/race', race, 'race')
-  return scopedEach('fx/Concurrent/Race', fxs).pipe(
+  return mapScoped('fx/Concurrent/Race', fxs).pipe(
     flatMap(fxs => new Race({
       fxs: fxs as unknown as Fxs,
       ...trace
@@ -287,14 +287,14 @@ type FirstSuccessRaceFailure<E> = E extends Race<infer Fxs>
 type EveryFxCanFail<Fxs extends readonly Fx<unknown, unknown>[]> = Fxs extends readonly []
   ? true
   : number extends Fxs['length']
-    ? true
-    : Fxs extends readonly [infer F, ...infer Rest]
-      ? F extends Fx<unknown, unknown>
-        ? [FailuresOfFx<F>] extends [never]
-          ? false
-          : Rest extends readonly Fx<unknown, unknown>[] ? EveryFxCanFail<Rest> : true
-        : false
-      : true
+  ? true
+  : Fxs extends readonly [infer F, ...infer Rest]
+  ? F extends Fx<unknown, unknown>
+  ? [FailuresOfFx<F>] extends [never]
+  ? false
+  : Rest extends readonly Fx<unknown, unknown>[] ? EveryFxCanFail<Rest> : true
+  : false
+  : true
 type FailuresOfFxs<Fxs extends readonly Fx<unknown, unknown>[]> = {
   readonly [K in keyof Fxs]: FailuresOfFx<Fxs[K]>
 }

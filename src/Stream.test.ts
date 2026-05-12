@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { orReturn } from './Abort.js'
 import { unbounded } from './Concurrent.js'
 import { fx, map as mapFx, ok, run, runPromise, unit, type Fx } from './Fx.js'
+import { scope } from './Scope.js'
 import { next as nextSink } from './Sink.js'
 import {
   emit,
@@ -15,6 +16,7 @@ import {
   repeat,
   switchMap,
   take,
+  TakeScope,
   to,
   toAsyncIterable,
   withEnqueue,
@@ -46,7 +48,8 @@ describe('Stream', () => {
       const n = Math.floor(Math.random() * 100)
       const [r, events] = repeat(ok(x)).pipe(
         take(n),
-        orReturn(n),
+        scope(TakeScope),
+        orReturn(TakeScope, n),
         collectAll,
         run
       )
@@ -65,7 +68,8 @@ describe('Stream', () => {
         return 'done'
       }).pipe(
         take(n - 1),
-        orReturn('aborted'),
+        scope(TakeScope),
+        orReturn(TakeScope, 'aborted'),
         collectAll,
         run
       )
@@ -82,7 +86,8 @@ describe('Stream', () => {
         return 'done'
       }).pipe(
         take(n),
-        orReturn('aborted'),
+        scope(TakeScope),
+        orReturn(TakeScope, 'aborted'),
         collectAll,
         run
       )

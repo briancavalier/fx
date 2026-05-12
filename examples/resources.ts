@@ -3,8 +3,11 @@ import { assertSync, formatDiagnostic, fx, runPromise } from "../src"
 import { all, defaultAll, unbounded } from "../src/Concurrent"
 import { defaultConsole, error } from "../src/Console"
 import { catchAll, fail } from "../src/Fail"
-import { managed, usingManaged, withFinalization } from "../src/Finalization"
+import { managed, usingManaged } from "../src/Finalization"
+import { scope } from "../src/Scope"
 import { defaultTime, sleep } from "../src/Time"
+
+const Resources = 'examples/resources' as const
 
 const myResource = (name: string) => fx(function* () {
   yield* sleep(100)
@@ -15,7 +18,7 @@ const myResource = (name: string) => fx(function* () {
 })
 
 const f = (n: number) => fx(function* () {
-  const resource = yield* usingManaged(myResource(`my-resource-${n}`))
+  const resource = yield* usingManaged(Resources, myResource(`my-resource-${n}`))
 
   console.log(`using resource: ${resource}`)
 
@@ -27,7 +30,7 @@ const f = (n: number) => fx(function* () {
 
 await all([f(1), f(2)]).pipe(
   defaultAll,
-  withFinalization,
+  scope(Resources),
   defaultTime,
   unbounded,
   catchAll(e => error('failed', formatDiagnostic(e, { source: { lookup: nodeSourceLookup() } }))),

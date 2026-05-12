@@ -1,83 +1,76 @@
 import { Effect } from './Effect.js'
-import { Fx, fx, ok } from './Fx.js'
-import { Handle, handle } from './Handler.js'
-
-import { Fail, fail, returnFail } from './Fail.js'
+import { Fx, fx } from './Fx.js'
+import type { Exit } from './Scope.js'
 
 // ----------------------------------------------------------------------
-// Guaranteed finalization effects within a finalization boundary
-
-export type Exit<A = unknown, F extends Fail<unknown> = Fail<unknown>> =
-  | Success<A>
-  | Failure<F>
-
-export interface Success<A> {
-  readonly type: 'success'
-  readonly value: A
-}
-
-export interface Failure<F extends Fail<unknown>> {
-  readonly type: 'failure'
-  readonly failure: F
-}
+// Guaranteed finalization effects within a named scope
 
 /**
- * A value paired with cleanup for the enclosing finalization boundary.
+ * A value paired with cleanup for a named scope.
  *
- * The finalizer receives the boundary's exit, not the managed value.
+ * The finalizer receives the scope's exit, not the managed value.
  */
 export interface Managed<A, E = never> {
   readonly value: A
   readonly finalizer: (exit: Exit) => Fx<E, void>
 }
 
-type Finalizer = (exit: Exit) => Fx<unknown, void>
+export type Finalizer = (exit: Exit) => Fx<unknown, void>
 
 /**
- * Request that a cleanup operation be run when the enclosing finalization boundary exits.
+ * Request that a cleanup operation be run when the named scope exits.
  */
-export class Finally extends Effect('fx/Finally')<Finalizer, void> { }
+export class Finally<const Scope extends string> extends Effect('fx/Finally')<{
+  readonly scope: Scope
+  readonly finalizer: Finalizer
+}, void> { }
 
 /**
- * Register a cleanup operation to run when the enclosing finalization boundary exits.
+ * Register a cleanup operation to run when the named scope exits.
  */
-export const andFinally = <E>(f: Fx<E, void>): Fx<Finally, void> =>
-  new Finally(() => f)
+export const andFinally = <const Scope extends string, E>(
+  scope: Scope,
+  f: Fx<E, void>
+): Fx<Finally<Scope>, void> =>
+  new Finally({ scope, finalizer: () => f })
 
 /**
- * Register a cleanup operation that receives the enclosing finalization boundary's exit.
+ * Register a cleanup operation that receives the named scope's exit.
  */
-export const andFinallyExit = <E>(
+export const andFinallyExit = <const Scope extends string, E>(
+  scope: Scope,
   f: (exit: Exit) => Fx<E, void>
-): Fx<Finally, void> =>
-  new Finally(exit => f(exit))
+): Fx<Finally<Scope>, void> =>
+  new Finally({ scope, finalizer: exit => f(exit) })
 
 /**
  * Run an initial operation, register cleanup for its result, and return it.
  */
-export const using = <const IE, const FE, const R>(
+export const using = <const Scope extends string, const IE, const FE, const R>(
+  scope: Scope,
   initially: Fx<IE, R>,
   finally_: (r: R) => Fx<FE, void>
-): Fx<IE | Finally, R> => fx(function* () {
+): Fx<IE | Finally<Scope>, R> => fx(function* () {
   const r = yield* initially
-  yield* andFinally(finally_(r))
+  yield* andFinally(scope, finally_(r))
   return r
 })
 
 /**
  * Run an initial operation, register exit-aware cleanup for its result, and return it.
  */
-export const usingExit = <const IE, const FE, const R>(
+export const usingExit = <const Scope extends string, const IE, const FE, const R>(
+  scope: Scope,
   initially: Fx<IE, R>,
   finally_: (r: R, exit: Exit) => Fx<FE, void>
-): Fx<IE | Finally, R> => fx(function* () {
+): Fx<IE | Finally<Scope>, R> => fx(function* () {
   const r = yield* initially
-  yield* andFinallyExit(exit => finally_(r, exit))
+  yield* andFinallyExit(scope, exit => finally_(r, exit))
   return r
 })
 
 /**
- * Pair a value with cleanup for a finalization boundary.
+ * Pair a value with cleanup for a named scope.
  */
 export const managed = <const A, const E>(
   value: A,
@@ -90,43 +83,11 @@ export const managed = <const A, const E>(
 /**
  * Run an initial operation that returns a managed value, register its cleanup, and return its value.
  */
-export const usingManaged = <const IE, const FE, const A>(
+export const usingManaged = <const Scope extends string, const IE, const FE, const A>(
+  scope: Scope,
   initially: Fx<IE, Managed<A, FE>>
-): Fx<IE | Finally, A> => fx(function* () {
+): Fx<IE | Finally<Scope>, A> => fx(function* () {
   const m = yield* initially
-  yield* andFinallyExit(m.finalizer)
+  yield* andFinallyExit(scope, m.finalizer)
   return m.value
-})
-
-/**
- * Run a computation and then run its registered cleanup operations.
- */
-export const withFinalization = <const E, const A>(f: Fx<E, A>) => fx(function* () {
-  const finalizers = [] as Finalizer[]
-  const result = yield* f.pipe(
-    handle(Finally, finally_ => ok(void finalizers.push(finally_.arg))),
-    returnFail
-  )
-
-  const failed = Fail.is(result)
-  const exit = failed
-    ? { type: 'failure', failure: result as Fail<unknown> } satisfies Exit
-    : { type: 'success', value: result } satisfies Exit
-  const failures = yield* releaseSafely(finalizers, exit)
-  if (failures.length > 0)
-    return yield* fail(new AggregateError(
-      failed ? [result.arg, ...failures] : failures,
-      'Resource release failed'
-    ))
-
-  return failed ? yield* fail(result.arg) : result
-}) as Fx<Handle<E, Finally, Fail<AggregateError>>, A>
-
-const releaseSafely = (resources: readonly Finalizer[], exit: Exit) => fx(function* () {
-  const failures = [] as unknown[]
-  for (let i = resources.length - 1; i >= 0; --i) {
-    const r = yield* returnFail(resources[i](exit))
-    if (Fail.is(r)) failures.push(r.arg)
-  }
-  return failures
 })

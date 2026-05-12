@@ -38,3 +38,4 @@ Development guidance:
 - Add focused tests under `src/*.test.ts` for behavior and type-level expectations where relevant.
 - Do not edit `dist/` directly; build output is generated.
 - Keep examples practical and small.
+- Never force push to a remote PR branch or PR worktree unless specifically told to do so. Always maintain full history on PR branches and PR worktrees.

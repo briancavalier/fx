@@ -13,7 +13,7 @@
   "description": "",
   "dependencies": {
     "@keyv/sqlite": "^4.0.8",
-    "keyv": "^4.5.4"
+    "keyv": "^5.6.0"
   },
   "overrides": {
     "keyv": {

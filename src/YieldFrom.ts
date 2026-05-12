@@ -1,6 +1,6 @@
 import { Effect } from './Effect.js'
-import { Fx, fx, map, ok } from './Fx.js'
-import { control } from './Handler.js'
+import { Fx, map, ok } from './Fx.js'
+import { handle } from './Handler.js'
 
 declare const YieldingTypeId: unique symbol
 
@@ -51,16 +51,16 @@ export const handleYieldFrom = <const Scope extends string & Yielding<unknown, u
 ) => <const E, const A>(
   f: Fx<E, A>
 ): Fx<ExcludeYieldFrom<E, Scope, E2>, A> =>
-    f.pipe(control(YieldFrom, (resume, effect) => fx(function* () {
+    f.pipe(handle<typeof YieldFrom, E2 | YieldFrom<string & Yielding<unknown, unknown>>>(YieldFrom, effect => {
       if (effect.arg.scope === scope) {
-        return resume(yield* handler(
+        return handler(
           effect.arg.value as YieldOutput<Scope>,
           effect as YieldFrom<Scope>
-        ))
+        )
       }
 
-      return resume(yield effect as YieldFrom<string & Yielding<unknown, unknown>>)
-    }))) as Fx<ExcludeYieldFrom<E, Scope, E2>, A>
+      return effect as YieldFrom<string & Yielding<unknown, unknown>>
+    })) as Fx<ExcludeYieldFrom<E, Scope, E2>, A>
 
 /**
  * Collect all one-way yields from the named scope.

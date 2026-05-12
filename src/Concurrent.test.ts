@@ -4,8 +4,10 @@ import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { RaceAllFailed, all, defaultAll, firstSettled, firstSuccess, fork, forkEach, race, unbounded } from './Concurrent.js'
+import { andFinally } from './Finalization.js'
 import { flatMap, fx, ok, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
+import { scope } from './Scope.js'
 import { Task, wait } from './Task.js'
 import { getTrace, snapshotError } from './Trace.js'
 
@@ -253,6 +255,29 @@ describe('Fork', () => {
       )
 
       assert.deepEqual(result, ['handled'])
+    })
+
+    it('runs children with scopes between all and defaultAll', async () => {
+      const TestScope = 'test/Fork/AllScope' as const
+      const released = [] as string[]
+      const cause = new Error('all scope failed')
+
+      const result = await all([fx(function* () {
+        yield* andFinally(TestScope, fx(function* () {
+          released.push('child')
+        }))
+        yield* fail(cause)
+      })]).pipe(
+        scope(TestScope),
+        defaultAll,
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.equal((result.arg as Error).cause, cause)
+      assert.deepEqual(released, ['child'])
     })
 
     it('types all as a value tuple rather than a Task', async () => {

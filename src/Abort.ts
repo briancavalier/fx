@@ -1,17 +1,25 @@
 import { Effect } from './Effect.js'
-import { ok } from './Fx.js'
+import { Fx, ok } from './Fx.js'
 import { control } from './Handler.js'
 
 /**
- * Abort a computation without returning a result. Abort represents partial functions,
- * where a result is not defined for some inputs.
+ * Abort the named scope without returning a result.
  */
-export class Abort extends Effect('fx/Abort')<void, never> { }
+export class Abort<const Scope extends string> extends Effect('fx/Abort')<Scope, never> { }
 
-export const abort = new Abort()
+export const abort = <const Scope extends string>(scope: Scope): Fx<Abort<Scope>, never> =>
+  new Abort(scope)
 
 /**
- * Return a default value from a computation that aborts early.
+ * Return a default value from an abort of the named scope.
  */
-export const orReturn = <const R>(r: R) =>
-  control(Abort, _ => ok(r))
+export const orReturn = <const Scope extends string, const R>(
+  scope: Scope,
+  value: R
+) => <const E, const A>(
+  f: Fx<E, A>
+): Fx<Exclude<E, Abort<Scope>>, A | R> =>
+    f.pipe(
+      control(Abort, (_, abort) =>
+        (abort.arg === scope ? ok(value) : abort) as Fx<Exclude<E, Abort<Scope>>, A | R>)
+    ) as Fx<Exclude<E, Abort<Scope>>, A | R>

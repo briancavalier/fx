@@ -65,6 +65,10 @@
       "types": "./dist/Ref.d.ts",
       "import": "./dist/Ref.js"
     },
+    "./ReturnFrom": {
+      "types": "./dist/ReturnFrom.d.ts",
+      "import": "./dist/ReturnFrom.js"
+    },
     "./Finalization": {
       "types": "./dist/Finalization.d.ts",
       "import": "./dist/Finalization.js"
@@ -76,6 +80,10 @@
     "./Sink": {
       "types": "./dist/Sink.d.ts",
       "import": "./dist/Sink.js"
+    },
+    "./Scope": {
+      "types": "./dist/Scope.d.ts",
+      "import": "./dist/Scope.js"
     },
     "./Stream": {
       "types": "./dist/Stream.d.ts",

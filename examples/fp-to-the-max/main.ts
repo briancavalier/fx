@@ -1,5 +1,6 @@
 import { Effect, fx, ok } from '../../src'
 import { abort, orReturn } from '../../src/Abort'
+import { scope } from '../../src/Scope'
 
 // -------------------------------------------------------------------
 // The number guessing game example from
@@ -16,9 +17,11 @@ export class Read extends Effect('Read')<string, string> { }
 
 const read = (prompt: string) => new Read(prompt)
 
+const ParseInteger = 'examples/fp-to-the-max/ParseInteger' as const
+
 export const toInteger = (s: string) => {
   const i = Number.parseInt(s, 10)
-  return Number.isInteger(i) ? ok(i) : abort
+  return Number.isInteger(i) ? ok(i) : abort(ParseInteger)
 }
 
 export class GenerateSecret extends Effect('GetSecret')<number, number> { }
@@ -55,7 +58,7 @@ const play = (name: string, max: number) => fx(function* () {
 
   const result = yield* read(`Dear ${name}, please guess a number from 1 to ${max}: `)
 
-  const guess = yield* toInteger(result).pipe(orReturn(undefined))
+  const guess = yield* toInteger(result).pipe(scope(ParseInteger), orReturn(ParseInteger, undefined))
   if (typeof guess !== 'number')
     yield* print('You did not enter an integer!')
   else if (checkAnswer(secret, guess))

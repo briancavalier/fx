@@ -17,6 +17,8 @@ import { IfAny } from './internal/type.js'
  */
 export class Stream<A> extends Effect('fx/Stream')<A, void> { }
 
+export const TakeScope = 'fx/Stream/take' as const
+
 export type Event<T> = T extends Stream<infer A> ? A : never
 
 export type ExcludeStream<E, E2 = never> = Handle<E, Stream<any>, E2>
@@ -49,9 +51,9 @@ export const take = (n: number) => <const E, const A, const R>(f: Fx<E | Stream<
       --i
       return resume(yield* emit(stream.arg))
     } else {
-      return yield* abort
+      return yield* abort(TakeScope)
     }
-  }))) as Fx<Handle<E, Stream<A>, Stream<A> | Abort>, A>
+  }))) as Fx<Handle<E, Stream<A>, Stream<A> | Abort<typeof TakeScope>>, A>
 }
 
 /**

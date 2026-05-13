@@ -6,6 +6,7 @@ import { Fx, fx } from './Fx.js'
 import { CapturedHandler, HandlerCapture } from './HandlerCapture.js'
 import { ReturnFrom } from './ReturnFrom.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
+import { withActiveScope } from './internal/runtimeContext.js'
 
 export const brand = <Brand>() =>
   <const Name extends string>(name: Name): Name & Brand =>
@@ -78,7 +79,7 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
 
   *[Symbol.iterator](): Iterator<unknown, A> {
     const finalizers = [] as Finalizer[]
-    const i = this.fx[Symbol.iterator]()
+    const i = withActiveScope(this.scopeName, this.fx)[Symbol.iterator]()
     try {
       let ir = i.next()
 
@@ -91,18 +92,18 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
             ir = i.next(undefined)
           } else if (ReturnFrom.is(effect) && effect.arg.scope === this.scopeName) {
             const exit = { type: 'returnFrom', scope: this.scopeName, value: effect.arg.value } satisfies Exit<Scope>
-            const failures = yield* releaseSafely(finalizers, exit)
-            if (failures.length > 0) return (yield* failCleanup(failures)) as A
+            const failures = yield* withActiveScope(this.scopeName, releaseSafely(finalizers, exit))
+            if (failures.length > 0) return (yield* withActiveScope(this.scopeName, failCleanup(failures))) as A
             return effect.arg.value as A
           } else if (Abort.is(effect) && effect.arg === this.scopeName) {
             const exit = { type: 'abort', scope: this.scopeName } satisfies Exit<Scope>
-            const failures = yield* releaseSafely(finalizers, exit)
-            if (failures.length > 0) return (yield* failCleanup(failures)) as A
+            const failures = yield* withActiveScope(this.scopeName, releaseSafely(finalizers, exit))
+            if (failures.length > 0) return (yield* withActiveScope(this.scopeName, failCleanup(failures))) as A
             return yield effect
           } else if (Fail.is(effect)) {
             const exit = { type: 'failure', failure: effect } satisfies Exit
-            const failures = yield* releaseSafely(finalizers, exit)
-            if (failures.length > 0) return (yield* failCleanup([effect.arg, ...failures])) as A
+            const failures = yield* withActiveScope(this.scopeName, releaseSafely(finalizers, exit))
+            if (failures.length > 0) return (yield* withActiveScope(this.scopeName, failCleanup([effect.arg, ...failures]))) as A
             return yield effect
           } else if (HandlerCapture.is(effect)) {
             ir = i.next([this, ...(yield effect) as any])
@@ -115,8 +116,8 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
       }
 
       const exit = { type: 'success', value: ir.value } satisfies Exit<Scope, A>
-      const failures = yield* releaseSafely(finalizers, exit)
-      if (failures.length > 0) return (yield* failCleanup(failures)) as A
+      const failures = yield* withActiveScope(this.scopeName, releaseSafely(finalizers, exit))
+      if (failures.length > 0) return (yield* withActiveScope(this.scopeName, failCleanup(failures))) as A
       return ir.value
     } finally {
       i.return?.()
@@ -133,5 +134,6 @@ const releaseSafely = (resources: readonly Finalizer[], exit: Exit) => fx(functi
   return failures
 })
 
-const failCleanup = (failures: readonly unknown[]) =>
-  fail(new AggregateError(failures, 'Resource release failed'))
+const failCleanup = (failures: readonly unknown[]) => fx(function* () {
+  return yield* fail(new AggregateError(failures, 'Resource release failed'))
+})

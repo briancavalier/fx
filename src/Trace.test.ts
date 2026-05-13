@@ -4,8 +4,10 @@ import { assertPromise, tryPromise } from './Async.js'
 import { at } from './Breadcrumb.js'
 import { all, defaultAll, firstSettled, fork, race, unbounded } from './Concurrent.js'
 import { Fail, fail, returnFail } from './Fail.js'
+import { andFinally } from './Finalization.js'
 import { fx, runPromise } from './Fx.js'
 import { defaultRetry, retry } from './Retry.js'
+import { scope } from './Scope.js'
 import { wait } from './Task.js'
 import { sleep, withClock } from './Time.js'
 import { TimeoutError, defaultTimeout, timeout } from './Timeout.js'
@@ -136,6 +138,64 @@ describe('Trace', () => {
     }
   })
 
+  it('captures active scopes in trace snapshots ordered outer-to-inner', async () => {
+    const f = fx(function* () {
+      yield* fail(new Error('scoped failure'))
+    }).pipe(
+      scope('db/transaction'),
+      scope('http/request')
+    )
+
+    await assert.rejects(
+      runPromise(f as never),
+      e => {
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request', 'db/transaction'])
+        return true
+      }
+    )
+  })
+
+  it('omits active scope diagnostics for unscoped traced errors', () => {
+    const formatted = formatDiagnostic(tracedError('unscoped', 'plain trace'), { colors: 'never' })
+
+    assert.doesNotMatch(formatted, /Active scopes:/)
+  })
+
+  it('formats active scopes compactly on one line', async () => {
+    const f = fx(function* () {
+      yield* fail(new Error('scoped formatting'))
+    }).pipe(
+      scope('db/transaction'),
+      scope('http/request')
+    )
+
+    await assert.rejects(
+      runPromise(f as never),
+      e => {
+        assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: http\/request > db\/transaction/)
+        assert.match(formatError(e), /Active scopes: http\/request > db\/transaction/)
+        return true
+      }
+    )
+  })
+
+  it('compacts deep active scope stacks', async () => {
+    const scoped = ['a', 'b', 'c', 'd', 'e'].reduceRight(
+      (f, name) => f.pipe(scope(name)),
+      fx(function* () {
+        yield* fail(new Error('deep scopes'))
+      })
+    )
+
+    await assert.rejects(
+      runPromise(scoped as never),
+      e => {
+        assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: a > \.\.\. > c > d > e/)
+        return true
+      }
+    )
+  })
+
   it('does not rewrite traces captured before entering a region', async () => {
     const prebuilt = fail(new Error('prebuilt'))
 
@@ -201,6 +261,78 @@ describe('Trace', () => {
     } finally {
       setTraceCapturePolicy(previous)
     }
+  })
+
+  it('propagates active scopes to forked children', async () => {
+    const f = fx(function* () {
+      const task = yield* fork(fx(function* () {
+        yield* fail(new Error('fork scoped'))
+      }))
+      yield* wait(task)
+    }).pipe(scope('http/request'))
+
+    await assert.rejects(
+      runPromise(f.pipe(unbounded) as never),
+      e => {
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request'])
+        return true
+      }
+    )
+  })
+
+  it('propagates active scopes through structured concurrency handlers', async () => {
+    const allProgram = fx(function* () {
+      yield* all([fx(function* () { yield* fail(new Error('all scoped')) })]).pipe(defaultAll)
+    }).pipe(scope('http/request'))
+    const raceProgram = fx(function* () {
+      yield* race([fx(function* () { yield* fail(new Error('race scoped')) })]).pipe(firstSettled)
+    }).pipe(scope('http/request'))
+
+    await assert.rejects(
+      runPromise(allProgram.pipe(unbounded) as never),
+      e => {
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request'])
+        return true
+      }
+    )
+    await assert.rejects(
+      runPromise(raceProgram.pipe(unbounded) as never),
+      e => {
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request'])
+        return true
+      }
+    )
+  })
+
+  it('propagates active scopes to async failures', async () => {
+    const f = fx(function* () {
+      yield* tryPromise(() => Promise.reject(new Error('async scoped')))
+    }).pipe(scope('http/request'))
+
+    await assert.rejects(
+      runPromise(f as never),
+      e => {
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request'])
+        return true
+      }
+    )
+  })
+
+  it('captures active scopes for cleanup failures', async () => {
+    const f = fx(function* () {
+      yield* andFinally('db/transaction', fail(new Error('cleanup scoped')))
+    }).pipe(scope('db/transaction'))
+
+    await assert.rejects(
+      runPromise(f as never),
+      e => {
+        const formatted = formatDiagnostic(e, { colors: 'never' })
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['db/transaction'])
+        assert.match(formatted, /AggregateError: Resource release failed/)
+        assert.match(formatted, /Active scopes: db\/transaction/)
+        return true
+      }
+    )
   })
 
   it('wait converts task failures using the task runtime context', async () => {

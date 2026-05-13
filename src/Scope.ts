@@ -1,4 +1,5 @@
 import { Abort } from './Abort.js'
+import { ContinueFrom, type ContinuedFrom as ContinueExit } from './ContinueFrom.js'
 import { isEffect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { Finalizer, Finally } from './Finalization.js'
@@ -20,6 +21,7 @@ export type Exit<
   | Success<A>
   | Failure<F>
   | ReturnedFrom<Scope, R>
+  | ContinueExit<Scope>
   | Aborted<Scope>
 
 export interface Success<A> {
@@ -94,6 +96,11 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
             const failures = yield* releaseSafely(finalizers, exit)
             if (failures.length > 0) return (yield* failCleanup(failures)) as A
             return effect.arg.value as A
+          } else if (ContinueFrom.is(effect) && effect.arg === this.scopeName) {
+            const exit = { type: 'continueFrom', scope: this.scopeName } satisfies Exit<Scope>
+            const failures = yield* releaseSafely(finalizers, exit)
+            if (failures.length > 0) return (yield* failCleanup(failures)) as A
+            return yield effect
           } else if (Abort.is(effect) && effect.arg === this.scopeName) {
             const exit = { type: 'abort', scope: this.scopeName } satisfies Exit<Scope>
             const failures = yield* releaseSafely(finalizers, exit)

@@ -21,6 +21,10 @@
       "types": "./dist/Breadcrumb.d.ts",
       "import": "./dist/Breadcrumb.js"
     },
+    "./ContinueFrom": {
+      "types": "./dist/ContinueFrom.d.ts",
+      "import": "./dist/ContinueFrom.js"
+    },
     "./Console": {
       "types": "./dist/Console.d.ts",
       "import": "./dist/Console.js"

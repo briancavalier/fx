@@ -3,15 +3,19 @@ import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
-import { RaceAllFailed, all, defaultAll, firstSettled, firstSuccess, fork, forkEach, race, unbounded } from './Concurrent.js'
-import { andFinally } from './Finalization.js'
-import { flatMap, fx, ok, runPromise } from './Fx.js'
+import { RaceAllFailed, all, bounded, defaultAll, firstSettled, firstSuccess, fork, forkEach, race, unbounded } from './Concurrent.js'
+import { andFinally, andFinallyExit } from './Finalization.js'
+import { bracket, flatMap, fx, ok, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
-import { scope } from './Scope.js'
+import { scope, type Exit } from './Scope.js'
 import { Task, wait } from './Task.js'
 import { getTrace, snapshotError } from './Trace.js'
 
 const asyncValue = <A>(a: A) => assertPromise(() => Promise.resolve(a))
+
+// @ts-expect-error markHandled is runtime-internal bookkeeping, not public API.
+const noPublicMarkHandled: typeof import('./Task.js').markHandled = undefined
+void noPublicMarkHandled
 
 describe('Fork', () => {
   describe('unbounded', () => {
@@ -58,6 +62,18 @@ describe('Fork', () => {
       const t = await f.pipe(fork, unbounded, runPromise)
       const r = await t.promise
       assert.deepEqual(r, x)
+    })
+
+    it('does not mark tasks handled until wait is run', async () => {
+      const task = await asyncValue('done').pipe(fork, unbounded, runPromise)
+
+      const constructed = wait(task)
+      assert.equal(task._handled, false)
+
+      const result = await constructed.pipe(runPromise)
+
+      assert.equal(result, 'done')
+      assert.equal(task._handled, true)
     })
 
     it('runs forked tasks with handlers outside the fork handler', async () => {
@@ -280,6 +296,96 @@ describe('Fork', () => {
       assert.deepEqual(released, ['child'])
     })
 
+    it('releases scoped finalizers when all cancels a sibling', async () => {
+      const TestScope = 'test/Fork/AllCancelScope' as const
+      const released = [] as string[]
+      const cause = new Error('all failed')
+
+      const slow = fx(function* () {
+        yield* andFinally(TestScope, fx(function* () {
+          released.push('slow')
+        }))
+        yield* awaitAbort()
+      })
+      const bad = fx(function* () {
+        yield* asyncValue(undefined)
+        yield* fail(cause)
+      })
+
+      const result = await all([slow, bad]).pipe(
+        defaultAll,
+        scope(TestScope),
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.equal((result.arg as Error).cause, cause)
+      assert.deepEqual(released, ['slow'])
+    })
+
+    it('surfaces cleanup failures when all cancels a sibling', async () => {
+      const TestScope = 'test/Fork/AllCancelCleanupFailure' as const
+      const cause = new Error('all failed')
+      const releaseFailure = new Error('release failed')
+
+      const slow = fx(function* () {
+        yield* andFinally(TestScope, fail(releaseFailure))
+        yield* awaitAbort()
+      })
+      const bad = fx(function* () {
+        yield* asyncValue(undefined)
+        yield* fail(cause)
+      })
+
+      const result = await all([slow, bad]).pipe(
+        defaultAll,
+        scope(TestScope),
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.ok(result.arg instanceof AggregateError)
+      assert.equal(result.arg.message, 'Resource release failed')
+      assert.equal(result.arg.errors.length, 2)
+      assert.equal((result.arg.errors[0] as Error).cause, cause)
+      assert.equal(result.arg.errors[1], releaseFailure)
+    })
+
+    it('reports every cleanup failure when all cancels siblings', async () => {
+      const TestScope = 'test/Fork/AllCancelMultipleCleanupFailures' as const
+      const cause = new Error('all failed')
+      const firstReleaseFailure = new Error('first release failed')
+      const secondReleaseFailure = new Error('second release failed')
+
+      const slow = (releaseFailure: Error) => fx(function* () {
+        yield* andFinally(TestScope, fail(releaseFailure))
+        yield* awaitAbort()
+      })
+      const bad = fx(function* () {
+        yield* asyncValue(undefined)
+        yield* fail(cause)
+      })
+
+      const result = await all([slow(firstReleaseFailure), bad, slow(secondReleaseFailure)]).pipe(
+        defaultAll,
+        scope(TestScope),
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.ok(result.arg instanceof AggregateError)
+      assert.equal(result.arg.message, 'Resource release failed')
+      assert.equal(result.arg.errors.length, 3)
+      assert.equal((result.arg.errors[0] as Error).cause, cause)
+      assert.deepEqual(result.arg.errors.slice(1), [firstReleaseFailure, secondReleaseFailure])
+    })
+
     it('types all as a value tuple rather than a Task', async () => {
       const result = await fx(function* () {
         const values = yield* all([ok(1), ok('two')])
@@ -326,6 +432,52 @@ describe('Fork', () => {
 
       assert.equal(result, 'winner')
       assert.equal(cancelled, true)
+    })
+
+    it('releases scoped finalizers when race cancels the loser', async () => {
+      const TestScope = 'test/Fork/RaceCancelScope' as const
+      const released = [] as string[]
+
+      const slow = fx(function* () {
+        yield* andFinally(TestScope, fx(function* () {
+          released.push('slow')
+        }))
+        yield* awaitAbort()
+      })
+
+      const result = await race([ok('winner'), slow]).pipe(
+        firstSettled,
+        scope(TestScope),
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.equal(result, 'winner')
+      assert.deepEqual(released, ['slow'])
+    })
+
+    it('fails when a race loser cleanup fails after a successful winner', async () => {
+      const TestScope = 'test/Fork/RaceCancelCleanupFailure' as const
+      const releaseFailure = new Error('release failed')
+
+      const slow = fx(function* () {
+        yield* andFinally(TestScope, fail(releaseFailure))
+        yield* awaitAbort()
+      })
+
+      const result = await race([ok('winner'), slow]).pipe(
+        firstSettled,
+        scope(TestScope),
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.ok(result.arg instanceof AggregateError)
+      assert.equal(result.arg.message, 'Resource release failed')
+      assert.deepEqual(result.arg.errors, [releaseFailure])
     })
 
     it('runs children with handlers between race and firstSettled', async () => {
@@ -394,6 +546,29 @@ describe('Fork', () => {
       assert.equal(cancelled, true)
     })
 
+    it('fails when firstSuccess loser cleanup fails after a successful winner', async () => {
+      const TestScope = 'test/Fork/FirstSuccessCancelCleanupFailure' as const
+      const releaseFailure = new Error('release failed')
+
+      const slow = fx(function* () {
+        yield* andFinally(TestScope, fail(releaseFailure))
+        yield* awaitAbort()
+      })
+
+      const result = await race([ok('winner'), slow]).pipe(
+        firstSuccess,
+        scope(TestScope),
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.ok(result.arg instanceof AggregateError)
+      assert.equal(result.arg.message, 'Resource release failed')
+      assert.deepEqual(result.arg.errors, [releaseFailure])
+    })
+
     it('fails with input-ordered errors when every child fails', async () => {
       const first = new Error('first failed')
       const second = new Error('second failed')
@@ -460,6 +635,328 @@ describe('Fork', () => {
   })
 })
 
+describe('Task interruption finalization', () => {
+  it('explicit task disposal releases scoped finalizers', async () => {
+    const TestScope = 'test/Fork/DisposeScope' as const
+    const released = [] as string[]
+
+    const task = taskOrThrow(await fx(function* () {
+      return yield* fork(fx(function* () {
+        yield* andFinally(TestScope, fx(function* () {
+          released.push('task')
+        }))
+        yield* awaitAbort()
+      }))
+    }).pipe(
+      scope(TestScope),
+      returnFail,
+      unbounded,
+      runPromise
+    ))
+
+    await task._disposeAndWait()
+
+    assert.deepEqual(released, ['task'])
+  })
+
+  it('runs interrupted scoped finalizers once when task disposal is repeated', async () => {
+    const TestScope = 'test/Fork/DisposeOnceScope' as const
+    const released = [] as string[]
+
+    const task = taskOrThrow(await fx(function* () {
+      return yield* fork(fx(function* () {
+        yield* andFinally(TestScope, fx(function* () {
+          released.push('task')
+        }))
+        yield* awaitAbort()
+      }))
+    }).pipe(
+      scope(TestScope),
+      returnFail,
+      unbounded,
+      runPromise
+    ))
+
+    await task._disposeAndWait()
+    await task._disposeAndWait()
+
+    assert.deepEqual(released, ['task'])
+  })
+
+  it('provides interrupted exit to exit-aware finalizers', async () => {
+    const TestScope = 'test/Fork/InterruptedExitScope' as const
+    const exits = [] as Exit[]
+
+    const task = taskOrThrow(await fx(function* () {
+      return yield* fork(fx(function* () {
+        yield* andFinallyExit(TestScope, exit => fx(function* () {
+          exits.push(exit)
+        }))
+        yield* awaitAbort()
+      }))
+    }).pipe(
+      scope(TestScope),
+      returnFail,
+      unbounded,
+      runPromise
+    ))
+
+    await task._disposeAndWait()
+
+    assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope }])
+  })
+
+  it('disposes queued bounded tasks before semaphore acquisition', async () => {
+    const events = [] as string[]
+    const child = (label: string) => fx(function* () {
+      events.push(`start ${label}`)
+      yield* awaitAbort()
+    })
+
+    const tasks = await fx(function* () {
+      const first = yield* fork(child('first'))
+      const second = yield* fork(child('second'))
+      const third = yield* fork(child('third'))
+      return [first, second, third] as const
+    }).pipe(
+      bounded(1),
+      runPromise
+    )
+
+    assert.deepEqual(events, ['start first'])
+    await withTimeout(tasks[1]._disposeAndWait(), 100)
+
+    await tasks[0]._disposeAndWait()
+    await eventually(() => events.includes('start third'))
+    assert.deepEqual(events, ['start first', 'start third'])
+
+    await tasks[2]._disposeAndWait()
+  })
+
+  it('runs async effects in interrupted finalizers before disposal completes', async () => {
+    const TestScope = 'test/Fork/InterruptedAsyncFinalizer' as const
+    const released = [] as string[]
+
+    const task = taskOrThrow(await fx(function* () {
+      return yield* fork(fx(function* () {
+        yield* andFinally(TestScope, fx(function* () {
+          yield* asyncValue(undefined)
+          released.push('task')
+        }))
+        yield* awaitAbort()
+      }))
+    }).pipe(
+      scope(TestScope),
+      returnFail,
+      unbounded,
+      runPromise
+    ))
+
+    await task._disposeAndWait()
+
+    assert.deepEqual(released, ['task'])
+  })
+
+  it('drains effects yielded from wrapped iterator return during interruption', async () => {
+    const TestScope = 'test/Fork/InterruptedInnerReturn' as const
+    const released = [] as string[]
+
+    const task = taskOrThrow(await fx(function* () {
+      return yield* fork(fx(function* () {
+        yield* bracket(
+          ok(undefined),
+          () => fx(function* () {
+            yield* asyncValue(undefined)
+            released.push('inner')
+          }),
+          () => awaitAbort()
+        )
+      }))
+    }).pipe(
+      scope(TestScope),
+      returnFail,
+      unbounded,
+      runPromise
+    ))
+
+    await task._disposeAndWait()
+
+    assert.deepEqual(released, ['inner'])
+  })
+
+  it('drains wrapped iterator return after interrupted scoped finalizer yields', async () => {
+    const TestScope = 'test/Fork/InterruptedScopeThenInnerReturn' as const
+    const released = [] as string[]
+
+    const task = taskOrThrow(await fx(function* () {
+      return yield* fork(fx(function* () {
+        yield* andFinally(TestScope, fx(function* () {
+          yield* asyncValue(undefined)
+          released.push('scope')
+        }))
+        yield* bracket(
+          ok(undefined),
+          () => fx(function* () {
+            yield* asyncValue(undefined)
+            released.push('inner')
+          }),
+          () => awaitAbort()
+        )
+      }))
+    }).pipe(
+      scope(TestScope),
+      returnFail,
+      unbounded,
+      runPromise
+    ))
+
+    await task._disposeAndWait()
+
+    assert.deepEqual(released, ['scope', 'inner'])
+  })
+
+  it('documents async cleanup rejection wrapper during interruption', async () => {
+    const TestScope = 'test/Fork/InterruptedAsyncCleanupRejection' as const
+    const releaseFailure = new Error('async release failed')
+
+    const slow = fx(function* () {
+      yield* andFinally(TestScope, assertPromise(() => Promise.reject(releaseFailure)))
+      yield* awaitAbort()
+    })
+
+    const result = await race([ok('winner'), slow]).pipe(
+      firstSettled,
+      scope(TestScope),
+      returnFail,
+      unbounded,
+      runPromise
+    )
+
+    assert.ok(Fail.is(result))
+    assert.ok(result.arg instanceof AggregateError)
+    assert.equal(result.arg.message, 'Resource release failed')
+    assert.equal(result.arg.errors.length, 1)
+    const [cleanupFailure] = result.arg.errors
+    const snapshot = snapshotError(cleanupFailure)
+    assert.equal(snapshot.code, 'FX_AWAITED_ASYNC_FAILED')
+    assert.equal(snapshot.cause?.message, 'async release failed')
+  })
+
+  it('aggregates interrupted scoped and wrapped iterator cleanup failures', async () => {
+    const TestScope = 'test/Fork/InterruptedMultipleCleanupFailures' as const
+    const scopeFailure = new Error('scope release failed')
+    const innerFailure = new Error('inner release failed')
+
+    const slow = fx(function* () {
+      yield* andFinally(TestScope, fail(scopeFailure))
+      yield* bracket(
+        ok(undefined),
+        () => fail(innerFailure),
+        () => awaitAbort()
+      )
+    })
+
+    const result = await race([ok('winner'), slow]).pipe(
+      firstSettled,
+      scope(TestScope),
+      returnFail,
+      unbounded,
+      runPromise
+    )
+
+    assert.ok(Fail.is(result))
+    assert.ok(result.arg instanceof AggregateError)
+    assert.equal(result.arg.message, 'Resource release failed')
+    assert.deepEqual(result.arg.errors, [scopeFailure, innerFailure])
+  })
+
+  it('aggregates interrupted scoped cleanup failure with synchronous iterator return throw', async () => {
+    const TestScope = 'test/Fork/InterruptedReturnThrow' as const
+    const scopeFailure = new Error('scope release failed')
+    const innerFailure = new Error('inner hard throw')
+    const throwsOnReturn = (): ReturnType<typeof awaitAbort> => ({
+      pipe: ok(undefined).pipe.bind(ok(undefined)),
+      [Symbol.iterator]() {
+        const iterator = awaitAbort()[Symbol.iterator]()
+        return {
+          next: iterator.next.bind(iterator),
+          return() {
+          throw innerFailure
+          }
+        } satisfies Iterator<unknown, void, unknown>
+      }
+    })
+
+    const slow = fx(function* () {
+      yield* andFinally(TestScope, fail(scopeFailure))
+      yield* throwsOnReturn()
+    })
+
+    const result = await race([ok('winner'), slow]).pipe(
+      firstSettled,
+      scope(TestScope),
+      returnFail,
+      unbounded,
+      runPromise
+    )
+
+    assert.ok(Fail.is(result))
+    assert.ok(result.arg instanceof AggregateError)
+    assert.equal(result.arg.message, 'Resource release failed')
+    assert.deepEqual(result.arg.errors, [scopeFailure, innerFailure])
+  })
+
+  it('runs interrupted finalizers through outer handlers', async () => {
+    const TestScope = 'test/Fork/InterruptedOuterHandler' as const
+    class Release extends Effect('test/Fork/InterruptedOuterHandler/Release')<void, void> { }
+    const released = [] as string[]
+
+    const task = taskOrThrow(await fx(function* () {
+      return yield* fork(fx(function* () {
+        yield* andFinally(TestScope, new Release())
+        yield* awaitAbort()
+      }))
+    }).pipe(
+      scope(TestScope),
+      returnFail,
+      unbounded,
+      handle(Release, () => fx(function* () {
+        released.push('task')
+      })),
+      runPromise
+    ))
+
+    await task._disposeAndWait()
+
+    assert.deepEqual(released, ['task'])
+  })
+
+  it('runs interrupted finalizers through captured handlers', async () => {
+    const TestScope = 'test/Fork/InterruptedCapturedHandler' as const
+    class Release extends Effect('test/Fork/InterruptedCapturedHandler/Release')<void, void> { }
+    const released = [] as string[]
+
+    const task = taskOrThrow(await fx(function* () {
+      return yield* fork(fx(function* () {
+        yield* andFinally(TestScope, new Release())
+        yield* awaitAbort()
+      }))
+    }).pipe(
+      scope(TestScope),
+      handle(Release, () => fx(function* () {
+        released.push('task')
+      })),
+      returnFail,
+      unbounded,
+      runPromise
+    ))
+
+    await task._disposeAndWait()
+
+    assert.deepEqual(released, ['task'])
+  })
+})
+
 const firstLine = (e: unknown): string =>
   e instanceof Error ? e.stack?.split('\n')[0] ?? '' : ''
 
@@ -471,4 +968,31 @@ const traceMessages = (e: unknown) => {
     trace = trace.parent
   }
   return messages
+}
+
+const awaitAbort = () => assertPromise<void>(signal => new Promise(resolve => {
+  signal.addEventListener('abort', () => resolve(), { once: true })
+}))
+
+const withTimeout = async <A>(promise: Promise<A>, ms: number): Promise<A> =>
+  await Promise.race([
+    promise,
+    delay(ms).then(() => {
+      throw new Error(`Timed out after ${ms}ms`)
+    })
+  ])
+
+const eventually = async (f: () => boolean): Promise<void> => {
+  for (let i = 0; i < 20; i++) {
+    if (f()) return
+    await delay(5)
+  }
+  assert.equal(f(), true)
+}
+
+const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+const taskOrThrow = <A, E>(task: Task<A, E> | Fail<unknown>): Task<A, E> => {
+  assert.ok(!Fail.is(task))
+  return task
 }

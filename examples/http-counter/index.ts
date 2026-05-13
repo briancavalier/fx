@@ -4,7 +4,7 @@ import { assert as assertNoFail } from '../../src/Fail.js'
 import { unbounded } from '../../src/Concurrent.js'
 import { console as logConsole, info } from '../../src/Log.js'
 import { defaultTime } from '../../src/Time.js'
-import { route, serve, type ServerEvent, type ServerListening } from '../../src/HttpServer.js'
+import { route, serve, type RouteContext, type ServerEvent, type ServerListening } from '../../src/HttpServer.js'
 import { nodeHttp } from '../../src/HttpServerNode.js'
 import { emit, forEach as forEachStream } from '../../src/Stream.js'
 
@@ -15,7 +15,7 @@ import { mapCounter } from './counter-map.js'
 // ----------------------------------------------------------------------
 // Define the routes
 
-const appRoutes = route('GET', '/*', request => fx(function* () {
+const appRoutes = route('GET', '/*', fx(function* ({ request }: RouteContext) {
   const key = request.path
   const value = yield* next(key)
 
@@ -23,7 +23,7 @@ const appRoutes = route('GET', '/*', request => fx(function* () {
 
   return {
     status: 200,
-    body: { type: 'json', value: { key, value } }
+    body: { type: 'json' as const, value: { key, value } }
   }
 }))
 

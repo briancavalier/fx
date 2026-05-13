@@ -1,5 +1,6 @@
 import { Async } from './Async.js'
 import { Effect } from './Effect.js'
+import { Get, provide, provideFrom, type ExcludeEnv } from './Env.js'
 import { Fail } from './Fail.js'
 import { Fx, flatMap, ok } from './Fx.js'
 import { type Headers, type Method } from './HttpClient.js'
@@ -77,8 +78,15 @@ export type ResponseBody<_E = never> =
 
 export type ParamsRecord = Readonly<Record<string, string>>
 
+export type RouteContext<Params extends ParamsRecord = ParamsRecord> = {
+  readonly request: ServerRequest<Params>
+}
+
+export type RouteEffects<E> =
+  ExcludeEnv<E, RouteContext<any>>
+
 export type RouteHandler<E, Params extends ParamsRecord = ParamsRecord> =
-  (request: ServerRequest<Params>) => Fx<E, ServerResponse<E>>
+  Fx<E | Get<RouteContext<Params>>, ServerResponse<E>>
 
 /**
  * A composable HTTP route declaration tree.
@@ -117,21 +125,35 @@ export type Route<E, Params extends ParamsRecord = ParamsRecord> = {
 
 export const emptyRoutes: Routes<never> = { type: 'empty' }
 
-export const route = <E, Params extends ParamsRecord = ParamsRecord>(
+export const route = <E>(
   method: Method,
   path: string,
-  handle: RouteHandler<E, Params>
-): Routes<E> => ({
+  handle: Fx<E, ServerResponse<any>>
+): Routes<RouteEffects<E>> => ({
     type: 'route',
-    route: { method, path, handle: handle as RouteHandler<E> }
+    route: {
+      method,
+      path,
+      handle: handle as unknown as RouteHandler<RouteEffects<E>>
+    }
   })
 
-export const routes = <const Rs extends readonly Routes<any>[]>(
+export function routes<const E1>(r1: Routes<E1>): Routes<E1>
+export function routes<const E1, const E2>(r1: Routes<E1>, r2: Routes<E2>): Routes<E1 | E2>
+export function routes<const E1, const E2, const E3>(r1: Routes<E1>, r2: Routes<E2>, r3: Routes<E3>): Routes<E1 | E2 | E3>
+export function routes<const E1, const E2, const E3, const E4>(r1: Routes<E1>, r2: Routes<E2>, r3: Routes<E3>, r4: Routes<E4>): Routes<E1 | E2 | E3 | E4>
+export function routes<const E1, const E2, const E3, const E4, const E5>(r1: Routes<E1>, r2: Routes<E2>, r3: Routes<E3>, r4: Routes<E4>, r5: Routes<E5>): Routes<E1 | E2 | E3 | E4 | E5>
+export function routes<const Rs extends readonly Routes<any>[]>(
   ...routes: Rs
-): Routes<EffectsOfRoutes<Rs[number]>> => ({
+): Routes<EffectsOfRoutes<Rs[number]>>
+export function routes(
+  ...routes: readonly Routes<any>[]
+): Routes<any> {
+  return {
     type: 'concat',
     routes
-  })
+  }
+}
 
 export const mount = <E>(
   prefix: string,
@@ -146,7 +168,7 @@ export type EffectsOfRoutes<R> =
   R extends Routes<infer E> ? E : never
 
 export type RouteTransform<E1, E2> =
-  <A>(fx: Fx<E1, A>) => Fx<E2, A>
+  <A>(fx: Fx<E1 | Get<RouteContext<any>>, A>) => Fx<E2 | Get<RouteContext<any>>, A>
 
 export const mapRoutes = <E1, E2>(
   routes: Routes<E1>,
@@ -184,8 +206,12 @@ export const handleRoutes = <E1, E2>(
   transform: RouteTransform<E1, E2>
 ) =>
   (routes: Routes<E1>): Routes<E2> =>
-    mapRoutes(routes, handleRequest => request =>
-      transform(handleRequest(request)))
+    mapRoutes(routes, transform)
+
+export const provideRoutesFrom =
+  <const PE, const C extends Record<PropertyKey, unknown>>(context: Fx<PE, C>) =>
+    handleRoutes(provideFrom(context)) as
+      <const E>(routes: Routes<E>) => Routes<RouteEffects<PE | ExcludeEnv<E, C>>>
 
 export type ServerRouteEffects = Async | Fail<any> | HandlerCapture<string>
 
@@ -241,7 +267,9 @@ export const dispatch = <E>(
     if (route.method !== request.method) continue
 
     const params = route.match(request.path)
-    if (params !== false) return route.handle({ ...request, params })
+    if (params !== false) return route.handle.pipe(
+      provide({ request: { ...request, params } })
+    ) as Fx<E, ServerResponse<E>>
   }
 
   return ok({

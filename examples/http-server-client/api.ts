@@ -1,11 +1,17 @@
+import { get } from '../../src/Env.js'
 import { handle } from '../../src/Handler.js'
 import { bytes as readBytes } from '../../src/HttpClient.js'
-import { mount, route, routes, type ServerRequest, type ServerResponse } from '../../src/HttpServer.js'
+import { mount, provideRoutesFrom, route, routes, type RouteContext, type ServerRequest, type ServerResponse } from '../../src/HttpServer.js'
 import { Effect, fx, map, ok, type Fx } from '../../src/index.js'
 
 export type Note = {
   readonly id: string
   readonly text: string
+}
+
+export type User = {
+  readonly id: string
+  readonly name: string
 }
 
 export class ListNotes extends Effect('example/HttpServerClient/ListNotes')<void, readonly Note[]> { }
@@ -14,20 +20,39 @@ export class AddNote extends Effect('example/HttpServerClient/AddNote')<string, 
 export const listNotes = new ListNotes()
 export const createNote = (text: string) => new AddNote(text)
 
-const apiRoutes = routes(
-  route('GET', '/health', () => ok(text('ok'))),
+type UserContext = {
+  readonly user: User
+}
 
-  route('GET', '/notes', () => fx(function* () {
-    return json(yield* listNotes)
+const userContext = fx(function* ({ request }: RouteContext) {
+  return {
+    user: fakeAuthenticate(request)
+  }
+})
+
+const healthRoutes = route('GET', '/health', ok(text('ok')))
+
+const noteRoutes = provideRoutesFrom(userContext)(routes(
+  route('GET', '/notes', fx(function* ({ user }: UserContext) {
+    return json({
+      user,
+      notes: yield* listNotes
+    })
   })),
 
-  route('POST', '/notes', (req: ServerRequest) => fx(function* () {
-    const note = yield* createNote((yield* readText(req)).trim())
-    return json(note, 201)
+  route('POST', '/notes', fx(function* ({ user }: UserContext) {
+    const { request: req } = yield* get<RouteContext>()
+    const note = yield* createNote(`${user.name}: ${(yield* readText(req)).trim()}`)
+    return json({ user, note }, 201)
   }))
-)
+))
 
-export const appRoutes = mount('/api', apiRoutes)
+export const appRoutes = mount('/api',
+  routes(
+    healthRoutes,
+    noteRoutes
+  )
+)
 
 export function memoryNotes() {
   const notes: Note[] = []
@@ -63,4 +88,12 @@ function readText(request: ServerRequest) {
   return readBytes({ status: 200, headers: [], body: request.body }).pipe(
     map((bytes: Uint8Array) => new TextDecoder().decode(bytes))
   )
+}
+
+function fakeAuthenticate(request: ServerRequest): User {
+  const id = request.headers.find(([name]) => name.toLowerCase() === 'x-user-id')?.[1] ?? 'demo-user'
+  return {
+    id,
+    name: id === 'demo-user' ? 'Demo User' : id
+  }
 }

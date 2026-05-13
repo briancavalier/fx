@@ -9,6 +9,7 @@ type ClientConfig = {
 
 const client = fx(function* ({ port }: ClientConfig) {
   const base = `http://127.0.0.1:${port}`
+  const userHeaders = [['x-user-id', 'ada']] as const
 
   yield* request({ url: new URL('/api/health', base) }).pipe(
     flatMap(expectSuccess)
@@ -17,6 +18,7 @@ const client = fx(function* ({ port }: ClientConfig) {
   yield* request({
     method: 'POST',
     url: new URL('/api/notes', base),
+    headers: userHeaders,
     body: { type: 'text', value: 'learn algebraic effects' }
   }).pipe(
     flatMap(expectSuccess)
@@ -25,12 +27,16 @@ const client = fx(function* ({ port }: ClientConfig) {
   yield* request({
     method: 'POST',
     url: new URL('/api/notes', base),
+    headers: userHeaders,
     body: { type: 'text', value: 'ship a small http server' }
   }).pipe(
     flatMap(expectSuccess)
   )
 
-  return yield* request({ url: new URL('/api/notes', base) }).pipe(
+  return yield* request({
+    url: new URL('/api/notes', base),
+    headers: userHeaders
+  }).pipe(
     flatMap(expectSuccess),
     flatMap(text)
   )

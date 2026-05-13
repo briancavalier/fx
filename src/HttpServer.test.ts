@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict'
 import { createServer, request as nodeRequest, type IncomingHttpHeaders } from 'node:http'
 import { describe, it } from 'node:test'
 import { Async } from './Async.js'
+import { Get, provideFrom } from './Env.js'
 import { Effect } from './Effect.js'
 import { Fail, assert as assertNoFail, fail } from './Fail.js'
 import { ok, fx, run, runPromise, runTask, type Fx } from './Fx.js'
@@ -17,6 +18,7 @@ import {
   serve,
   type EffectsOfRoutes,
   type ResponseBody,
+  type RouteContext,
   type Routes,
   type ServerEvent,
   type ServerRequest,
@@ -33,8 +35,8 @@ describe('HttpServer', () => {
       class E1 extends Effect('test/HttpServer/E1')<void, string> { }
       class E2 extends Effect('test/HttpServer/E2')<void, number> { }
 
-      const r1 = route('GET', '/one', () => new E1().pipe(responseText))
-      const r2 = route('GET', '/two', () => new E2().pipe(responseText))
+      const r1 = route('GET', '/one', new E1().pipe(responseText))
+      const r2 = route('GET', '/two', new E2().pipe(responseText))
       const rs = routes(r1, r2)
 
       type Actual = EffectsOfRoutes<typeof rs>
@@ -43,7 +45,9 @@ describe('HttpServer', () => {
     })
 
     it('mount composes prefixes without mutating child routes', async () => {
-      const child = route('GET', '/:id', req => ok(text(req.params.id)))
+      const child = route('GET', '/:id', fx(function* ({ request: req }: RouteContext<{ readonly id: string }>) {
+        return text(req.params.id)
+      }))
       const app = mount('/users', child)
 
       const childResponse = await dispatch(compileRoutes(child), request('/users/1')).pipe(runPromise)
@@ -57,7 +61,7 @@ describe('HttpServer', () => {
     it('transforms route handler effects', async () => {
       class CurrentValue extends Effect('test/HttpServer/TransformCurrentValue')<void, string> { }
 
-      const app = route('GET', '/current', () => fx(function* () {
+      const app = route('GET', '/current', fx(function* () {
         return text(yield* new CurrentValue())
       }))
 
@@ -71,7 +75,7 @@ describe('HttpServer', () => {
     it('keeps route effects visible until the server program handles them', () => {
       class CurrentValue extends Effect('test/HttpServer/ServeCurrentValue')<void, string> { }
 
-      const app = route('GET', '/current', () => fx(function* () {
+      const app = route('GET', '/current', fx(function* () {
         return text(yield* new CurrentValue())
       }))
 
@@ -89,11 +93,63 @@ describe('HttpServer', () => {
       const runnable: Fx<Async | HandlerCapture<string>, void> = handled
       void runnable
     })
+
+    it('does not expose route request context as a server program effect', () => {
+      const app = route('GET', '/current', fx(function* ({ request }: RouteContext) {
+        return text(request.path)
+      }))
+
+      const runnable: Fx<Async | HandlerCapture<string>, void> = serve(app, { port: 3000 }).pipe(
+        nodeHttp(),
+        assertNoFail
+      )
+      void runnable
+    })
+
+    it('supports request-scoped route context from provideFrom', async () => {
+      type User = {
+        readonly id: string
+      }
+
+      class Authenticate extends Effect('test/HttpServer/Authenticate')<ServerRequest, User> { }
+
+      let authRuns = 0
+      const withUser = provideFrom(fx(function* ({ request }: RouteContext) {
+        authRuns += 1
+        return {
+          user: yield* new Authenticate(request)
+        }
+      }))
+
+      const app = handleRoutes<Get<{ readonly user: User }>, Authenticate>(withUser)(
+        route('GET', '/users/:id', fx(function* ({ user }: { readonly user: User }) {
+          return text(user.id)
+        }))
+      )
+
+      const _: Routes<Authenticate> = app
+      void _
+
+      const handleAuth = handle(Authenticate, auth => ok({ id: auth.arg.params['id'] ?? 'missing' }))
+      const matched = await dispatch(compileRoutes(app), request('/users/ada')).pipe(
+        handleAuth,
+        runPromise
+      )
+      const unmatched = await dispatch(compileRoutes(app), request('/missing')).pipe(
+        handleAuth,
+        runPromise
+      )
+
+      assert.equal(matched.status, 200)
+      assert.equal(await readBody(matched.body), 'ada')
+      assert.equal(unmatched.status, 404)
+      assert.equal(authRuns, 1)
+    })
   })
 
   describe('reference dispatcher', () => {
     it('matches exact routes', async () => {
-      const app = route('GET', '/health', () => ok(text('ok')))
+      const app = route('GET', '/health', ok(text('ok')))
 
       const response = await dispatch(compileRoutes(app), request('/health')).pipe(runPromise)
 
@@ -102,7 +158,9 @@ describe('HttpServer', () => {
     })
 
     it('matches params', async () => {
-      const app = route('GET', '/users/:id', req => ok(text(req.params.id)))
+      const app = route('GET', '/users/:id', fx(function* ({ request: req }: RouteContext<{ readonly id: string }>) {
+        return text(req.params.id)
+      }))
 
       const response = await dispatch(compileRoutes(app), request('/users/alice')).pipe(runPromise)
 
@@ -111,7 +169,9 @@ describe('HttpServer', () => {
     })
 
     it('matches mounted params', async () => {
-      const app = mount('/api', route('GET', '/users/:id', req => ok(text(req.params.id))))
+      const app = mount('/api', route('GET', '/users/:id', fx(function* ({ request: req }: RouteContext<{ readonly id: string }>) {
+        return text(req.params.id)
+      })))
 
       const response = await dispatch(compileRoutes(app), request('/api/users/bob')).pipe(runPromise)
 
@@ -120,7 +180,9 @@ describe('HttpServer', () => {
     })
 
     it('matches trailing wildcards', async () => {
-      const app = route('GET', '/files/*', req => ok(text(req.params['*'])))
+      const app = route('GET', '/files/*', fx(function* ({ request: req }: RouteContext<{ readonly '*': string }>) {
+        return text(req.params['*'])
+      }))
 
       const response = await dispatch(compileRoutes(app), request('/files/a/b/c')).pipe(runPromise)
 
@@ -137,8 +199,10 @@ describe('HttpServer', () => {
 
     it('uses declaration order for ambiguous matches', async () => {
       const app = routes(
-        route<never>('GET', '/users/:id', req => ok(text(`param:${req.params.id}`))),
-        route<never>('GET', '/users/me', () => ok(text('exact')))
+        route('GET', '/users/:id', fx(function* ({ request: req }: RouteContext<{ readonly id: string }>) {
+          return text(`param:${req.params.id}`)
+        })),
+        route<never>('GET', '/users/me', ok(text('exact')))
       ) as Routes<never>
 
       const response = await dispatch(compileRoutes(app), request('/users/me')).pipe(runPromise)
@@ -150,7 +214,7 @@ describe('HttpServer', () => {
 
   describe('nodeHttp', () => {
     it('starts a server and serves a text response', async () => {
-      const app = route('GET', '/health', () => ok(text('ok')))
+      const app = route('GET', '/health', ok(text('ok')))
 
       await withServer(createServer => serve(app, { port: 0, host: '127.0.0.1' }).pipe(
         nodeHttp({ createServer })
@@ -162,7 +226,7 @@ describe('HttpServer', () => {
     })
 
     it('emits listening with the actual bound address', async () => {
-      const app = route('GET', '/health', () => ok(text('ok')))
+      const app = route('GET', '/health', ok(text('ok')))
       const events: ServerEvent[] = []
       const before = Date.now()
 
@@ -187,7 +251,7 @@ describe('HttpServer', () => {
     })
 
     it('emits completed request summaries', async () => {
-      const app = route('GET', '/health', () => ok(text('ok')))
+      const app = route('GET', '/health', ok(text('ok')))
       const events: ServerEvent[] = []
 
       await withServer(createServer => serve(app, {
@@ -223,13 +287,15 @@ describe('HttpServer', () => {
     })
 
     it('passes request details to route handlers', async () => {
-      const app = route('GET', '/users/:id', req => ok(text(JSON.stringify({
-        method: req.method,
-        path: req.path,
-        query: req.query.get('q'),
-        params: req.params,
-        host: req.headers.find(([name]) => name === 'host')?.[1]
-      }))))
+      const app = route('GET', '/users/:id', fx(function* ({ request: req }: RouteContext<{ readonly id: string }>) {
+        return text(JSON.stringify({
+          method: req.method,
+          path: req.path,
+          query: req.query.get('q'),
+          params: req.params,
+          host: req.headers.find(([name]) => name === 'host')?.[1]
+        }))
+      }))
 
       await withServer(createServer => serve(app, { port: 0, host: '127.0.0.1' }).pipe(
         nodeHttp({ createServer })
@@ -248,11 +314,11 @@ describe('HttpServer', () => {
 
     it('writes bytes and stream bodies', async () => {
       const app = routes(
-        route<never>('GET', '/bytes', () => ok({
+        route<never>('GET', '/bytes', ok({
           status: 200,
           body: { type: 'bytes', value: new TextEncoder().encode('bytes') }
         })),
-        route<never>('GET', '/stream', () => ok({
+        route<never>('GET', '/stream', ok({
           status: 200,
           body: {
             type: 'stream',
@@ -275,7 +341,7 @@ describe('HttpServer', () => {
     })
 
     it('writes JSON bodies with a default content-type', async () => {
-      const app = route('GET', '/json', () => ok({
+      const app = route('GET', '/json', ok({
         status: 200,
         body: { type: 'json', value: { ok: true } }
       }))
@@ -291,7 +357,7 @@ describe('HttpServer', () => {
     })
 
     it('preserves explicit JSON content-type headers', async () => {
-      const app = route('GET', '/json', () => ok({
+      const app = route('GET', '/json', ok({
         status: 200,
         headers: [['content-type', 'application/vnd.api+json']],
         body: { type: 'json', value: { ok: true } }
@@ -308,7 +374,7 @@ describe('HttpServer', () => {
     it('runs route handlers with handlers outside nodeHttp', async () => {
       class CurrentValue extends Effect('test/HttpServer/CurrentValue')<void, string> { }
 
-      const app = route('GET', '/current', () => fx(function* () {
+      const app = route('GET', '/current', fx(function* () {
         return text(yield* new CurrentValue())
       }))
 
@@ -327,7 +393,7 @@ describe('HttpServer', () => {
     it('runs route handlers with handlers before nodeHttp', async () => {
       class CurrentValue extends Effect('test/HttpServer/InnerCurrentValue')<void, string> { }
 
-      const app = route('GET', '/current', () => fx(function* () {
+      const app = route('GET', '/current', fx(function* () {
         return text(yield* new CurrentValue())
       }))
 
@@ -344,7 +410,7 @@ describe('HttpServer', () => {
     })
 
     it('converts route failures to 500 responses', async () => {
-      const app = route('GET', '/fail', () => fail(new Error('failed')))
+      const app = route('GET', '/fail', fail(new Error('failed')))
 
       await withServer(createServer => serve(app, { port: 0, host: '127.0.0.1' }).pipe(
         nodeHttp({ createServer })
@@ -357,7 +423,7 @@ describe('HttpServer', () => {
 
     it('emits failed request summaries for route failures', async () => {
       const failure = new Error('failed')
-      const app = route('GET', '/fail', () => fail(failure))
+      const app = route('GET', '/fail', fail(failure))
       const events: ServerEvent[] = []
 
       await withServer(createServer => serve(app, {
@@ -380,7 +446,7 @@ describe('HttpServer', () => {
     })
 
     it('keeps observer stream effects visible until handled', () => {
-      const app = route('GET', '/health', () => ok(text('ok')))
+      const app = route('GET', '/health', ok(text('ok')))
 
       const observed = serve(app, {
         port: 3000,
@@ -395,7 +461,7 @@ describe('HttpServer', () => {
     })
 
     it('fails fast and closes the server when observation fails', async () => {
-      const app = route('GET', '/health', () => ok(text('ok')))
+      const app = route('GET', '/health', ok(text('ok')))
       const failure = new Error('observation failed')
       let closeCalled = false
 

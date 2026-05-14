@@ -83,6 +83,9 @@ const handlerCaptureBoundaryPassThroughPrograms = new Map<number, Fx<any, any>>(
 const controlPassThroughPrograms = new Map<number, Fx<any, any>>(
   handlerContextDepths.map(depth => [depth, applyControls(targetProgram, depth).pipe(targetHandler)])
 )
+const scopeNoFinalizerPrograms = new Map<number, Fx<any, any>>(
+  handlerContextDepths.map(depth => [depth, applyScopes(ok(1), depth)])
+)
 
 const capturedContexts = new Map<number, ReturnType<typeof captureContext>>(
   handlerContextDepths.map(depth => [depth, captureContext(depth)])
@@ -168,6 +171,11 @@ const cases: readonly BenchmarkCase[] = [
   ...handlerContextDepths.map(depth =>
     benchmark(`scope pass-through depth ${depth}`, 'scope', HandlerIterations, 500, () => {
       scopePassThroughPrograms.get(depth)!.pipe(run)
+    })
+  ),
+  ...handlerContextDepths.map(depth =>
+    benchmark(`scope no-finalizer success depth ${depth}`, 'scope', CaptureIterations, 500, () => {
+      scopeNoFinalizerPrograms.get(depth)!.pipe(run)
     })
   ),
   ...handlerContextDepths.map(depth =>

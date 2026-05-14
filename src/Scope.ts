@@ -95,6 +95,7 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
     const release = function* (exit: Exit): Generator<unknown, readonly unknown[]> {
       if (released) return []
       released = true
+      if (finalizers.length === 0) return []
       return yield* withActiveScope(scopeName, releaseSafely(finalizers, exit))
     }
     const step = function* (ir: IteratorResult<unknown, A>): Generator<unknown, A, unknown> {

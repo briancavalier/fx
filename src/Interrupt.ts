@@ -5,25 +5,21 @@ export type Interrupt = InterruptMaskBegin | InterruptMaskEnd
 
 export type RestoreInterrupt = <const E, const A>(fx: Fx<E, A>) => Fx<E | Interrupt, A>
 
-export const uninterruptible = <const E, const A>(fx: Fx<E, A>): Fx<E | Interrupt, A> => {
-  const token = interruptMaskToken()
-  return mask(token, fx)
-}
+export const uninterruptible = <const E, const A>(fx: Fx<E, A>): Fx<E | Interrupt, A> =>
+  mask(() => fx)
 
 export const uninterruptibleMask = <const E, const A>(
   f: (restore: RestoreInterrupt) => Fx<E, A>
-): Fx<E | Interrupt, A> => {
-  const token = interruptMaskToken()
-  return mask(token, f(restore(token)))
-}
+): Fx<E | Interrupt, A> =>
+  mask(token => f(restore(token)))
 
 const mask = <const E, const A>(
-  token: InterruptMaskToken,
-  f: Fx<E, A>
+  f: (token: InterruptMaskToken) => Fx<E, A>
 ): Fx<E | Interrupt, A> => fx(function* () {
+  const token = interruptMaskToken()
   yield* new InterruptMaskBegin(token)
   try {
-    return yield* f
+    return yield* f(token)
   } finally {
     yield* new InterruptMaskEnd(token)
   }

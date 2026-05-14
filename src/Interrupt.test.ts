@@ -160,6 +160,21 @@ describe('Interrupt masking', () => {
     await assert.rejects(task.promise, hasInterruptMaskInvariantCause)
   })
 
+  it('fails when restore escapes to a later execution of the same uninterruptibleMask value', async () => {
+    let restore!: RestoreInterrupt
+    let useEscaped = false
+
+    const program = uninterruptibleMask(r => fx(function* () {
+      if (useEscaped) yield* restore(ok(undefined))
+      else restore = r
+    }))
+
+    await runTask(program).promise
+    useEscaped = true
+
+    await assert.rejects(runTask(program).promise, hasInterruptMaskInvariantCause)
+  })
+
   it('escaped restore failure does not mask future interruption', async () => {
     let restore!: RestoreInterrupt
     let started = false

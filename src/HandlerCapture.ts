@@ -69,7 +69,7 @@ class HandlerCaptureBoundary<E, A> implements Fx<E, A>, Pipeable {
     const step = function* (ir: IteratorResult<E, A>): Generator<E, A, unknown> {
       while (!ir.done) {
         if (isEffect(ir.value)) {
-          if (HandlerCapture.is(ir.value) && ir.value.arg === captureName) {
+          if (ir.value._fxEffectId === HandlerCapture._fxEffectId && ir.value.arg === captureName) {
             ir = i.next([])
           } else {
             ir = i.next(yield ir.value as any)

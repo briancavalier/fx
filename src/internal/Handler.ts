@@ -24,9 +24,7 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, CapturedHandler {
   *[Symbol.iterator](): Iterator<E, A> {
     const { effectId, handler, fx } = this
     const i = fx[Symbol.iterator]()
-    const captured: CapturedHandler = {
-      wrap: fx => new Handler(fx, effectId, handler)
-    }
+    let captured: CapturedHandler | undefined
     const step = function* (ir: IteratorResult<E, A>): Generator<E, A, unknown> {
       while (!ir.done) {
         if (isEffect(ir.value)) {
@@ -37,7 +35,10 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, CapturedHandler {
               ? handler(effect)
               : withActiveRuntimeContext(context, () => handler(effect))
             ir = i.next(yield* withRuntimeContext(context, handled) as any)
-          } else if (HandlerCapture.is(effect)) {
+          } else if (effect._fxEffectId === HandlerCapture._fxEffectId) {
+            captured ??= {
+              wrap: fx => new Handler(fx, effectId, handler)
+            }
             ir = i.next([captured, ...(yield effect) as any])
           } else {
             ir = i.next(yield effect as any)

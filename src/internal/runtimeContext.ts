@@ -41,7 +41,7 @@ export const withRuntimeContext = <E, A>(
 
 export const attachRuntimeContext = (target: unknown, context: RuntimeContext | undefined = activeRuntimeContext): void => {
   if (context === undefined || typeof target !== 'object' || target === null) return
-  if (getRuntimeContext(target) !== undefined) return
+  if ((target as Partial<Record<typeof RuntimeContextTypeId, RuntimeContext>>)[RuntimeContextTypeId] !== undefined) return
 
   try {
     Object.defineProperty(target, RuntimeContextTypeId, {

@@ -5,7 +5,7 @@ import { Finalizer, Finally } from './Finalization.js'
 import { Fx, fx } from './Fx.js'
 import { CapturedHandler, HandlerCapture } from './HandlerCapture.js'
 import { ReturnFrom } from './ReturnFrom.js'
-import { isInterpretingReturn } from './internal/iteratorClose.js'
+import { drainIteratorReturn, isInterpretingReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { withActiveScope } from './internal/runtimeContext.js'
 
@@ -142,30 +142,47 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
       completed = true
       return value
     } finally {
-      const interpretingReturn = isInterpretingReturn()
-      const cleanupFailures = [] as unknown[]
-      try {
-        const exit = { type: 'interrupted', scope: scopeName } satisfies Exit<Scope>
-        cleanupFailures.push(...yield* release(exit))
-      } catch (e) {
-        cleanupFailures.push(e)
-      } finally {
-        if (!completed) {
-          try {
-            const ir = i.return?.()
-            if (ir !== undefined && interpretingReturn) {
-              const result = yield* returnFail(fx(function* () {
-                return yield* step(ir)
-              }))
-              if (Fail.is(result)) cleanupFailures.push(result.arg)
-            }
-          } catch (e) {
-            cleanupFailures.push(e)
-          }
-        }
-      }
+      const cleanupFailures = yield* collectInterruptedCleanupFailures(scopeName, release, completed, isInterpretingReturn(), i, step)
       if (cleanupFailures.length > 0) yield* withActiveScope(scopeName, failCleanup(cleanupFailures))
     }
+  }
+}
+
+const collectInterruptedCleanupFailures = function* <A, Scope extends string>(
+  scopeName: Scope,
+  release: (exit: Exit) => Generator<unknown, readonly unknown[]>,
+  completed: boolean,
+  shouldDrainReturn: boolean,
+  iterator: Iterator<unknown, A, unknown>,
+  step: (ir: IteratorResult<unknown, A>) => Generator<unknown, A, unknown>
+): Generator<unknown, readonly unknown[], unknown> {
+  const failures = [] as unknown[]
+  const exit = { type: 'interrupted', scope: scopeName } satisfies Exit<Scope>
+
+  yield* collectCleanupFailures(failures, function* () {
+    failures.push(...yield* release(exit))
+  })
+
+  if (!completed && shouldDrainReturn) {
+    yield* collectCleanupFailures(failures, function* () {
+      const result = yield* returnFail(fx(function* () {
+        return yield* drainIteratorReturn(iterator, step)
+      }))
+      if (Fail.is(result)) failures.push(result.arg)
+    })
+  }
+
+  return failures
+}
+
+const collectCleanupFailures = function* (
+  failures: unknown[],
+  cleanup: () => Generator<unknown, void, unknown>
+): Generator<unknown, void, unknown> {
+  try {
+    yield* cleanup()
+  } catch (e) {
+    failures.push(e)
   }
 }
 

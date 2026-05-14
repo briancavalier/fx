@@ -77,6 +77,10 @@
       "types": "./dist/HandlerCapture.d.ts",
       "import": "./dist/HandlerCapture.js"
     },
+    "./Interrupt": {
+      "types": "./dist/Interrupt.d.ts",
+      "import": "./dist/Interrupt.js"
+    },
     "./Sink": {
       "types": "./dist/Sink.d.ts",
       "import": "./dist/Sink.js"

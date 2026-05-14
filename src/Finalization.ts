@@ -1,5 +1,7 @@
 import { Effect } from './Effect.js'
 import { Fx, fx } from './Fx.js'
+import { uninterruptible } from './Interrupt.js'
+import type { Interrupt } from './Interrupt.js'
 import type { Exit } from './Scope.js'
 
 // ----------------------------------------------------------------------
@@ -50,11 +52,11 @@ export const using = <const Scope extends string, const IE, const FE, const R>(
   scope: Scope,
   initially: Fx<IE, R>,
   finally_: (r: R) => Fx<FE, void>
-): Fx<IE | Finally<Scope>, R> => fx(function* () {
+): Fx<IE | Finally<Scope> | Interrupt, R> => uninterruptible(fx(function* () {
   const r = yield* initially
   yield* andFinally(scope, finally_(r))
   return r
-})
+}))
 
 /**
  * Run an initial operation, register exit-aware cleanup for its result, and return it.
@@ -63,11 +65,11 @@ export const usingExit = <const Scope extends string, const IE, const FE, const 
   scope: Scope,
   initially: Fx<IE, R>,
   finally_: (r: R, exit: Exit) => Fx<FE, void>
-): Fx<IE | Finally<Scope>, R> => fx(function* () {
+): Fx<IE | Finally<Scope> | Interrupt, R> => uninterruptible(fx(function* () {
   const r = yield* initially
   yield* andFinallyExit(scope, exit => finally_(r, exit))
   return r
-})
+}))
 
 /**
  * Pair a value with cleanup for a named scope.
@@ -86,8 +88,8 @@ export const managed = <const A, const E>(
 export const usingManaged = <const Scope extends string, const IE, const FE, const A>(
   scope: Scope,
   initially: Fx<IE, Managed<A, FE>>
-): Fx<IE | Finally<Scope>, A> => fx(function* () {
+): Fx<IE | Finally<Scope> | Interrupt, A> => uninterruptible(fx(function* () {
   const m = yield* initially
   yield* andFinallyExit(scope, m.finalizer)
   return m.value
-})
+}))

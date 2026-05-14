@@ -1,10 +1,11 @@
 import { Abort, abort } from './Abort.js'
 import { Async, assertPromise } from './Async.js'
+import { Fork, fork } from './Concurrent.js'
 import { Effect } from './Effect.js'
 import { Fail } from './Fail.js'
-import { Fork, fork } from './Concurrent.js'
 import { Fx, assertSync, bracket, fx as gen, ok, unit } from './Fx.js'
 import { Handle, control, handle } from './Handler.js'
+import type { Interrupt } from './Interrupt.js'
 import { Sink } from './Sink.js'
 import { Task, wait as waitTask } from './Task.js'
 import * as Queue from './internal/Queue.js'
@@ -100,7 +101,7 @@ export const fromDequeue = <A>(queue: Queue.Dequeue<A>): Fx<Async | Stream<A>, v
 export const withEnqueue = <A>(
   f: (o: Queue.Enqueue<A>) => Disposable,
   q: Queue.Queue<A> = new Queue.UnboundedQueue()
-): Fx<Async | Stream<A>, void> => bracket(
+) => bracket(
   assertSync(() => f(q)),
   disposable => ok(dispose(disposable)),
   _ => fromDequeue(q)
@@ -133,7 +134,7 @@ export interface AsyncIterableWithReturn<Y, R> {
 /**
  * Create a stream that emits all values from an AsyncIterable
  */
-export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>): Fx<Async | Stream<A>, R> => bracket(
+export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>): Fx<Async | Stream<A> | Interrupt, R> => bracket(
   assertSync(() => f()[Symbol.asyncIterator]()),
   iterator => assertPromise(() => iterator.return?.().then(() => { }) ?? Promise.resolve()),
   iterator => gen(function* () {

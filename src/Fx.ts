@@ -3,8 +3,11 @@ import { at } from './Breadcrumb.js'
 import { Get, get, provideAll } from './Env.js'
 import { Fail, assert } from './Fail.js'
 import { HandlerCapture } from './HandlerCapture.js'
+import { uninterruptibleMask } from './Interrupt.js'
+import type { Interrupt } from './Interrupt.js'
 import { Task } from './Task.js'
 import * as generator from './internal/generator.js'
+import { isInterruptMaskEffect } from './internal/interrupt.js'
 import { Pipeable } from './internal/pipe.js'
 import { RunForkOptions, runFork } from './internal/runFork.js'
 import { TrySync } from './internal/sync.js'
@@ -106,7 +109,7 @@ export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E
 /**
  * Execute all the effects of the provided Fx, and return a {@link Task} for its result.
  */
-export const runTask = <const R>(f: Fx<Async | HandlerCapture<string>, R>, options: RunForkOptions = {}): Task<R, never> => {
+export const runTask = <const R>(f: Fx<Async | HandlerCapture<string> | Interrupt, R>, options: RunForkOptions = {}): Task<R, never> => {
   return runFork(f.pipe(provideAll({})), {
     ...options,
     origin: options.origin ?? at('fx/runTask', runTask)
@@ -117,7 +120,7 @@ export const runTask = <const R>(f: Fx<Async | HandlerCapture<string>, R>, optio
  * Execute all the effects of the provided Fx, and return a Promise for its result,
  * discarding the ability to cancel the computation.
  */
-export const runPromise = <const R>(f: Fx<Async | HandlerCapture<string>, R>, options: RunForkOptions = {}): Promise<R> => {
+export const runPromise = <const R>(f: Fx<Async | HandlerCapture<string> | Interrupt, R>, options: RunForkOptions = {}): Promise<R> => {
   return runTask(f, {
     ...options,
     origin: options.origin ?? at('fx/runPromise', runPromise)
@@ -127,8 +130,13 @@ export const runPromise = <const R>(f: Fx<Async | HandlerCapture<string>, R>, op
 /**
  * Execute all the effects of the provided Fx, and return its result.
  */
-export const run = <const R>(f: Fx<never, R>): R =>
-  f.pipe(provideAll({}), f => f[Symbol.iterator]().next().value)
+export const run = <const R>(f: Fx<Interrupt, R>): R =>
+  f.pipe(provideAll({}), f => {
+    const i = f[Symbol.iterator]()
+    let ir = i.next()
+    while (!ir.done && isInterruptMaskEffect(ir.value)) ir = i.next()
+    return ir.value as R
+  })
 
 /**
  * Ensures that a resource is acquired, used, and then released,
@@ -140,11 +148,11 @@ export const bracket = <const IE, const FE, const E, const R, const A>(
   initially: Fx<IE, R>,
   andFinally: (a: R) => Fx<FE, void>,
   f: (a: R) => Fx<E, A>
-) => fx(function* () {
+) => uninterruptibleMask(restore => fx(function* () {
   const r = yield* initially
   try {
-    return yield* f(r)
+    return yield* restore(f(r))
   } finally {
     yield* andFinally(r)
   }
-})
+}))

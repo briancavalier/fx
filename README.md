@@ -185,14 +185,17 @@ The runtime is small and focused:
 
 ---
 
-### No first-class interruption semantics (yet)
+### Cooperative interruption
 
-- cancellation is cooperative (disposal/abort)  
-- no masking (`uninterruptible`, etc.)
+- cancellation is cooperative (disposal/abort)
+- `uninterruptible` and `uninterruptibleMask` defer interruption across short
+  critical sections
+- masking appears as the lightweight `Interrupt` effect until a runtime
+  boundary eliminates it
 
 **Tradeoff:**
-- simpler model  
-- but weaker guarantees under complex concurrency
+- simple runtime-owned interruption model
+- uninterruptible regions must remain small to avoid delaying cancellation
 
 ---
 

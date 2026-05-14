@@ -87,6 +87,11 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
   *[Symbol.iterator](): Iterator<unknown, A> {
     const finalizers = [] as Finalizer[]
     const { scopeName } = this
+    const finallyId = Finally._fxEffectId
+    const returnFromId = ReturnFrom._fxEffectId
+    const abortId = Abort._fxEffectId
+    const failId = Fail._fxEffectId
+    const handlerCaptureId = HandlerCapture._fxEffectId
     const i = withActiveScope(scopeName, this.fx)[Symbol.iterator]()
     const captured: CapturedHandler = {
       wrap: fx => new ScopeBoundary(fx, scopeName)
@@ -101,27 +106,28 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
     const step = function* (ir: IteratorResult<unknown, A>): Generator<unknown, A, unknown> {
       while (!ir.done) {
         if (isEffect(ir.value)) {
-          const effect = ir.value
+          const effect = ir.value as any
+          const effectId = effect._fxEffectId
 
-          if (Finally.is(effect) && effect.arg.scope === scopeName) {
+          if (effectId === finallyId && effect.arg.scope === scopeName) {
             finalizers.push(effect.arg.finalizer)
             ir = i.next(undefined)
-          } else if (ReturnFrom.is(effect) && effect.arg.scope === scopeName) {
+          } else if (effectId === returnFromId && effect.arg.scope === scopeName) {
             const exit = { type: 'returnFrom', scope: scopeName, value: effect.arg.value } satisfies Exit<Scope>
             const failures = yield* release(exit)
             if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup(failures))) as A
             return effect.arg.value as A
-          } else if (Abort.is(effect) && effect.arg === scopeName) {
+          } else if (effectId === abortId && effect.arg === scopeName) {
             const exit = { type: 'abort', scope: scopeName } satisfies Exit<Scope>
             const failures = yield* release(exit)
             if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup(failures))) as A
             return (yield effect) as A
-          } else if (Fail.is(effect)) {
+          } else if (effectId === failId) {
             const exit = { type: 'failure', failure: effect } satisfies Exit
             const failures = yield* release(exit)
             if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup([effect.arg, ...failures]))) as A
             return (yield effect) as A
-          } else if (HandlerCapture.is(effect)) {
+          } else if (effectId === handlerCaptureId) {
             ir = i.next([captured, ...(yield effect) as any])
           } else {
             ir = i.next(yield effect)

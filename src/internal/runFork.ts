@@ -4,11 +4,13 @@ import { Fail } from '../Fail.js'
 import { Fork, ForkContext } from '../Concurrent.js'
 import { Fx } from '../Fx.js'
 import { CapturedHandler, HandlerCapture, withHandlerContext } from '../HandlerCapture.js'
+import type { Interrupt } from '../Interrupt.js'
 import { Task } from '../Task.js'
 import { attachTrace, captureAppendTrace, capturePrependTrace, captureTrace, getTrace } from '../Trace.js'
 import type { Trace, TraceFrameMetadata, TraceOptions } from '../Trace.js'
 import { Semaphore } from './Semaphore.js'
-import { DisposableSet, dispose } from './disposable.js'
+import { DisposableSet } from './disposable.js'
+import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './interrupt.js'
 import { withInterpretedReturn } from './iteratorClose.js'
 import type { RuntimeContext } from './runtimeContext.js'
 import { currentRuntimeContext, getRuntimeContext, traceCapturePolicy, withActiveRuntimeContext } from './runtimeContext.js'
@@ -17,8 +19,8 @@ export type RunForkOptions = TraceOptions & {
   readonly maxConcurrency?: number
 }
 
-export const runFork = <const E extends Async | Fork | Fail<unknown> | HandlerCapture<string>, const A>(f: Fx<E, A>, options: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
-  const disposables = new DisposableSet()
+export const runFork = <const E extends Async | Fork | Fail<unknown> | HandlerCapture<string> | Interrupt, const A>(f: Fx<E, A>, options: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
+  const disposables = new InterruptState()
   const disposed = Promise.withResolvers<void>()
   const runtimeContext = currentRuntimeContext()
   const origin = options.origin ?? at('fx/runFork', runFork)
@@ -27,7 +29,7 @@ export const runFork = <const E extends Async | Fork | Fail<unknown> | HandlerCa
 
   const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, disposed, origin, trace, runtimeContext)
     .finally(() => {
-      dispose(disposables)
+      disposables.disposeActive()
       disposed.resolve()
     })
 
@@ -35,13 +37,13 @@ export const runFork = <const E extends Async | Fork | Fail<unknown> | HandlerCa
 }
 
 export const acquireAndRunFork = (f: ForkContext, s: Semaphore, context: readonly CapturedHandler[] = [], runtimeContext: RuntimeContext | undefined = currentRuntimeContext()): Task<unknown, unknown> => {
-  const disposables = new DisposableSet()
+  const disposables = new InterruptState()
   const disposed = Promise.withResolvers<void>()
 
   const promise = acquire(s, disposables, disposed,
     () => runForkInternal(withHandlerContext(context, f.fx), context, s, disposables, disposed, f.origin, f.trace, runtimeContext)
       .finally(() => {
-        dispose(disposables)
+        disposables.disposeActive()
         disposed.resolve()
       }))
 
@@ -52,7 +54,7 @@ const runForkInternal = <const E, const A>(
   f: Fx<E, A>,
   context: readonly CapturedHandler[],
   semaphore: Semaphore,
-  disposables: DisposableSet,
+  disposables: InterruptState,
   disposed: PromiseWithResolvers<void>,
   origin: Breadcrumb,
   trace: Trace | undefined,
@@ -71,7 +73,7 @@ const runForkLoop = async <const E, const A>(
   f: Fx<E, A>,
   context: readonly CapturedHandler[],
   semaphore: Semaphore,
-  disposables: DisposableSet,
+  disposables: InterruptState,
   disposed: PromiseWithResolvers<void>,
   origin: Breadcrumb,
   trace: Trace | undefined,
@@ -83,24 +85,24 @@ const runForkLoop = async <const E, const A>(
 
   try {
     const i = iteratorWithRuntimeContext(f, runtimeContext)
-    const interrupt = async (): Promise<A> => {
+    const interrupt = async (masks: readonly InterruptMaskBegin['arg'][] = disposables.maskSnapshot()): Promise<A> => {
       if (interrupting === undefined) {
-        interrupting = interruptIterator(i, context, semaphore, origin, trace, unhandled, rejectUnhandled, runtimeContext, disposed)
+        interrupting = interruptIterator(i, context, semaphore, origin, trace, unhandled, rejectUnhandled, runtimeContext, disposed, masks)
         interrupting.catch(() => { })
       }
       await interrupting
       return await never()
     }
-    disposables.add({ [Symbol.dispose]: () => { void interrupt().catch(() => { }) } })
+    disposables.setInterrupt(interrupt)
     return await runIterator(nextWithRuntimeContext(i, runtimeContext), i, context, semaphore, disposables, origin, trace, unhandled, rejectUnhandled, runtimeContext, interrupt)
   } catch (e) {
     if (e instanceof ForkError) {
-      if (disposables.disposed) disposed.reject(e)
+      if (disposables.interruptRequested) disposed.reject(e)
       throw e
     }
     const errorContext = getRuntimeContext(e) ?? runtimeContext
     const error = new ForkError('FX_UNHANDLED_EXCEPTION', `Unhandled exception in forked task`, origin, traceWithCause(trace, e, errorContext), errorContext, { cause: e })
-    if (disposables.disposed) disposed.reject(error)
+    if (disposables.interruptRequested) disposed.reject(error)
     throw error
   }
 }
@@ -114,9 +116,10 @@ const interruptIterator = async <const E, const A>(
   unhandled: Promise<never>,
   rejectUnhandled: (e: unknown) => void,
   runtimeContext: RuntimeContext | undefined,
-  disposed: PromiseWithResolvers<void>
+  disposed: PromiseWithResolvers<void>,
+  masks: readonly InterruptMaskBegin['arg'][]
 ): Promise<void> => {
-  const cleanup = new DisposableSet()
+  const cleanup = new InterruptState(masks)
   try {
     const ir = returnWithRuntimeContext(i, runtimeContext)
     await runIterator(ir, i, context, semaphore, cleanup, origin, trace, unhandled, rejectUnhandled, runtimeContext)
@@ -125,7 +128,7 @@ const interruptIterator = async <const E, const A>(
     disposed.reject(e)
     throw e
   } finally {
-    dispose(cleanup)
+    cleanup.disposeActive()
   }
 }
 
@@ -134,13 +137,13 @@ const runIterator = async <const E, const A>(
   i: Iterator<E, A, unknown>,
   context: readonly CapturedHandler[],
   semaphore: Semaphore,
-  disposables: DisposableSet,
+  disposables: InterruptState,
   origin: Breadcrumb,
   trace: Trace | undefined,
   unhandled: Promise<never>,
   rejectUnhandled: (e: unknown) => void,
   runtimeContext: RuntimeContext | undefined,
-  interrupt?: () => Promise<A>
+  interrupt?: (masks?: readonly InterruptMaskBegin['arg'][]) => Promise<A>
 ): Promise<A> => {
   while (!ir.done) {
     if (Async.is(ir.value)) {
@@ -154,12 +157,12 @@ const runIterator = async <const E, const A>(
         a = await Promise.race([promise, unhandled])
       } catch (e) {
         if (e instanceof UnhandledForkError) throw e.error
-        if (disposables.disposed && interrupt !== undefined) return await interrupt()
+        if (disposables.canInterrupt && interrupt !== undefined) return await disposables.interruptNow(interrupt)
         const asyncTrace = capturePrependTraceWithContext(effectContext, origin, trace, { kind: 'async' })
         throw new ForkError('FX_AWAITED_ASYNC_FAILED', `Awaited Async task failed`, origin, traceWithCause(asyncTrace, e, effectContext), effectContext, { cause: e })
       }
       // stop if the scope was disposed while we were waiting
-      if (disposables.disposed && interrupt !== undefined) return await interrupt()
+      if (disposables.canInterrupt && interrupt !== undefined) return await disposables.interruptNow(interrupt)
       ir = resumeWithRuntimeContext(i, effectContext, a)
     } else if (Fork.is(ir.value)) {
       const effectContext = runtimeContextOfEffect(ir.value, runtimeContext)
@@ -171,7 +174,7 @@ const runIterator = async <const E, const A>(
         .finally(() => disposables.remove(t))
         .catch(e => {
           queueMicrotask(() => {
-            if (t._handled || t._disposed || disposables.disposed) return
+            if (t._handled || t._disposed || disposables.interruptRequested) return
             rejectUnhandled(
               new ForkError('FX_UNHANDLED_FORK_FAILURE', `Unhandled failure in forked task`, forkOrigin, traceWithCause(forkTrace, e, effectContext), effectContext, { cause: e })
             )
@@ -180,6 +183,14 @@ const runIterator = async <const E, const A>(
       ir = resumeWithRuntimeContext(i, effectContext, t)
     } else if (HandlerCapture.is(ir.value)) {
       ir = resumeWithRuntimeContext(i, runtimeContext, context)
+    } else if (InterruptMaskBegin.is(ir.value)) {
+      disposables.mask(ir.value.arg)
+      ir = resumeWithRuntimeContext(i, runtimeContext, undefined)
+    } else if (InterruptMaskEnd.is(ir.value)) {
+      const cleanupMasks = disposables.maskSnapshot()
+      disposables.unmask(ir.value.arg)
+      if (disposables.canInterrupt && interrupt !== undefined) return await disposables.interruptNow(interrupt, cleanupMasks)
+      ir = resumeWithRuntimeContext(i, runtimeContext, undefined)
     } else if (Fail.is(ir.value)) {
       const causeTrace = getTrace(ir.value.arg)
       const effectContext = runtimeContextOfEffect(ir.value, runtimeContext)
@@ -192,6 +203,68 @@ const runIterator = async <const E, const A>(
     }
   }
   return ir.value as A
+}
+
+class InterruptState implements Disposable {
+  private readonly disposables = new DisposableSet()
+  private readonly masks: InterruptMaskState
+  private interrupt?: (masks?: readonly InterruptMaskBegin['arg'][]) => Promise<unknown>
+  private interrupting?: Promise<unknown>
+  private requested = false
+
+  constructor(masks: readonly InterruptMaskBegin['arg'][] = []) {
+    this.masks = new InterruptMaskState(masks)
+  }
+
+  get interruptRequested() {
+    return this.requested
+  }
+
+  get canInterrupt() {
+    return this.requested && this.masks.canInterrupt
+  }
+
+  setInterrupt(interrupt: (masks?: readonly InterruptMaskBegin['arg'][]) => Promise<unknown>) {
+    this.interrupt = interrupt
+    if (this.requested && this.masks.canInterrupt) void this.interruptNow(interrupt).catch(() => { })
+  }
+
+  add(disposable: Disposable) {
+    this.disposables.add(disposable)
+  }
+
+  remove(disposable: Disposable) {
+    this.disposables.remove(disposable)
+  }
+
+  maskSnapshot() {
+    return this.masks.snapshot()
+  }
+
+  mask(token: InterruptMaskBegin['arg']) {
+    this.masks.mask(token)
+  }
+
+  unmask(token: InterruptMaskEnd['arg']) {
+    this.masks.unmask(token)
+  }
+
+  [Symbol.dispose]() {
+    this.requested = true
+    if (!this.masks.canInterrupt) return
+    this.disposeActive()
+    if (this.interrupt !== undefined) void this.interruptNow(this.interrupt).catch(() => { })
+  }
+
+  disposeActive() {
+    this.disposables[Symbol.dispose]()
+  }
+
+  async interruptNow<A>(interrupt: (masks?: readonly InterruptMaskBegin['arg'][]) => Promise<A>, masks: readonly InterruptMaskBegin['arg'][] = this.maskSnapshot()): Promise<A> {
+    this.disposeActive()
+    this.interrupting ??= interrupt(masks)
+    return await this.interrupting as A
+  }
 }
 
 class ForkError extends Error {
@@ -216,7 +289,7 @@ class UnhandledForkError extends Error {
   }
 }
 
-const acquire = async <A>(s: Semaphore, scope: DisposableSet, disposed: PromiseWithResolvers<void>, f: () => Promise<A>) => {
+const acquire = async <A>(s: Semaphore, scope: InterruptState, disposed: PromiseWithResolvers<void>, f: () => Promise<A>) => {
   const a = s.acquire()
   const cancelled = Promise.withResolvers<void>()
   let acquired = false

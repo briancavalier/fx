@@ -1,10 +1,11 @@
 import { Abort, abort } from './Abort.js'
 import { Async, assertPromise } from './Async.js'
+import { Fork, fork } from './Concurrent.js'
 import { Effect } from './Effect.js'
 import { Fail } from './Fail.js'
-import { Fork, fork } from './Concurrent.js'
 import { Fx, assertSync, bracket, fx as gen, ok, unit } from './Fx.js'
 import { Handle, control, handle } from './Handler.js'
+import type { Interrupt } from './Interrupt.js'
 import { Sink } from './Sink.js'
 import { Task, wait as waitTask } from './Task.js'
 import * as Queue from './internal/Queue.js'
@@ -71,7 +72,7 @@ export const filter: {
 } = <E, A>(f: Fx<E, A>, predicate: (a: Event<E>) => boolean): Fx<ExcludeStream<E, Stream<Event<E>>>, A> =>
     forEach(f, a => predicate(a) ? emit(a) : unit)
 
-export const switchMap = <E, A, E2>(f: Fx<E, A>, each: (a: Event<E>) => Fx<E2, unknown>): Fx<ExcludeStream<E, Fork | Async | E2>, A> =>
+export const switchMap = <E, A, E2>(f: Fx<E, A>, each: (a: Event<E>) => Fx<E2, unknown>): Fx<ExcludeStream<E, Fork | Async | E2> | Interrupt, A> =>
   bracket(
     assertSync(() => new CurrentTask<E2>()),
     task => ok(dispose(task)),
@@ -80,7 +81,7 @@ export const switchMap = <E, A, E2>(f: Fx<E, A>, each: (a: Event<E>) => Fx<E2, u
       yield* task.wait()
       return x
     })
-  ) as Fx<ExcludeStream<E, Fork | Async | E2>, A>
+  ) as Fx<ExcludeStream<E, Fork | Async | E2> | Interrupt, A>
 
 /**
  * Create a stream that emits all values from a {@link Queue.Dequeue}
@@ -100,7 +101,7 @@ export const fromDequeue = <A>(queue: Queue.Dequeue<A>): Fx<Async | Stream<A>, v
 export const withEnqueue = <A>(
   f: (o: Queue.Enqueue<A>) => Disposable,
   q: Queue.Queue<A> = new Queue.UnboundedQueue()
-): Fx<Async | Stream<A>, void> => bracket(
+) => bracket(
   assertSync(() => f(q)),
   disposable => ok(dispose(disposable)),
   _ => fromDequeue(q)
@@ -113,7 +114,7 @@ export interface IterableWithReturn<Y, R> {
 /**
  * Create a stream that emits all values from an Iterable
  */
-export const fromIterable = <A, R>(i: IterableWithReturn<A, R>): Fx<Stream<A>, IfAny<R, void>> => bracket(
+export const fromIterable = <A, R>(i: IterableWithReturn<A, R>): Fx<Stream<A> | Interrupt, IfAny<R, void>> => bracket(
   assertSync(() => i[Symbol.iterator]()),
   iterator => ok(void iterator.return?.()),
   iterator => gen(function* () {
@@ -124,7 +125,7 @@ export const fromIterable = <A, R>(i: IterableWithReturn<A, R>): Fx<Stream<A>, I
     }
     return result.value
   })
-) as Fx<Stream<A>, IfAny<R, void>>
+) as Fx<Stream<A> | Interrupt, IfAny<R, void>>
 
 export interface AsyncIterableWithReturn<Y, R> {
   [Symbol.asyncIterator](): AsyncIterator<Y, R>
@@ -133,7 +134,7 @@ export interface AsyncIterableWithReturn<Y, R> {
 /**
  * Create a stream that emits all values from an AsyncIterable
  */
-export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>): Fx<Async | Stream<A>, R> => bracket(
+export const fromAsyncIterable = <A, R>(f: () => AsyncIterableWithReturn<A, R>): Fx<Async | Stream<A> | Interrupt, R> => bracket(
   assertSync(() => f()[Symbol.asyncIterator]()),
   iterator => assertPromise(() => iterator.return?.().then(() => { }) ?? Promise.resolve()),
   iterator => gen(function* () {

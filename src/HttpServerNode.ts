@@ -20,6 +20,7 @@ import {
   dispatch
 } from './HttpServer.js'
 import { HandlerCapture, handleCaptured, withCapturedHandlers, withHandlerContext } from './HandlerCapture.js'
+import type { Interrupt } from './Interrupt.js'
 import * as Queue from './internal/Queue.js'
 
 export type NodeHttpOptions = {
@@ -65,13 +66,13 @@ export const nodeHttp = ({
     ) as Fx<NodeHttpHandled<E>, A>
 
 export type NodeHttpHandled<E> =
-  Handle<Handle<E, Serve<any, any>, Async | Fail<NodeHttpError>>, HandlerCapture<typeof ServeScope>>
+  Handle<Handle<E, Serve<any, any>, Async | Fail<NodeHttpError> | Interrupt>, HandlerCapture<typeof ServeScope>>
   | HandlerCapture<typeof ServeScope>
 
 const runNodeServer = <E, OE>(
   request: ServeRequest<E, OE>,
   createServer: NodeHttpServerFactory
-): Fx<OE | Async | Fail<NodeHttpError>, void> => {
+): Fx<OE | Async | Fail<NodeHttpError> | Interrupt, void> => {
   const compiled = compileRoutes(request.routes)
   const observe = request.options.observe ?? ignoreServerEvent as (event: ServerEvent) => Fx<OE, void>
 
@@ -89,7 +90,7 @@ const runNodeServer = <E, OE>(
     )
   ).pipe(
     flatMap(rethrowObservedFail)
-  ) as Fx<OE | Async | Fail<NodeHttpError>, void>
+  ) as Fx<OE | Async | Fail<NodeHttpError> | Interrupt, void>
 }
 
 type ServerInternalEvent =

@@ -720,6 +720,48 @@ describe('Trace', () => {
     assert.match(formatDiagnostic(error, { colors: 'never' }), /at race trace \[race child #1\]/)
   })
 
+  it('compacts same-location all child and parent frames', () => {
+    const error = tracedError(
+      'all failed',
+      'fx/Fail/fail',
+      { kind: 'fail' },
+      concurrencyTrace('all', 0, 20, 21, 20, 21)
+    )
+
+    const formatted = formatDiagnostic(error, { colors: 'never' })
+
+    assert.match(formatted, /at fx\/Concurrent\/all\[0\] \[all child #0\]/)
+    assert.doesNotMatch(formatted, /at fx\/Concurrent\/all \[all\]/)
+  })
+
+  it('compacts same-location race child and parent frames', () => {
+    const error = tracedError(
+      'race failed',
+      'fx/Fail/fail',
+      { kind: 'fail' },
+      concurrencyTrace('race', 1, 20, 21, 20, 21)
+    )
+
+    const formatted = formatDiagnostic(error, { colors: 'never' })
+
+    assert.match(formatted, /at fx\/Concurrent\/race\[1\] \[race child #1\]/)
+    assert.doesNotMatch(formatted, /at fx\/Concurrent\/race \[race\]/)
+  })
+
+  it('keeps different-location concurrency child and parent frames', () => {
+    const error = tracedError(
+      'all failed',
+      'fx/Fail/fail',
+      { kind: 'fail' },
+      concurrencyTrace('all', 0, 20, 21, 22, 23)
+    )
+
+    const formatted = formatDiagnostic(error, { colors: 'never' })
+
+    assert.match(formatted, /at fx\/Concurrent\/all\[0\] \[all child #0\]/)
+    assert.match(formatted, /at fx\/Concurrent\/all \[all\]/)
+  })
+
   it('formats source snippets with default one-line context', () => {
     const error = tracedErrorAt('source failed', 'source trace', 10, 11, { kind: 'fail' })
     const formatted = formatDiagnostic(error, {
@@ -962,6 +1004,30 @@ const sharedRaceTrace = (index: number) =>
       { kind: 'race' }
     ),
     { kind: 'race', index }
+  )
+
+const concurrencyTrace = (
+  kind: 'all' | 'race',
+  index: number,
+  childLine: number,
+  childColumn: number,
+  parentLine: number,
+  parentColumn: number
+) =>
+  prependTrace(
+    stackBreadcrumb(
+      `fx/Concurrent/${kind}[${index}]`,
+      `Error: ${kind} child\n    at child (${import.meta.filename}:${childLine}:${childColumn})`
+    ),
+    prependTrace(
+      stackBreadcrumb(
+        `fx/Concurrent/${kind}`,
+        `Error: ${kind}\n    at ${kind} (${import.meta.filename}:${parentLine}:${parentColumn})`
+      ),
+      undefined,
+      { kind }
+    ),
+    { kind, index }
   )
 
 const raceAllFailed = (errors: readonly unknown[]) => {

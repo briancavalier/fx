@@ -602,7 +602,7 @@ const formatDiagnosticTrace = (
 
   if (frames.length > 0) {
     lines.push(`${prefix}${context.style.section('Fx trace:')}`)
-    for (const frame of frames) {
+    for (const frame of compactConcurrencyFrames(frames)) {
       lines.push(`${prefix}  at ${formatSnapshotFrame(frame, context)}`)
       if (frame.location !== undefined) {
         lines.push(`${prefix}     ${formatTraceLocation(frame.location, context)}`)
@@ -618,6 +618,27 @@ const formatDiagnosticTrace = (
     else if (trace.truncated) lines.push(`${prefix}  ${context.style.section('<trace truncated; older frames omitted>')}`)
   }
 }
+
+const compactConcurrencyFrames = (frames: readonly TraceSnapshotFrame[]): readonly TraceSnapshotFrame[] =>
+  frames.filter((frame, i) => !isSameLocationConcurrencyParent(frame, frames[i - 1]))
+
+const isSameLocationConcurrencyParent = (
+  frame: TraceSnapshotFrame,
+  previous: TraceSnapshotFrame | undefined
+): boolean =>
+  previous !== undefined
+  && (frame.kind === 'all' || frame.kind === 'race')
+  && frame.kind === previous.kind
+  && frame.index === undefined
+  && previous.index !== undefined
+  && sameTraceLocation(frame, previous)
+
+const sameTraceLocation = (a: TraceSnapshotFrame, b: TraceSnapshotFrame): boolean =>
+  a.location !== undefined
+  && b.location !== undefined
+  && a.location.file === b.location.file
+  && a.location.line === b.location.line
+  && a.location.column === b.location.column
 
 const formatSnapshotFrame = (frame: TraceSnapshotFrame, context: FormatContext): string => {
   const metadata = formatFrameMetadata(frame)

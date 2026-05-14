@@ -60,13 +60,7 @@ const runForkInternal = <const E, const A>(
   trace: Trace | undefined,
   runtimeContext?: RuntimeContext
 ): Promise<A> => {
-  let rejectUnhandled: (e: UnhandledForkError) => void = () => { }
-  const unhandled = new Promise<never>((_, reject) => {
-    rejectUnhandled = reject
-  })
-  unhandled.catch(() => { })
-
-  return runForkLoop(f, context, semaphore, disposables, disposed, origin, trace, unhandled, e => rejectUnhandled(new UnhandledForkError(e)), runtimeContext)
+  return runForkLoop(f, context, semaphore, disposables, disposed, origin, trace, new UnhandledForkMonitor(), runtimeContext)
 }
 
 const runForkLoop = async <const E, const A>(
@@ -77,8 +71,7 @@ const runForkLoop = async <const E, const A>(
   disposed: PromiseWithResolvers<void>,
   origin: Breadcrumb,
   trace: Trace | undefined,
-  unhandled: Promise<never>,
-  rejectUnhandled: (e: unknown) => void,
+  unhandled: UnhandledForkMonitor,
   runtimeContext?: RuntimeContext
 ): Promise<A> => {
   let interrupting: Promise<void> | undefined
@@ -87,14 +80,14 @@ const runForkLoop = async <const E, const A>(
     const i = iteratorWithRuntimeContext(f, runtimeContext)
     const interrupt = async (cleanupMasks: readonly InterruptMaskBegin['arg'][] = disposables.maskSnapshot()): Promise<A> => {
       if (interrupting === undefined) {
-        interrupting = closeInterruptedIterator(i, context, semaphore, origin, trace, unhandled, rejectUnhandled, runtimeContext, disposed, cleanupMasks)
+        interrupting = closeInterruptedIterator(i, context, semaphore, origin, trace, unhandled, runtimeContext, disposed, cleanupMasks)
         interrupting.catch(() => { })
       }
       await interrupting
       return await never()
     }
     disposables.setInterrupt(interrupt)
-    return await runIterator(nextWithRuntimeContext(i, runtimeContext), i, context, semaphore, disposables, origin, trace, unhandled, rejectUnhandled, runtimeContext, interrupt)
+    return await runIterator(nextWithRuntimeContext(i, runtimeContext), i, context, semaphore, disposables, origin, trace, unhandled, runtimeContext, interrupt)
   } catch (e) {
     if (e instanceof ForkError) {
       if (disposables.interruptRequested) disposed.reject(e)
@@ -113,8 +106,7 @@ const closeInterruptedIterator = async <const E, const A>(
   semaphore: Semaphore,
   origin: Breadcrumb,
   trace: Trace | undefined,
-  unhandled: Promise<never>,
-  rejectUnhandled: (e: unknown) => void,
+  unhandled: UnhandledForkMonitor,
   runtimeContext: RuntimeContext | undefined,
   disposed: PromiseWithResolvers<void>,
   cleanupMasks: readonly InterruptMaskBegin['arg'][]
@@ -122,7 +114,7 @@ const closeInterruptedIterator = async <const E, const A>(
   const cleanup = new InterruptState(cleanupMasks)
   try {
     const ir = returnWithRuntimeContext(i, runtimeContext)
-    await runIterator(ir, i, context, semaphore, cleanup, origin, trace, unhandled, rejectUnhandled, runtimeContext)
+    await runIterator(ir, i, context, semaphore, cleanup, origin, trace, unhandled, runtimeContext)
     disposed.resolve()
   } catch (e) {
     disposed.reject(e)
@@ -140,8 +132,7 @@ const runIterator = async <const E, const A>(
   disposables: InterruptState,
   origin: Breadcrumb,
   trace: Trace | undefined,
-  unhandled: Promise<never>,
-  rejectUnhandled: (e: unknown) => void,
+  unhandled: UnhandledForkMonitor,
   runtimeContext: RuntimeContext | undefined,
   interrupt?: (masks?: readonly InterruptMaskBegin['arg'][]) => Promise<A>
 ): Promise<A> => {
@@ -154,7 +145,7 @@ const runIterator = async <const E, const A>(
       const promise = t.promise.finally(() => disposables.remove(t))
       let a
       try {
-        a = await Promise.race([promise, unhandled])
+        a = await unhandled.race(promise)
       } catch (e) {
         if (e instanceof UnhandledForkError) throw e.error
         if (disposables.canInterrupt && interrupt !== undefined) return await disposables.interruptNow(interrupt)
@@ -168,6 +159,7 @@ const runIterator = async <const E, const A>(
       const effectContext = runtimeContextOfEffect(ir.value, runtimeContext)
       const forkOrigin = ir.value.arg.origin
       const forkTrace = capturePrependTraceWithContext(effectContext, forkOrigin, trace, forkFrameMetadata(ir.value.arg.trace))
+      unhandled.activate()
       const t = acquireAndRunFork({ ...ir.value.arg, trace: forkTrace }, semaphore, context, effectContext)
       disposables.add(t)
       t.promise
@@ -175,7 +167,7 @@ const runIterator = async <const E, const A>(
         .catch(e => {
           queueMicrotask(() => {
             if (t._handled || t._disposed || disposables.interruptRequested) return
-            rejectUnhandled(
+            unhandled.reject(
               new ForkError('FX_UNHANDLED_FORK_FAILURE', `Unhandled failure in forked task`, forkOrigin, traceWithCause(forkTrace, e, effectContext), effectContext, { cause: e })
             )
           })
@@ -286,6 +278,33 @@ type ForkErrorCode = 'FX_AWAITED_ASYNC_FAILED' | 'FX_UNHANDLED_FORK_FAILURE' | '
 class UnhandledForkError extends Error {
   constructor(readonly error: unknown) {
     super('Unhandled fork failed')
+  }
+}
+
+class UnhandledForkMonitor {
+  private promise?: Promise<never>
+  private rejectPromise?: (e: UnhandledForkError) => void
+
+  race<A>(promise: Promise<A>): Promise<A> {
+    return this.promise === undefined ? promise : Promise.race([promise, this.promise])
+  }
+
+  activate() {
+    this.ensureReject()
+  }
+
+  reject(e: unknown) {
+    this.ensureReject()(new UnhandledForkError(e))
+  }
+
+  private ensureReject(): (e: UnhandledForkError) => void {
+    if (this.rejectPromise !== undefined) return this.rejectPromise
+
+    this.promise = new Promise<never>((_, reject) => {
+      this.rejectPromise = reject
+    })
+    this.promise.catch(() => { })
+    return this.rejectPromise!
   }
 }
 

@@ -62,6 +62,7 @@ const prebuiltMatchedHandlerProgram = pingProgram.pipe(pingHandler)
 const directMatchedHandlerProgram = pingProgram.pipe(directPingHandler)
 const pureRunPromise = ok(1)
 const sequentialAsync10 = asyncProgram(10)
+const asyncAfterFork10 = asyncAfterForkProgram(10)
 const forkFanout16 = forkFanout(16)
 const allFanout16 = all(fanoutValues(16))
 const raceFanout16 = race(fanoutValues(16))
@@ -215,6 +216,9 @@ const cases: readonly BenchmarkCase[] = [
   benchmark('sequential async x10', 'runFork', RunForkIterations, 100, async () => {
     await runPromise(sequentialAsync10)
   }),
+  benchmark('async after fork x10', 'runFork', RunForkIterations, 100, async () => {
+    await asyncAfterFork10.pipe(unbounded, runPromise)
+  }),
   benchmark('fork fanout 16 unbounded', 'runFork', RunForkIterations, 100, async () => {
     await forkFanout16.pipe(unbounded, runPromise)
   }),
@@ -342,6 +346,15 @@ function asyncProgram(count: number) {
       n = yield* assertPromise(() => Promise.resolve(n + 1))
     }
     return n
+  })
+}
+
+function asyncAfterForkProgram(count: number) {
+  return fx(function* () {
+    const task = yield* fork(ok(1))
+    const value = yield* asyncProgram(count)
+    yield* wait(task)
+    return value
   })
 }
 

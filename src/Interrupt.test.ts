@@ -6,7 +6,7 @@ import { fail, returnFail } from './Fail.js'
 import { firstSettled, race, unbounded } from './Concurrent.js'
 import { managed, usingExit, usingManaged } from './Finalization.js'
 import { bracket, fx, ok, run, runPromise, runTask, type Fx } from './Fx.js'
-import { handle } from './Handler.js'
+import { control, handle } from './Handler.js'
 import { uninterruptible, uninterruptibleMask, type Interrupt, type RestoreInterrupt } from './Interrupt.js'
 import { scope, type Exit } from './Scope.js'
 
@@ -27,6 +27,47 @@ describe('Interrupt masking', () => {
     }).pipe(handle(Current, () => ok('handled'))))
 
     assert.equal(result, 'handled')
+  })
+
+  it('control abort inside uninterruptible drains mask cleanup', () => {
+    class Stop extends Effect('test/Interrupt/ControlStop')<void, string> { }
+    const events = [] as string[]
+
+    const result = run(uninterruptible(fx(function* () {
+      try {
+        yield* new Stop()
+      } finally {
+        events.push('cleanup')
+      }
+      return 'continued'
+    })).pipe(
+      control(Stop, () => ok('stopped'))
+    ))
+
+    assert.equal(result, 'stopped')
+    assert.deepEqual(events, ['cleanup'])
+  })
+
+  it('handler closed by control abort drains mask cleanup', () => {
+    class Current extends Effect('test/Interrupt/HandlerCurrent')<void, string> { }
+    class Stop extends Effect('test/Interrupt/HandlerStop')<void, string> { }
+    const events = [] as string[]
+
+    const result = run(uninterruptible(fx(function* () {
+      try {
+        yield* new Current()
+        yield* new Stop()
+      } finally {
+        events.push('cleanup')
+      }
+      return 'continued'
+    })).pipe(
+      handle(Current, () => ok('handled')),
+      control(Stop, () => ok('stopped'))
+    ))
+
+    assert.equal(result, 'stopped')
+    assert.deepEqual(events, ['cleanup'])
   })
 
   it('defers disposal during a masked async computation', async () => {

@@ -1,7 +1,7 @@
 import { Effect, EffectType, isEffect } from './Effect.js'
 import { Fx, map } from './Fx.js'
 import { Answer, Handler } from './internal/Handler.js'
-import { isInterpretingReturn } from './internal/iteratorClose.js'
+import { drainRuntimeIteratorReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 
 export interface CapturedHandler {
@@ -89,8 +89,7 @@ class HandlerCaptureBoundary<E, A> implements Fx<E, A>, Pipeable {
       return value
     } finally {
       if (!completed) {
-        const ir = i.return?.()
-        if (ir !== undefined && isInterpretingReturn()) yield* step(ir)
+        yield* drainRuntimeIteratorReturn(i, step)
       }
     }
   }

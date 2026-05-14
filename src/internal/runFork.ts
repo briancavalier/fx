@@ -85,9 +85,9 @@ const runForkLoop = async <const E, const A>(
 
   try {
     const i = iteratorWithRuntimeContext(f, runtimeContext)
-    const interrupt = async (masks: readonly InterruptMaskBegin['arg'][] = disposables.maskSnapshot()): Promise<A> => {
+    const interrupt = async (cleanupMasks: readonly InterruptMaskBegin['arg'][] = disposables.maskSnapshot()): Promise<A> => {
       if (interrupting === undefined) {
-        interrupting = interruptIterator(i, context, semaphore, origin, trace, unhandled, rejectUnhandled, runtimeContext, disposed, masks)
+        interrupting = closeInterruptedIterator(i, context, semaphore, origin, trace, unhandled, rejectUnhandled, runtimeContext, disposed, cleanupMasks)
         interrupting.catch(() => { })
       }
       await interrupting
@@ -107,7 +107,7 @@ const runForkLoop = async <const E, const A>(
   }
 }
 
-const interruptIterator = async <const E, const A>(
+const closeInterruptedIterator = async <const E, const A>(
   i: Iterator<E, A, unknown>,
   context: readonly CapturedHandler[],
   semaphore: Semaphore,
@@ -117,9 +117,9 @@ const interruptIterator = async <const E, const A>(
   rejectUnhandled: (e: unknown) => void,
   runtimeContext: RuntimeContext | undefined,
   disposed: PromiseWithResolvers<void>,
-  masks: readonly InterruptMaskBegin['arg'][]
+  cleanupMasks: readonly InterruptMaskBegin['arg'][]
 ): Promise<void> => {
-  const cleanup = new InterruptState(masks)
+  const cleanup = new InterruptState(cleanupMasks)
   try {
     const ir = returnWithRuntimeContext(i, runtimeContext)
     await runIterator(ir, i, context, semaphore, cleanup, origin, trace, unhandled, rejectUnhandled, runtimeContext)
@@ -187,9 +187,9 @@ const runIterator = async <const E, const A>(
       disposables.mask(ir.value.arg)
       ir = resumeWithRuntimeContext(i, runtimeContext, undefined)
     } else if (InterruptMaskEnd.is(ir.value)) {
-      const cleanupMasks = disposables.maskSnapshot()
+      const masksAtInterruptDelivery = disposables.maskSnapshot()
       disposables.unmask(ir.value.arg)
-      if (disposables.canInterrupt && interrupt !== undefined) return await disposables.interruptNow(interrupt, cleanupMasks)
+      if (disposables.canInterrupt && interrupt !== undefined) return await disposables.interruptNow(interrupt, masksAtInterruptDelivery)
       ir = resumeWithRuntimeContext(i, runtimeContext, undefined)
     } else if (Fail.is(ir.value)) {
       const causeTrace = getTrace(ir.value.arg)

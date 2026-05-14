@@ -6,8 +6,9 @@ import { HandlerCapture } from './HandlerCapture.js'
 import { uninterruptibleMask } from './Interrupt.js'
 import type { Interrupt } from './Interrupt.js'
 import { Task } from './Task.js'
+import { isEffect } from './Effect.js'
 import * as generator from './internal/generator.js'
-import { isInterruptMaskEffect } from './internal/interrupt.js'
+import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './internal/interrupt.js'
 import { Pipeable } from './internal/pipe.js'
 import { RunForkOptions, runFork } from './internal/runFork.js'
 import { TrySync } from './internal/sync.js'
@@ -133,8 +134,32 @@ export const runPromise = <const R>(f: Fx<Async | HandlerCapture<string> | Inter
 export const run = <const R>(f: Fx<Interrupt, R>): R =>
   f.pipe(provideAll({}), f => {
     const i = f[Symbol.iterator]()
+    const masks = new InterruptMaskState()
     let ir = i.next()
-    while (!ir.done && isInterruptMaskEffect(ir.value)) ir = i.next()
+    const step = (ir: IteratorResult<Interrupt, R>) => {
+      while (!ir.done) {
+        if (InterruptMaskBegin.is(ir.value)) {
+          masks.mask(ir.value.arg)
+          ir = i.next()
+        } else if (InterruptMaskEnd.is(ir.value)) {
+          masks.unmask(ir.value.arg)
+          ir = i.next()
+        } else if (isEffect(ir.value)) {
+          throw new Error('Unhandled effect in run')
+        } else {
+          throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
+        }
+      }
+      return ir
+    }
+    ir = step(ir)
+    if (!masks.balanced) {
+      const cleanup = i.return?.(ir.value)
+      if (cleanup !== undefined) ir = step(cleanup)
+    }
+    // Handlers such as returnFail can return effects as ordinary values.
+    // Those values are not effects that run still needs to interpret.
+    if (!isEffect(ir.value)) masks.assertBalanced()
     return ir.value as R
   })
 

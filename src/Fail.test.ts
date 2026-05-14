@@ -71,9 +71,10 @@ describe('Fail', () => {
         return unexpected
       })
 
-      // @ts-expect-error failure is not handled
-      const result = run(f.pipe(returnIf((x): x is string => typeof x === 'string')))
-      assert.notEqual(result, unexpected)
+      assert.throws(() => {
+        // @ts-expect-error failure is not handled
+        run(f.pipe(returnIf((x): x is string => typeof x === 'string')))
+      }, /Unhandled effect in run/)
     })
 
     it('given matching failure, returns failure', () => {
@@ -107,9 +108,10 @@ describe('Fail', () => {
         return unexpected
       })
 
-      // @ts-expect-error failure is not handled
-      const result = run(f.pipe(returnOnly(CustomError)))
-      assert.notEqual(result, unexpected)
+      assert.throws(() => {
+        // @ts-expect-error failure is not handled
+        run(f.pipe(returnOnly(CustomError)))
+      }, /Unhandled effect in run/)
     })
 
     it('given matching failure, returns failure', () => {

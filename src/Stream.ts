@@ -72,7 +72,7 @@ export const filter: {
 } = <E, A>(f: Fx<E, A>, predicate: (a: Event<E>) => boolean): Fx<ExcludeStream<E, Stream<Event<E>>>, A> =>
     forEach(f, a => predicate(a) ? emit(a) : unit)
 
-export const switchMap = <E, A, E2>(f: Fx<E, A>, each: (a: Event<E>) => Fx<E2, unknown>): Fx<ExcludeStream<E, Fork | Async | E2>, A> =>
+export const switchMap = <E, A, E2>(f: Fx<E, A>, each: (a: Event<E>) => Fx<E2, unknown>): Fx<ExcludeStream<E, Fork | Async | E2> | Interrupt, A> =>
   bracket(
     assertSync(() => new CurrentTask<E2>()),
     task => ok(dispose(task)),
@@ -81,7 +81,7 @@ export const switchMap = <E, A, E2>(f: Fx<E, A>, each: (a: Event<E>) => Fx<E2, u
       yield* task.wait()
       return x
     })
-  ) as Fx<ExcludeStream<E, Fork | Async | E2>, A>
+  ) as Fx<ExcludeStream<E, Fork | Async | E2> | Interrupt, A>
 
 /**
  * Create a stream that emits all values from a {@link Queue.Dequeue}
@@ -114,7 +114,7 @@ export interface IterableWithReturn<Y, R> {
 /**
  * Create a stream that emits all values from an Iterable
  */
-export const fromIterable = <A, R>(i: IterableWithReturn<A, R>): Fx<Stream<A>, IfAny<R, void>> => bracket(
+export const fromIterable = <A, R>(i: IterableWithReturn<A, R>): Fx<Stream<A> | Interrupt, IfAny<R, void>> => bracket(
   assertSync(() => i[Symbol.iterator]()),
   iterator => ok(void iterator.return?.()),
   iterator => gen(function* () {
@@ -125,7 +125,7 @@ export const fromIterable = <A, R>(i: IterableWithReturn<A, R>): Fx<Stream<A>, I
     }
     return result.value
   })
-) as Fx<Stream<A>, IfAny<R, void>>
+) as Fx<Stream<A> | Interrupt, IfAny<R, void>>
 
 export interface AsyncIterableWithReturn<Y, R> {
   [Symbol.asyncIterator](): AsyncIterator<Y, R>

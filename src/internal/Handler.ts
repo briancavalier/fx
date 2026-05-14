@@ -1,7 +1,6 @@
 import { EffectType, isEffect } from '../Effect.js'
 import { Fx } from '../Fx.js'
 import { HandlerCapture, type CapturedHandler } from '../HandlerCapture.js'
-import { isInterpretingReturn } from './iteratorClose.js'
 import { Pipeable, pipeThis } from './pipe.js'
 import { getRuntimeContext, withActiveRuntimeContext, withRuntimeContext } from './runtimeContext.js'
 
@@ -57,7 +56,7 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, CapturedHandler {
     } finally {
       if (!completed) {
         const ir = i.return?.()
-        if (ir !== undefined && isInterpretingReturn()) yield* step(ir)
+        if (ir !== undefined) yield* step(ir)
       }
     }
   }
@@ -92,7 +91,11 @@ export class Control<E, A> implements Fx<E, A>, Pipeable {
               ? handler(k, effect)
               : withActiveRuntimeContext(context, () => handler(k, effect))
             const hr = yield* withRuntimeContext(context, handled) as any
-            if (!done) return hr
+            if (!done) {
+              const cleanup = i.return?.()
+              if (cleanup !== undefined) yield* step(cleanup)
+              return hr
+            }
             done = false
             ir = i.next(hr)
           } else {
@@ -113,7 +116,7 @@ export class Control<E, A> implements Fx<E, A>, Pipeable {
     } finally {
       if (!completed) {
         const ir = i.return?.()
-        if (ir !== undefined && isInterpretingReturn()) yield* step(ir)
+        if (ir !== undefined) yield* step(ir)
       }
     }
   }

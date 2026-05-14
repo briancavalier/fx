@@ -7,7 +7,7 @@ import { firstSettled, race, unbounded } from './Concurrent.js'
 import { managed, usingExit, usingManaged } from './Finalization.js'
 import { bracket, fx, ok, run, runPromise, runTask, type Fx } from './Fx.js'
 import { handle } from './Handler.js'
-import { uninterruptible, uninterruptibleMask, type Interrupt } from './Interrupt.js'
+import { uninterruptible, uninterruptibleMask, type Interrupt, type RestoreInterrupt } from './Interrupt.js'
 import { scope, type Exit } from './Scope.js'
 
 describe('Interrupt masking', () => {
@@ -147,6 +147,45 @@ describe('Interrupt masking', () => {
     assert.equal(restoreAborted, true)
   })
 
+  it('fails when restore escapes its uninterruptibleMask region', async () => {
+    let restore!: RestoreInterrupt
+
+    const task = runTask(fx(function* () {
+      yield* uninterruptibleMask(r => fx(function* () {
+        restore = r
+      }))
+      yield* restore(ok(undefined))
+    }))
+
+    await assert.rejects(task.promise, hasInterruptMaskInvariantCause)
+  })
+
+  it('escaped restore failure does not mask future interruption', async () => {
+    let restore!: RestoreInterrupt
+    let started = false
+    let aborted = false
+
+    await assert.rejects(runTask(fx(function* () {
+      yield* uninterruptibleMask(r => fx(function* () {
+        restore = r
+      }))
+      yield* restore(ok(undefined))
+    })).promise, hasInterruptMaskInvariantCause)
+
+    const task = runTask(assertPromise<void>(signal => new Promise(resolve => {
+      started = true
+      signal.addEventListener('abort', () => {
+        aborted = true
+        resolve()
+      })
+    })))
+
+    await eventually(() => started)
+    await task._disposeAndWait()
+
+    assert.equal(aborted, true)
+  })
+
   it('nested masks defer interruption until the outermost mask exits', async () => {
     const events = [] as string[]
     let resolveInner!: () => void
@@ -166,6 +205,37 @@ describe('Interrupt masking', () => {
     await disposed
 
     assert.deepEqual(events, ['outer start', 'inner start', 'outer end'])
+  })
+
+  it('restore preserves an outer uninterruptible region', async () => {
+    const events = [] as string[]
+    let restoreStarted = false
+    let restoreAborted = false
+    let resolveRestore!: () => void
+
+    const task = runTask(uninterruptible(uninterruptibleMask(restore => fx(function* () {
+      events.push('outer start')
+      yield* restore(assertPromise<void>(signal => new Promise(resolve => {
+        restoreStarted = true
+        resolveRestore = resolve
+        signal.addEventListener('abort', () => {
+          restoreAborted = true
+          resolve()
+        })
+      })))
+      events.push('outer end')
+    }))))
+
+    await eventually(() => restoreStarted)
+    const disposed = task._disposeAndWait()
+    await Promise.resolve()
+
+    assert.equal(restoreAborted, false)
+    resolveRestore()
+    await disposed
+
+    assert.deepEqual(events, ['outer start', 'outer end'])
+    assert.equal(restoreAborted, false)
   })
 
   it('race cancellation waits for masked acquire/register finalization', async () => {
@@ -221,3 +291,10 @@ const eventually = async (f: () => boolean): Promise<void> => {
   }
   assert.equal(f(), true)
 }
+
+const hasInterruptMaskInvariantCause = (e: unknown): boolean =>
+  e instanceof Error
+  && (
+    e.message === 'Interrupt mask invariant failed'
+    || e.cause instanceof Error && e.cause.message === 'Interrupt mask invariant failed'
+  )

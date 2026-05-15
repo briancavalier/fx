@@ -2,9 +2,10 @@ import { fx, run, type Fx } from '../../src'
 import { defaultConsole, log } from '../../src/Console'
 import { assert as assertNoFail } from '../../src/Fail'
 import { managed, usingManaged } from '../../src/Finalization'
+import { handleScoped } from '../../src/Handler'
 import { returnFrom } from '../../src/ReturnFrom'
 import { brand, scope } from '../../src/Scope'
-import { handleYieldFrom, yieldFrom, type YieldFrom, type Yielding } from '../../src/YieldFrom'
+import { yieldFrom, YieldFrom, type Yielding } from '../../src/YieldFrom'
 
 const ImportCsv = 'examples/scope/ImportCsv' as const
 
@@ -56,8 +57,8 @@ const readCsvRows = (file: CsvFile) => fx(function* () {
 const withIndex = <E>(rows: Fx<E | YieldFrom<typeof CsvRows>, void>) => fx(function* () {
   let index = 0
 
-  yield* rows.pipe(handleYieldFrom(CsvRows, row => fx(function* () {
-    yield* yieldFrom(IndexedCsvRows, { index, value: row })
+  yield* rows.pipe(handleScoped(YieldFrom<typeof CsvRows>, CsvRows, effect => fx(function* () {
+    yield* yieldFrom(IndexedCsvRows, { index, value: effect.arg })
     index += 1
   })))
 })
@@ -77,7 +78,9 @@ const importRows = (file: CsvFile) => fx(function* () {
 
   yield* readCsvRows(file).pipe(
     withIndex,
-    handleYieldFrom(IndexedCsvRows, ({ index, value: row }) => fx(function* () {
+    handleScoped(YieldFrom<typeof IndexedCsvRows>, IndexedCsvRows, effect => fx(function* () {
+      const { index, value: row } = effect.arg
+
       if (index === 0) {
         return yield* validateHeader(row)
       }

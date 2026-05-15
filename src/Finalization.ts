@@ -1,4 +1,4 @@
-import { Effect } from './Effect.js'
+import { ScopedEffect } from './Effect.js'
 import { Fx, fx } from './Fx.js'
 import { uninterruptible } from './Interrupt.js'
 import type { Interrupt } from './Interrupt.js'
@@ -22,8 +22,7 @@ export type Finalizer = (exit: Exit) => Fx<unknown, void>
 /**
  * Request that a cleanup operation be run when the named scope exits.
  */
-export class Finally<const Scope extends string> extends Effect('fx/Finally')<{
-  readonly scope: Scope
+export class Finally<const Scope extends string> extends ScopedEffect('fx/Finally')<Scope, {
   readonly finalizer: Finalizer
 }, void> { }
 
@@ -34,7 +33,7 @@ export const andFinally = <const Scope extends string, E>(
   scope: Scope,
   f: Fx<E, void>
 ): Fx<Finally<Scope>, void> =>
-  new Finally({ scope, finalizer: () => f })
+  new Finally(scope, { finalizer: () => f })
 
 /**
  * Register a cleanup operation that receives the named scope's exit.
@@ -43,7 +42,7 @@ export const andFinallyExit = <const Scope extends string, E>(
   scope: Scope,
   f: (exit: Exit) => Fx<E, void>
 ): Fx<Finally<Scope>, void> =>
-  new Finally({ scope, finalizer: exit => f(exit) })
+  new Finally(scope, { finalizer: exit => f(exit) })
 
 /**
  * Run an initial operation, register cleanup for its result, and return it.

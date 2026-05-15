@@ -101,16 +101,17 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
       while (!ir.done) {
         if (isEffect(ir.value)) {
           const effect = ir.value
+          const sameScope = (effect as { readonly scope?: unknown }).scope === scopeName
 
-          if (Finally.is(effect) && effect.arg.scope === scopeName) {
+          if (sameScope && Finally.is(effect)) {
             finalizers.push(effect.arg.finalizer)
             ir = i.next(undefined)
-          } else if (ReturnFrom.is(effect) && effect.arg.scope === scopeName) {
-            const exit = { type: 'returnFrom', scope: scopeName, value: effect.arg.value } satisfies Exit<Scope>
+          } else if (sameScope && ReturnFrom.is(effect)) {
+            const exit = { type: 'returnFrom', scope: scopeName, value: effect.arg } satisfies Exit<Scope>
             const failures = yield* release(exit)
             if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup(failures))) as A
-            return effect.arg.value as A
-          } else if (Abort.is(effect) && effect.arg === scopeName) {
+            return effect.arg as A
+          } else if (sameScope && Abort.is(effect)) {
             const exit = { type: 'abort', scope: scopeName } satisfies Exit<Scope>
             const failures = yield* release(exit)
             if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup(failures))) as A

@@ -1,6 +1,7 @@
 import { EffectType, isEffect } from '../Effect.js'
 import { Fx } from '../Fx.js'
 import { HandlerCapture, type CapturedHandler } from '../HandlerCapture.js'
+import { Ok } from './generator.js'
 import { drainIteratorReturn } from './iteratorClose.js'
 import { Pipeable, pipeThis } from './pipe.js'
 import { getRuntimeContext, withActiveRuntimeContext, withRuntimeContext } from './runtimeContext.js'
@@ -34,7 +35,9 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, CapturedHandler {
             const handled = context === undefined
               ? handler(effect)
               : withActiveRuntimeContext(context, () => handler(effect))
-            ir = i.next(yield* withRuntimeContext(context, handled) as any)
+            ir = handled instanceof Ok
+              ? i.next(handled.value as any)
+              : i.next(yield* withRuntimeContext(context, handled) as any)
           } else if (effect._fxEffectId === HandlerCapture._fxEffectId) {
             captured ??= {
               wrap: fx => new Handler(fx, effectId, handler)
@@ -91,7 +94,9 @@ export class Control<E, A> implements Fx<E, A>, Pipeable {
             const handled = context === undefined
               ? handler(k, effect)
               : withActiveRuntimeContext(context, () => handler(k, effect))
-            const hr = yield* withRuntimeContext(context, handled) as any
+            const hr = handled instanceof Ok
+              ? handled.value
+              : yield* withRuntimeContext(context, handled) as any
             if (!done) {
               yield* drainIteratorReturn(i, step)
               return hr

@@ -392,6 +392,7 @@ const snapshotErrorValue = (error: unknown, seen: Set<unknown>): DiagnosticError
   }
 
   if (tracksCycles(error)) seen.add(error)
+  if (isFailEffect(error)) return snapshotFail(error, seen)
 
   const trace = getTrace(error)
   const base = error instanceof Error
@@ -411,6 +412,23 @@ const snapshotErrorValue = (error: unknown, seen: Set<unknown>): DiagnosticError
     ...(aggregate === undefined ? {} : { aggregate: { errors: aggregate.map(e => snapshotErrorValue(e, seen)) } })
   }
 }
+
+const snapshotFail = (failure: DiagnosticFail, seen: Set<unknown>): DiagnosticErrorSnapshot => ({
+  ...snapshotErrorValue(failure.arg, seen),
+  ...(failure.trace === undefined ? {} : { trace: snapshotTrace(failure.trace) })
+})
+
+// Avoid importing Fail here: Fail.ts depends on Trace.ts.
+interface DiagnosticFail {
+  readonly _fxEffectId: 'fx/Fail'
+  readonly arg: unknown
+  readonly trace?: Trace
+}
+
+const isFailEffect = (value: unknown): value is DiagnosticFail =>
+  typeof value === 'object'
+  && value !== null
+  && (value as Partial<DiagnosticFail>)._fxEffectId === 'fx/Fail'
 
 const snapshotErrorObject = (error: Error): DiagnosticErrorSnapshot => ({
   type: error.constructor.name,

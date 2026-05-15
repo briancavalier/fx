@@ -568,6 +568,19 @@ describe('Trace', () => {
     ].join('\n'))
   })
 
+  it('formats Fail values using the wrapped error and Fail trace', () => {
+    const failure = new Fail(new Error('boom'), {
+      origin: breadcrumb('failed here'),
+      trace: prependTrace(breadcrumb('failed here'))
+    })
+
+    assert.equal(formatDiagnostic(failure), [
+      'Error: boom',
+      'Fx trace:',
+      '  at failed here'
+    ].join('\n'))
+  })
+
   it('formats aggregate errors with compact indexed child summaries', () => {
     const child = new Error('wrapped child', { cause: new TypeError('root child') })
     const aggregate = new AggregateError([child, 'plain failure'], 'aggregate failed')

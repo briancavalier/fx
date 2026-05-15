@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": ".benchmark-dist",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "strict": false,
+    "noCheck": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "benchmarks/runtime-loops.ts"
+  ],
+  "exclude": [
+    "src/**/*.test.ts"
+  ]
+}

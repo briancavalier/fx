@@ -310,7 +310,7 @@ function formatMarkdown(results: readonly Result[]): string {
     `- Worktree: ${worktreeState()}`,
     `- Node: ${process.version}`,
     `- Platform: ${platform()} ${release()} ${arch()}`,
-    '- Command: `pnpm benchmark:runtime-loops`',
+    `- Command: \`${process.env.FX_BENCHMARK_COMMAND ?? 'pnpm benchmark:runtime-loops'}\``,
     `- Handler programs yield ${EffectsPerProgram.toLocaleString()} effects per operation.`,
     '',
     '| Case | Iterations | Total ms | Ops/sec | ns/op | Relative |',

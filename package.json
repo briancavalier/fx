@@ -126,6 +126,8 @@
     "benchmark:trace": "tsx benchmarks/trace.ts",
     "benchmark:runtime-context": "tsx benchmarks/runtime-context.ts",
     "benchmark:runtime-loops": "tsx benchmarks/runtime-loops.ts",
+    "build:benchmarks": "tsc --project ./tsconfig.benchmarks.json",
+    "benchmark:runtime-loops:js": "pnpm build:benchmarks && FX_BENCHMARK_COMMAND='pnpm benchmark:runtime-loops:js' node .benchmark-dist/benchmarks/runtime-loops.js",
     "lint": "oxlint --type-aware",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "test:watch": "node --import tsx --test --test-reporter=dot --watch './src/**/*.test.ts'",

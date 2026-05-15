@@ -1,6 +1,7 @@
 node_modules/
 .pnpm-store/
 dist/
+.benchmark-dist/
 experiments/
 /AGENT_STATUS.md
 *.code-workspace

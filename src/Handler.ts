@@ -13,16 +13,10 @@ export type Handle<E, A, B = never> = E extends A ? B : E
  */
 export type HandleReturn<E, A, R> = E extends A ? R : never
 
-/**
- * A scoped effect narrowed to the scope currently being handled.
- */
-export type MatchedScopedEffect<A, Scope extends string> =
+type MatchedScopedEffect<A, Scope extends string> =
   A & { readonly scope: Scope }
 
-/**
- * A scoped effect with the handled scope removed from its remaining scope type.
- */
-export type ResidualScopedEffect<E, Scope extends string> =
+type ResidualScopedEffect<E, Scope extends string> =
   E extends { readonly scope: infer EffectScope extends string }
   ? Exclude<EffectScope, Scope> extends never
     ? never
@@ -41,16 +35,10 @@ export type HandleScoped<E, A, Scope extends string, B = never> =
     : E
   : E
 
-/**
- * An effect constructor whose instances carry a top-level scope name.
- */
-export type ScopedEffectType =
+type ScopedEffectType =
   EffectType & { new(...args: readonly any[]): { readonly scope: string } }
 
-/**
- * The scope names produced by a scoped effect constructor.
- */
-export type EffectScope<T extends ScopedEffectType> =
+type EffectScope<T extends ScopedEffectType> =
   InstanceType<T>['scope']
 
 /**

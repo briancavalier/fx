@@ -1,4 +1,6 @@
+import { at } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
+import { withOrigin } from './Effect.js'
 import { Fx, ok } from './Fx.js'
 import { control } from './Handler.js'
 
@@ -8,7 +10,7 @@ import { control } from './Handler.js'
 export class Abort<const Scope extends string> extends Effect('fx/Abort')<Scope, never> { }
 
 export const abort = <const Scope extends string>(scope: Scope): Fx<Abort<Scope>, never> =>
-  new Abort(scope)
+  withOrigin(new Abort(scope), at('fx/Abort/abort', abort))
 
 /**
  * Return a default value from an abort of the named scope.

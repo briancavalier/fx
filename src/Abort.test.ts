@@ -1,7 +1,9 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { abort, Abort, orReturn } from './Abort.js'
-import { fx, ok, run } from './Fx.js'
+import { abort, Abort, orReturn, restartOnAbort } from './Abort.js'
+import { fail, Fail, returnFail } from './Fail.js'
+import { andFinally } from './Finalization.js'
+import { fx, ok, run, type Fx } from './Fx.js'
 import { scope } from './Scope.js'
 
 describe('Abort', () => {
@@ -37,6 +39,132 @@ describe('Abort', () => {
       }).pipe(scope(TestScope), orReturn(TestScope, 'aborted'))
 
       assert.equal(Abort.is(f[Symbol.iterator]().next().value), true)
+    })
+  })
+
+  describe('restartOnAbort', () => {
+    it('restarts a scoped computation after abort and returns success', () => {
+      let attempts = 0
+
+      const result = fx(function* () {
+        attempts += 1
+        if (attempts < 3) yield* abort(TestScope)
+        return 'ok'
+      }).pipe(
+        restartOnAbort(TestScope, { restarts: 2 }),
+        orReturn(TestScope, 'exhausted'),
+        run
+      )
+
+      assert.equal(result, 'ok')
+      assert.equal(attempts, 3)
+    })
+
+    it('uses a fresh iterator for each attempt', () => {
+      const attempts = [] as number[]
+
+      const result = fx(function* () {
+        attempts.push(attempts.length + 1)
+        if (attempts.length < 3) yield* abort(TestScope)
+        return attempts.length
+      }).pipe(
+        restartOnAbort(TestScope, { restarts: 2 }),
+        orReturn(TestScope, 0),
+        run
+      )
+
+      assert.equal(result, 3)
+      assert.deepEqual(attempts, [1, 2, 3])
+    })
+
+    it('runs scoped finalizers for each aborted attempt before the next attempt', () => {
+      let attempts = 0
+      const released = [] as string[]
+
+      const result = fx(function* () {
+        attempts += 1
+        const attempt = attempts
+        yield* andFinally(TestScope, fx(function* () {
+          released.push(`release:${attempt}`)
+        }))
+
+        if (attempt < 3) yield* abort(TestScope)
+        return 'done'
+      }).pipe(
+        restartOnAbort(TestScope, { restarts: 2 }),
+        orReturn(TestScope, 'exhausted'),
+        returnFail,
+        run
+      )
+
+      assert.equal(result, 'done')
+      assert.deepEqual(released, ['release:1', 'release:2', 'release:3'])
+    })
+
+    it('leaves Abort visible when restarts are exhausted', () => {
+      let attempts = 0
+
+      const result = fx(function* () {
+        attempts += 1
+        yield* abort(TestScope)
+      }).pipe(
+        restartOnAbort(TestScope, { restarts: 1 }),
+        orReturn(TestScope, 'exhausted'),
+        run
+      )
+
+      assert.equal(result, 'exhausted')
+      assert.equal(attempts, 2)
+    })
+
+    it('does not restart Abort from a different scope', () => {
+      const OtherScope = 'test/Abort/restartOnAbort/other' as const
+      let attempts = 0
+
+      const f = fx(function* () {
+        attempts += 1
+        yield* abort(OtherScope)
+        return 'done'
+      }).pipe(restartOnAbort(TestScope, { restarts: 2 }))
+
+      const next = f[Symbol.iterator]().next()
+
+      assert.equal(Abort.is(next.value), true)
+      assert.equal((next.value as Abort<typeof OtherScope>).scope, OtherScope)
+      assert.equal(attempts, 1)
+    })
+
+    it('stops restarting when cleanup fails after abort', () => {
+      const cleanupFailure = new Error('cleanup failed')
+      let attempts = 0
+
+      const result = fx(function* () {
+        attempts += 1
+        yield* andFinally(TestScope, fail(cleanupFailure))
+        yield* abort(TestScope)
+      }).pipe(
+        restartOnAbort(TestScope, { restarts: 2 }),
+        orReturn(TestScope, undefined),
+        returnFail,
+        run
+      )
+
+      assert.ok(Fail.is(result))
+      assert.ok(result.arg instanceof AggregateError)
+      assert.deepEqual(result.arg.errors, [cleanupFailure])
+      assert.equal(attempts, 1)
+    })
+
+    it('preserves Abort typing until a downstream handler interprets exhaustion', () => {
+      const exhausted = abort(TestScope).pipe(
+        restartOnAbort(TestScope, { restarts: 0 })
+      )
+      const _: typeof exhausted extends Fx<Abort<typeof TestScope>, never> ? true : false = true
+
+      const handled = exhausted.pipe(orReturn(TestScope, 'exhausted'))
+      const __: typeof handled extends Fx<never, 'exhausted'> ? true : false = true
+
+      assert.equal(handled.pipe(run), 'exhausted')
     })
   })
 })

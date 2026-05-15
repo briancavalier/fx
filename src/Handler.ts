@@ -7,9 +7,23 @@ export type Handle<E, A, B = never> = E extends A ? B : E
 
 export type HandleReturn<E, A, R> = E extends A ? R : never
 
+export type MatchedScopedEffect<A, Scope extends string> =
+  A & { readonly scope: Scope }
+
+export type ResidualScopedEffect<E, Scope extends string> =
+  E extends { readonly scope: infer EffectScope extends string }
+  ? Exclude<EffectScope, Scope> extends never
+    ? never
+    : E & { readonly scope: Exclude<EffectScope, Scope> }
+  : E
+
 export type HandleScoped<E, A, Scope extends string, B = never> =
   E extends A
-  ? E extends { readonly scope: Scope } ? B : E
+  ? E extends { readonly scope: infer EffectScope extends string }
+    ? Extract<EffectScope, Scope> extends never
+      ? E
+      : B | ResidualScopedEffect<E, Scope>
+    : E
   : E
 
 export type ScopedEffectType =
@@ -29,13 +43,13 @@ export const handle = <T extends EffectType, HandlerEffects>(
 export const handleScoped = <T extends ScopedEffectType, const Scope extends EffectScope<T>, HandlerEffects>(
   e: T,
   scope: Scope,
-  f: (effect: InstanceType<T>) => Fx<HandlerEffects, Answer<T>>
+  f: (effect: MatchedScopedEffect<InstanceType<T>, Scope>) => Fx<HandlerEffects, Answer<T>>
 ) => <const E, const A>(
   fx: Fx<E, A>
 ): Fx<HandleScoped<E, InstanceType<T>, Scope, HandlerEffects>, A> =>
     new Handler(fx, e._fxEffectId, effect => {
       if (effect.scope === scope) {
-        return f(effect as InstanceType<T>)
+        return f(effect as MatchedScopedEffect<InstanceType<T>, Scope>)
       }
 
       return effect as Fx<InstanceType<T>, Answer<T>>

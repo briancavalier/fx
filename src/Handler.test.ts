@@ -20,7 +20,10 @@ describe('Handler', () => {
       const result = fx(function* () {
         return yield* request(TestScope, 1)
       }).pipe(
-        handleScoped(Request<typeof TestScope>, TestScope, effect => ok(`handled ${effect.arg.value}`)),
+        handleScoped(Request, TestScope, effect => {
+          const _: typeof TestScope = effect.scope
+          return ok(`handled ${effect.arg.value}`)
+        }),
         run
       )
 
@@ -50,6 +53,20 @@ describe('Handler', () => {
       }).pipe(handleScoped(Request<typeof TestScope>, TestScope, () => ok('handled')))
 
       const _: typeof f extends Fx<Request<typeof OtherScope>, 'done'> ? true : false = true
+    })
+
+    it('narrows residual union scopes', () => {
+      const scope = (true as boolean) ? TestScope : OtherScope
+      const f = fx(function* () {
+        yield* request(scope, 1)
+        return 'done'
+      }).pipe(handleScoped(Request<typeof TestScope | typeof OtherScope>, TestScope, () => ok('handled')))
+
+      type ResidualScope = typeof f extends Fx<infer E, 'done'>
+        ? E extends { readonly scope: infer Scope } ? Scope : never
+        : never
+
+      const _: ResidualScope extends typeof OtherScope ? true : false = true
     })
   })
 })

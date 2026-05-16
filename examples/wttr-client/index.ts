@@ -1,10 +1,10 @@
-import { fx, runPromise } from '../../src'
-import { defaultConsole, log } from '../../src/Console'
-import { provide } from '../../src/Env'
-import { assert as assertNoFail } from '../../src/Fail'
-import { w3cFetch } from '../../src/HttpClient'
-import { WeatherQuery, getWeather } from './wttr'
-import { wttrHttp } from './wttr-http'
+import { fx, runPromise } from '../../src/index.js'
+import { defaultConsole, log } from '../../src/Console.js'
+import { provide } from '../../src/Env.js'
+import { assert as assertNoFail } from '../../src/Fail.js'
+import { w3cFetch } from '../../src/HttpClient.js'
+import { WeatherQuery, getWeather } from './wttr.js'
+import { wttrHttp } from './wttr-http.js'
 
 const main = fx(function* (query: WeatherQuery) {
   const response = yield* getWeather(query)

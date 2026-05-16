@@ -1,7 +1,7 @@
-import { fx, runPromise } from "../src"
-import { all, defaultAll, unbounded } from "../src/Concurrent"
-import { child, console as logConsole, debug, error, info, warn } from "../src/Log"
-import { defaultTime } from "../src/Time"
+import { fx, runPromise } from "../src/index.js"
+import { all, defaultAll, unbounded } from "../src/Concurrent.js"
+import { child, console as logConsole, debug, error, info, warn } from "../src/Log.js"
+import { defaultTime } from "../src/Time.js"
 
 const f = (index: number) => fx(function* () {
   yield* info('This is an info message')

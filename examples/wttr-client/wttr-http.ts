@@ -1,6 +1,6 @@
-import { flatMap, handle, map } from '../../src'
-import { expectSuccess, json, request } from '../../src/HttpClient'
-import { GetWeather, Weather } from './wttr'
+import { flatMap, handle, map } from '../../src/index.js'
+import { expectSuccess, json, request } from '../../src/HttpClient.js'
+import { GetWeather, Weather } from './wttr.js'
 
 export const wttrHttp = handle(GetWeather, ({ arg: { location } }) =>
   request({

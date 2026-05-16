@@ -1,9 +1,9 @@
-import { fx, runPromise } from "../../src"
-import { all, defaultAll, unbounded } from "../../src/Concurrent"
-import { defaultConsole, error, log } from "../../src/Console"
-import { catchAll, fail } from "../../src/Fail"
-import { formatDiagnostic, formatError, setTraceCapturePolicy, snapshotError, withTraceCapture } from "../../src/Trace"
-import { nodeSourceLookup } from "../../src/TraceNode"
+import { fx, runPromise } from "../../src/index.js"
+import { all, defaultAll, unbounded } from "../../src/Concurrent.js"
+import { defaultConsole, error, log } from "../../src/Console.js"
+import { catchAll, fail } from "../../src/Fail.js"
+import { formatDiagnostic, formatError, setTraceCapturePolicy, snapshotError, withTraceCapture } from "../../src/Trace.js"
+import { nodeSourceLookup } from "../../src/TraceNode.js"
 
 const sourceLookup = nodeSourceLookup()
 

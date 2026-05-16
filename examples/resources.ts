@@ -1,11 +1,11 @@
-import { nodeSourceLookup } from "../src/TraceNode"
-import { formatDiagnostic, fx, runPromise } from "../src"
-import { all, defaultAll, unbounded } from "../src/Concurrent"
-import { defaultConsole, error, log } from "../src/Console"
-import { catchAll, fail } from "../src/Fail"
-import { managed, usingManaged } from "../src/Finalization"
-import { scope } from "../src/Scope"
-import { defaultTime, sleep } from "../src/Time"
+import { nodeSourceLookup } from "../src/TraceNode.js"
+import { formatDiagnostic, fx, runPromise } from "../src/index.js"
+import { all, defaultAll, unbounded } from "../src/Concurrent.js"
+import { defaultConsole, error, log } from "../src/Console.js"
+import { catchAll, fail } from "../src/Fail.js"
+import { managed, usingManaged } from "../src/Finalization.js"
+import { scope } from "../src/Scope.js"
+import { defaultTime, sleep } from "../src/Time.js"
 
 /*
  * Resource safety with structured concurrency.

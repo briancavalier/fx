@@ -1,8 +1,8 @@
 
 import { createInterface } from 'node:readline/promises'
 
-import { Effect, Fx, assertSync, bracket, fx, handle, ok, runPromise } from '../src'
-import { assertPromise } from '../src/Async'
+import { Effect, Fx, assertSync, bracket, fx, handle, ok, runPromise } from '../src/index.js'
+import { assertPromise } from '../src/Async.js'
 
 class Print extends Effect('Print')<string, void> { }
 

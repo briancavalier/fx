@@ -1,10 +1,10 @@
-import { fx, runPromise } from "../../src"
-import { firstSettled, race, unbounded } from "../../src/Concurrent"
-import { defaultConsole, error, log } from "../../src/Console"
-import { catchAll, fail } from "../../src/Fail"
-import { defaultTime, sleep } from "../../src/Time"
-import { formatDiagnostic, formatError, snapshotError } from "../../src/Trace"
-import { nodeSourceLookup } from "../../src/TraceNode"
+import { fx, runPromise } from "../../src/index.js"
+import { firstSettled, race, unbounded } from "../../src/Concurrent.js"
+import { defaultConsole, error, log } from "../../src/Console.js"
+import { catchAll, fail } from "../../src/Fail.js"
+import { defaultTime, sleep } from "../../src/Time.js"
+import { formatDiagnostic, formatError, snapshotError } from "../../src/Trace.js"
+import { nodeSourceLookup } from "../../src/TraceNode.js"
 
 const sourceLookup = nodeSourceLookup()
 

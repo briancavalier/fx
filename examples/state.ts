@@ -1,8 +1,8 @@
 import { inspect } from 'util'
 
-import { Effect, Fx, fx, handle, map, ok, runPromise } from '../src'
-import { all, defaultAll, unbounded } from '../src/Concurrent'
-import { sleep, defaultTime } from '../src/Time'
+import { Effect, Fx, fx, handle, map, ok, runPromise } from '../src/index.js'
+import { all, defaultAll, unbounded } from '../src/Concurrent.js'
+import { sleep, defaultTime } from '../src/Time.js'
 
 // The usual state monad, as an effect
 class Get<A> extends Effect('State/Set')<void, A> { }

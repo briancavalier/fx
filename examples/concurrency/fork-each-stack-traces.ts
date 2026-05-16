@@ -1,10 +1,10 @@
-import { flatMap, fx, runPromise } from "../../src"
-import { defaultConsole, error, log } from "../../src/Console"
-import { catchAll, fail } from "../../src/Fail"
-import { forkEach, unbounded } from "../../src/Concurrent"
-import { wait } from "../../src/Task"
-import { formatDiagnostic, formatError, snapshotError } from "../../src/Trace"
-import { nodeSourceLookup } from "../../src/TraceNode"
+import { flatMap, fx, runPromise } from "../../src/index.js"
+import { defaultConsole, error, log } from "../../src/Console.js"
+import { catchAll, fail } from "../../src/Fail.js"
+import { forkEach, unbounded } from "../../src/Concurrent.js"
+import { wait } from "../../src/Task.js"
+import { formatDiagnostic, formatError, snapshotError } from "../../src/Trace.js"
+import { nodeSourceLookup } from "../../src/TraceNode.js"
 
 const sourceLookup = nodeSourceLookup()
 

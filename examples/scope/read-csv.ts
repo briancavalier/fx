@@ -1,11 +1,11 @@
-import { fx, run, type Fx } from '../../src'
-import { defaultConsole, log } from '../../src/Console'
-import { assert as assertNoFail } from '../../src/Fail'
-import { managed, usingManaged } from '../../src/Finalization'
-import { handleScoped } from '../../src/Handler'
-import { returnFrom } from '../../src/ReturnFrom'
-import { brand, scope } from '../../src/Scope'
-import { yieldFrom, YieldFrom, type Yielding } from '../../src/YieldFrom'
+import { fx, run, type Fx } from '../../src/index.js'
+import { defaultConsole, log } from '../../src/Console.js'
+import { assert as assertNoFail } from '../../src/Fail.js'
+import { managed, usingManaged } from '../../src/Finalization.js'
+import { handleScoped } from '../../src/Handler.js'
+import { returnFrom } from '../../src/ReturnFrom.js'
+import { brand, scope } from '../../src/Scope.js'
+import { yieldFrom, YieldFrom, type Yielding } from '../../src/YieldFrom.js'
 
 const ImportCsv = 'examples/scope/ImportCsv' as const
 

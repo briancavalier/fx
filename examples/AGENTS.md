@@ -5,6 +5,15 @@ Examples should demonstrate how applications are built from effects plus handler
 Good examples:
 - define small domain effects,
 - write business logic against those effects,
+- prefer const arrow functions over function declarations,
+- prefer expression-bodied arrow functions over block bodies with only a return
+  statement when readability is unchanged,
+- define Fx program constructors as constants, e.g.
+  `const foo = (a, b, c) => fx(function* () { ... })`, rather than
+  `function foo(a, b, c) { return fx(function* () { ... }) }`,
+- define pipe transforms as constants, e.g.
+  `const withFoo = (program) => program.pipe(...)`, rather than
+  `function withFoo(program) { return program.pipe(...) }`,
 - provide one or more handlers,
 - compose handlers with `.pipe(...)`,
 - use library effects for observable behavior, e.g. `Console.log` with

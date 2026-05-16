@@ -311,14 +311,18 @@ That keeps it honest as a client example.
 Commands:
 
 ```sh
+BOOKMARKS_URL=http://127.0.0.1:3000/api bookmarks list
 bookmarks add https://example.com/article --tag typescript --tag effects
-bookmarks list --status unread
+bookmarks list --status unread --tag effects --text algebraic
 bookmarks read <id>
 bookmarks archive <id>
 bookmarks refresh <id>
 ```
 
-The CLI boundary can use `HttpClient`, `Console`, and `Fail`:
+`BOOKMARKS_URL` overrides the default API base of
+`http://127.0.0.1:3000/api`.
+
+The CLI boundary uses `HttpClient` and `Fail`:
 
 - parse args,
 - make HTTP requests,
@@ -371,12 +375,11 @@ examples/bookmarks/
   store-memory.ts
   metadata-real.ts
   metadata-stub.ts
+  client.ts
   server.ts
   cli.ts
-  browser/
-    index.html
-    app.js
   domain.test.ts
+  cli.test.ts
 ```
 
 Optional later additions:
@@ -384,13 +387,17 @@ Optional later additions:
 ```text
 examples/bookmarks/
   store-json.ts
-  api-client.ts
+  browser/
+    index.html
+    app.js
   package.json
 ```
 
 ## Implementation Phases
 
 ### Phase 1: Domain and pure handlers
+
+Status: implemented.
 
 - Define domain types.
 - Define `BookmarkStore` and `PageMetadata` effects.
@@ -401,12 +408,16 @@ examples/bookmarks/
 
 ### Phase 2: API server
 
+Status: implemented.
+
 - Add HTTP routes.
 - Interpret domain programs with in-memory handlers.
 - Map domain failures to HTTP status codes.
 - Add small request-level logging.
 
 ### Phase 3: CLI client
+
+Status: implemented.
 
 - Add CLI commands that call the API.
 - Keep output compact and script-friendly.
@@ -425,12 +436,18 @@ examples/bookmarks/
 ## Open Questions
 
 - Use `Random` directly for ids, or add a tiny `BookmarkIdGenerator` effect?
+  Answer: implemented as `BookmarkIdGenerator` so tests and demos have readable,
+  deterministic ids.
 - Should metadata refresh run synchronously during add, or should add return
   immediately and refresh in the background?
+  Answer: synchronous for now; background refresh is deferred.
 - Should the first API server use only in-memory storage, or include JSON file
   persistence from the start?
+  Answer: in-memory only for the first implementation; JSON persistence remains a
+  later handler swap.
 - Should the browser client stay plain JavaScript, or should it also demonstrate
   `fx` on the client side?
+  Answer: deferred until the browser phase.
 
 ## Recommended First Cut
 

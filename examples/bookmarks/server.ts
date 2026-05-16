@@ -1,11 +1,11 @@
 import { unbounded } from '../../src/Concurrent.js'
 import { provide } from '../../src/Env.js'
 import { assert as assertNoFail, catchAll, returnAll, type Fail } from '../../src/Fail.js'
-import { flatMap, fx, map, ok, runPromise, trySync, type Fx } from '../../src/Fx.js'
+import { flatMap, fx, map, ok, trySync, type Fx } from '../../src/Fx.js'
 import { bytes as readBytes } from '../../src/HttpClient.js'
 import { mount, route, routes, serve, type Routes, type ServerEvent, type ServerListening, type ServerRequest, type ServerResponse } from '../../src/HttpServer.js'
-import { nodeHttp } from '../../src/HttpServerNode.js'
 import { info, console as logConsole, type Log } from '../../src/Log.js'
+import { nodeHttp, runNodeMain } from '../../src/platform-node.js'
 import { defaultRandom } from '../../src/Random.js'
 import { emit, forEach as forEachStream } from '../../src/Stream.js'
 import { defaultTime, type Time } from '../../src/Time.js'
@@ -209,5 +209,5 @@ await server.pipe(
   assertNoFail,
   provide({ port: Number(process.env.PORT ?? 3000) }),
   unbounded,
-  runPromise
+  runNodeMain
 )

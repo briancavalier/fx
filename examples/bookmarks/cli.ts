@@ -1,4 +1,3 @@
-import { fileURLToPath } from 'node:url'
 import { catchAll } from '../../src/Fail.js'
 import { fx, map, ok, runPromise, type Fx } from '../../src/Fx.js'
 import { w3cFetch } from '../../src/HttpClient.js'
@@ -29,6 +28,10 @@ export type ParseResult =
 export type CliResult =
   | { readonly tag: 'success'; readonly output: string }
   | { readonly tag: 'failure'; readonly message: string }
+
+export type CliEnv = {
+  readonly BOOKMARKS_URL?: string
+}
 
 export const parseArgs = (args: readonly string[]): ParseResult => {
   const [command, ...rest] = args
@@ -198,7 +201,7 @@ const usage = () => [
   '  bookmarks refresh <id>'
 ].join('\n')
 
-export const main = (args: readonly string[], env: NodeJS.ProcessEnv): Fx<BookmarkClientEffects, CliResult> => {
+export const main = (args: readonly string[], env: CliEnv): Fx<BookmarkClientEffects, CliResult> => {
   const parsed = parseArgs(args)
   return parsed.tag === 'error'
     ? ok({ tag: 'failure', message: parsed.message })
@@ -212,13 +215,31 @@ const runMain = (program: Fx<BookmarkClientEffects, CliResult>): Promise<CliResu
     runPromise
   )
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const result = await runMain(main(process.argv.slice(2), process.env))
+const runtime = globalThis as unknown as {
+  readonly process?: {
+    readonly argv: readonly string[]
+    readonly env: CliEnv
+    exitCode?: number
+  }
+  readonly console?: {
+    readonly log: (message: string) => void
+    readonly error: (message: string) => void
+  }
+}
+
+const isMain = (argv: readonly string[], moduleUrl: string): boolean =>
+  argv[1] === modulePath(moduleUrl)
+
+const modulePath = (moduleUrl: string): string =>
+  decodeURIComponent(new URL(moduleUrl).pathname)
+
+if (runtime.process !== undefined && isMain(runtime.process.argv, import.meta.url)) {
+  const result = await runMain(main(runtime.process.argv.slice(2), runtime.process.env))
 
   if (result.tag === 'success') {
-    console.log(result.output)
+    runtime.console?.log(result.output)
   } else {
-    console.error(result.message)
-    process.exitCode = 1
+    runtime.console?.error(result.message)
+    runtime.process.exitCode = 1
   }
 }

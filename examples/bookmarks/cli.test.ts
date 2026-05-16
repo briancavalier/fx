@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { returnAll } from '../../src/Fail.js'
+import { assert as assertNoFail, returnAll } from '../../src/Fail.js'
 import { ok } from '../../src/Fx.js'
 import { handle } from '../../src/Handler.js'
 import { HttpRequest, type Request, type ResponseBody } from '../../src/HttpClient.js'
@@ -80,6 +80,7 @@ describe('bookmarks API client', () => {
       tags: ['typescript']
     }).pipe(
       captureRequests(requests, jsonResponse(bookmark)),
+      assertNoFail,
       runPromise
     )
 
@@ -103,6 +104,7 @@ describe('bookmarks API client', () => {
       text: 'effects'
     }).pipe(
       captureRequests(requests, jsonResponse([bookmark])),
+      assertNoFail,
       runPromise
     )
 
@@ -114,9 +116,9 @@ describe('bookmarks API client', () => {
   it('updates bookmarks with expected routes', async () => {
     const requests: Request[] = []
 
-    await markBookmarkRead(apiBase, 'bookmark/1').pipe(captureRequests(requests, jsonResponse(bookmark)), runPromise)
-    await archiveBookmark(apiBase, 'bookmark/1').pipe(captureRequests(requests, jsonResponse(bookmark)), runPromise)
-    await refreshBookmarkMetadata(apiBase, 'bookmark/1').pipe(captureRequests(requests, jsonResponse(bookmark)), runPromise)
+    await markBookmarkRead(apiBase, 'bookmark/1').pipe(captureRequests(requests, jsonResponse(bookmark)), assertNoFail, runPromise)
+    await archiveBookmark(apiBase, 'bookmark/1').pipe(captureRequests(requests, jsonResponse(bookmark)), assertNoFail, runPromise)
+    await refreshBookmarkMetadata(apiBase, 'bookmark/1').pipe(captureRequests(requests, jsonResponse(bookmark)), assertNoFail, runPromise)
 
     assert.deepEqual(requests.map(request => [request.method, request.url.pathname]), [
       ['PATCH', '/api/bookmarks/bookmark%2F1/read'],
@@ -134,10 +136,9 @@ describe('bookmarks API client', () => {
       runPromise
     )
 
+    assertClientError(result)
     assert.equal(result.tag, 'BookmarkRequestFailed')
-    if (result.tag === 'BookmarkRequestFailed') {
-      assert.match(String(result.cause), /actual: 400/)
-    }
+    assert.match(String(result.cause), /actual: 400/)
   })
 })
 
@@ -176,3 +177,10 @@ const jsonBody = (body: unknown): ResponseBody => {
     }
   })
 }
+
+const assertClientError: (value: unknown) => asserts value is { readonly tag: 'BookmarkRequestFailed'; readonly cause: unknown } =
+  (value): asserts value is { readonly tag: 'BookmarkRequestFailed'; readonly cause: unknown } => {
+    assert.equal(typeof value, 'object')
+    assert.notEqual(value, null)
+    assert.equal((value as { readonly tag?: unknown }).tag, 'BookmarkRequestFailed')
+  }

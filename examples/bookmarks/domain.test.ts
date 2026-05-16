@@ -193,7 +193,8 @@ const runDomain = async <A>(
   ).then(result => Array.isArray(result) ? result[0] : result)
 }
 
-const assertBookmark = (value: Bookmark | BookmarkError | readonly Bookmark[]): asserts value is Bookmark => {
+const assertBookmark: (value: Bookmark | BookmarkError | readonly Bookmark[]) => asserts value is Bookmark =
+  (value): asserts value is Bookmark => {
   assert.equal(typeof value, 'object')
   assert.notEqual(value, null)
   assert.ok(!Array.isArray(value))

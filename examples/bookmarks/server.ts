@@ -19,7 +19,6 @@ import {
   demoPageMetadata,
   listBookmarks,
   markRead,
-  memoryBookmarkStore,
   randomBookmarkIds,
   refreshMetadata,
   type AddBookmarkInput,
@@ -30,6 +29,7 @@ import {
   type FetchPageMetadata,
   type NextBookmarkId
 } from './domain.js'
+import { sqliteBookmarkStore } from './store-sqlite.js'
 
 type ServerConfig = {
   readonly host: string
@@ -275,7 +275,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 await server.pipe(
   nodeHttp(),
   f => forEachStream(f, logHttpServerEvent),
-  memoryBookmarkStore(),
+  sqliteBookmarkStore(process.env.BOOKMARKS_DB ?? 'bookmarks.sqlite'),
   demoPageMetadata,
   randomBookmarkIds,
   logConsole,

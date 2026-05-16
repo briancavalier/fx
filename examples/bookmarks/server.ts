@@ -1,3 +1,7 @@
+import { readFileSync } from 'node:fs'
+import { networkInterfaces } from 'node:os'
+import { dirname, join, normalize, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { unbounded } from '../../src/Concurrent.js'
 import { provide } from '../../src/Env.js'
 import { assert as assertNoFail, catchAll, returnAll, type Fail } from '../../src/Fail.js'
@@ -28,6 +32,7 @@ import {
 } from './domain.js'
 
 type ServerConfig = {
+  readonly host: string
   readonly port: number
 }
 
@@ -74,11 +79,22 @@ const apiRoutes = routes(
     respond(refreshMetadata(request.params.id), json))
 )
 
-const appRoutes = mount('/api', apiRoutes as Routes<BookmarkRouteEffects>)
+const browserDir = join(dirname(fileURLToPath(import.meta.url)), 'browser')
 
-const server = fx(function* ({ port }: ServerConfig) {
+const browserRoutes = routes(
+  route('GET', '/', () => ok(fileResponse('index.html', 'text/html; charset=utf-8'))),
+  route('GET', '/bookmarks/styles.css', () => ok(fileResponse('styles.css', 'text/css; charset=utf-8'))),
+  route('GET', '/bookmarks/assets/*', request => ok(assetResponse(request.params['*'] ?? '')))
+)
+
+const appRoutes = routes(
+  browserRoutes,
+  mount('/api', apiRoutes as Routes<BookmarkRouteEffects>)
+)
+
+const server = fx(function* ({ host, port }: ServerConfig) {
   return yield* serve(appRoutes, {
-    host: '127.0.0.1',
+    host,
     port,
     observe: event => emit(event)
   })
@@ -142,6 +158,40 @@ const text = (value: string, status = 200): ServerResponse<never> => ({
   body: { type: 'text', value }
 })
 
+const fileResponse = (path: string, contentType: string): ServerResponse<never> => {
+  const file = readStaticFile(path)
+  return file === undefined
+    ? text('Not Found', 404)
+    : {
+      status: 200,
+      headers: [['content-type', contentType]],
+      body: { type: 'bytes', value: file }
+    }
+}
+
+const assetResponse = (path: string): ServerResponse<never> => {
+  const normalized = normalize(path)
+  if (normalized.startsWith(sep) || normalized.startsWith('..') || normalized.includes(`${sep}..${sep}`)) {
+    return text('Not Found', 404)
+  }
+
+  const contentType = normalized.endsWith('.js')
+    ? 'text/javascript; charset=utf-8'
+    : normalized.endsWith('.map')
+      ? 'application/json'
+      : 'application/octet-stream'
+
+  return fileResponse(join('assets', normalized), contentType)
+}
+
+const readStaticFile = (path: string): Uint8Array | undefined => {
+  try {
+    return readFileSync(join(browserDir, path))
+  } catch {
+    return undefined
+  }
+}
+
 const json = (value: unknown, status = 200): ServerResponse<never> => ({
   status,
   body: { type: 'json', value }
@@ -160,7 +210,7 @@ const parseJsonBody = (body: string): Fx<Fail<unknown>, JsonBody> =>
 const logHttpServerEvent = (event: ServerEvent) => {
   switch (event.type) {
     case 'listening':
-      return info('HTTP server ready', {
+      return info('Bookmark UI ready', {
         timestamp: event.timestamp,
         ...addressData(event.address)
       })
@@ -192,7 +242,32 @@ const logHttpServerEvent = (event: ServerEvent) => {
 const addressData = (address: ServerListening['address']) =>
   address === null
     ? {}
-    : { host: address.host, port: address.port }
+    : {
+      host: address.host,
+      port: address.port,
+      url: browserUrl(address),
+      bindUrl: bindUrl(address),
+      networkUrls: networkUrls(address.port)
+    }
+
+const browserUrl = ({ host, port }: NonNullable<ServerListening['address']>): string =>
+  `http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${port}/`
+
+const bindUrl = ({ host, port }: NonNullable<ServerListening['address']>): string =>
+  `http://${host}:${port}/`
+
+const networkUrls = (port: number): readonly string[] => {
+  const urls: string[] = []
+
+  for (const interfaces of Object.values(networkInterfaces())) {
+    for (const address of interfaces ?? []) {
+      if (address.family !== 'IPv4' || address.internal) continue
+      urls.push(`http://${address.address}:${port}/`)
+    }
+  }
+
+  return urls
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
@@ -207,7 +282,10 @@ await server.pipe(
   defaultTime,
   defaultRandom(),
   assertNoFail,
-  provide({ port: Number(process.env.PORT ?? 3000) }),
+  provide({
+    host: process.env.HOST ?? '127.0.0.1',
+    port: Number(process.env.PORT ?? 3000)
+  }),
   unbounded,
   runNodeMain
 )

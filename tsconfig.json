@@ -17,5 +17,8 @@
   "include": [
     "src/**/*.ts",
     "examples/**/*.ts"
+  ],
+  "exclude": [
+    "examples/bookmarks/browser/**/*.ts"
   ]
 }

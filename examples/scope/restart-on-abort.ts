@@ -1,8 +1,8 @@
-import { abort, orReturn, restartOnAbort } from '../../src/Abort'
-import { defaultConsole, log } from '../../src/Console'
-import { assert as assertNoFail } from '../../src/Fail'
-import { managed, usingManaged } from '../../src/Finalization'
-import { fx, run } from '../../src/Fx'
+import { abort, orReturn, restartOnAbort } from '../../src/Abort.js'
+import { defaultConsole, log } from '../../src/Console.js'
+import { assert as assertNoFail } from '../../src/Fail.js'
+import { managed, usingManaged } from '../../src/Finalization.js'
+import { fx, run } from '../../src/Fx.js'
 
 const SubmitOrder = 'examples/scope/restart-on-abort/SubmitOrder' as const
 

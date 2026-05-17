@@ -11,11 +11,11 @@ import {
   compileRoutes,
   dispatch,
   emptyRoutes,
-  handleRoutes,
   mount,
   route,
   routes,
   serve,
+  transformRoutes,
   type EffectsOfRoutes,
   type ResponseBody,
   type RouteContext,
@@ -61,18 +61,75 @@ describe('HttpServer', () => {
       assert.equal(await readBody(mountedResponse.body), '1')
     })
 
-    it('transforms route handler effects', async () => {
+    it('represents route transforms lazily and applies them when routes compile', async () => {
       class CurrentValue extends Effect('test/HttpServer/TransformCurrentValue')<void, string> { }
 
       const app = route('GET', '/current', fx(function* () {
         return text(yield* new CurrentValue())
       }))
 
-      const handled = handleRoutes<CurrentValue, never>(handle(CurrentValue, () => ok('handled')))(app)
-      const response = dispatch(compileRoutes(handled), request('/current')).pipe(run)
+      let transformApplications = 0
+      const handled = transformRoutes<CurrentValue, never>(fx => {
+        transformApplications += 1
+        return fx.pipe(handle(CurrentValue, () => ok('handled')))
+      })(app)
+
+      assert.equal(handled.type, 'transform')
+      assert.equal(transformApplications, 0)
+
+      const compiled = compileRoutes(handled)
+      assert.equal(transformApplications, 1)
+
+      const response = dispatch(compiled, request('/current')).pipe(run)
 
       assert.equal(response.status, 200)
       assert.equal(await readBody(response.body), 'handled')
+    })
+
+    it('applies nested route transforms in wrapper order', async () => {
+      const order: string[] = []
+      const wrap = (label: string) =>
+        transformRoutes<never, never>(handler => fx(function* () {
+          order.push(`before:${label}`)
+          const value = yield* handler
+          order.push(`after:${label}`)
+          return value
+        }))
+
+      const app = wrap('a')(wrap('b')(
+        route('GET', '/value', ok(text('ok')))
+      ))
+
+      const response = dispatch(compileRoutes(app), request('/value')).pipe(run)
+
+      assert.equal(response.status, 200)
+      assert.equal(await readBody(response.body), 'ok')
+      assert.deepEqual(order, ['before:a', 'before:b', 'after:b', 'after:a'])
+    })
+
+    it('applies mounted transforms inside matched route request context', async () => {
+      type User = {
+        readonly id: string
+      }
+
+      const withUser = provideFrom(fx(function* ({ request }: RouteContext<{ readonly id: string }>) {
+        return {
+          user: { id: request.params.id } satisfies User
+        }
+      }))
+
+      const app = mount('/api',
+        transformRoutes<Get<{ readonly user: User }>, never>(withUser)(
+          route('GET', '/users/:id', fx(function* ({ user }: { readonly user: User }) {
+            return text(user.id)
+          }))
+        )
+      )
+
+      const response = dispatch(compileRoutes(app), request('/api/users/ada')).pipe(run)
+
+      assert.equal(response.status, 200)
+      assert.equal(await readBody(response.body), 'ada')
     })
 
     it('keeps route effects visible until the server program handles them', () => {
@@ -124,7 +181,7 @@ describe('HttpServer', () => {
         }
       }))
 
-      const app = handleRoutes<Get<{ readonly user: User }>, Authenticate>(withUser)(
+      const app = transformRoutes<Get<{ readonly user: User }>, Authenticate>(withUser)(
         route('GET', '/users/:id', fx(function* ({ user }: { readonly user: User }) {
           return text(user.id)
         }))

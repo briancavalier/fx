@@ -43,19 +43,26 @@ export const restartOnAbort = <const Scope extends string>(
   options: RestartOnAbortOptions
 ) => <const E, const A>(
   f: Fx<E, A>
-): Fx<ScopeEffects<E, Scope> | Abort<Scope>, A> => {
-  const attempt = f.pipe(scoped(scope), orReturn(scope, Restart))
-
-  return fx(function* () {
+): Fx<ScopeEffects<E, Scope> | Abort<Scope>, A> =>
+  fx(function* () {
     let restarts = 0
+    let aborted: Abort<Scope> | undefined
+    const attempt = f.pipe(
+      scoped(scope),
+      control(Abort, (_, abort) => {
+        if (abort.scope !== scope) return abort
+
+        aborted = abort as Abort<Scope>
+        return ok(Restart)
+      })
+    )
 
     while (true) {
       const result = yield* attempt
       if (result !== Restart) return result as A
 
-      if (restarts >= options.restarts) return yield* abort(scope)
+      if (restarts >= options.restarts) return yield* aborted!
 
       restarts += 1
     }
   }) as Fx<ScopeEffects<E, Scope> | Abort<Scope>, A>
-}

@@ -1,6 +1,8 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { abort, Abort, orReturn, restartOnAbort } from './Abort.js'
+import { at } from './Breadcrumb.js'
+import { originOf, withOrigin } from './Effect.js'
 import { fail, Fail, returnFail } from './Fail.js'
 import { andFinally } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
@@ -115,6 +117,22 @@ describe('Abort', () => {
 
       assert.equal(result, 'exhausted')
       assert.equal(attempts, 2)
+    })
+
+    it('preserves the final abort effect when restarts are exhausted', () => {
+      const original = withOrigin(
+        new Abort(TestScope, undefined),
+        at('test/Abort/restartOnAbort/original')
+      )
+
+      const f = fx(function* () {
+        return yield* original
+      }).pipe(restartOnAbort(TestScope, { restarts: 0 }))
+
+      const next = f[Symbol.iterator]().next()
+
+      assert.equal(next.value, original)
+      assert.equal(originOf(next.value), originOf(original))
     })
 
     it('does not restart Abort from a different scope', () => {

@@ -1,6 +1,6 @@
-import { Effect, fx, ok } from '../../src'
-import { abort, orReturn } from '../../src/Abort'
-import { scope } from '../../src/Scope'
+import { Effect, fx, ok } from '../../src/index.js'
+import { abort, orReturn } from '../../src/Abort.js'
+import { scope } from '../../src/Scope.js'
 
 // -------------------------------------------------------------------
 // The number guessing game example from

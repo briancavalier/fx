@@ -5,7 +5,7 @@ import {
 } from './internal/tracePolicy.js'
 import type { TraceCapturePolicy } from './internal/tracePolicy.js'
 import type { Fx } from './Fx.js'
-import { capturesTrace, withRuntimeContext } from './internal/runtimeContext.js'
+import { activeScopes, capturesTrace, withRuntimeContext } from './internal/runtimeContext.js'
 
 export type { TraceCapturePolicy }
 export { getTraceCapturePolicy, setTraceCapturePolicy }
@@ -35,6 +35,7 @@ export interface TraceFrame {
 export interface Trace {
   readonly frame: TraceFrame
   readonly parent?: Trace
+  readonly activeScopes?: readonly string[]
   readonly depth: number
   readonly truncated: boolean
   readonly acyclic?: true
@@ -66,6 +67,7 @@ export interface TraceSnapshotFrame {
 
 export interface TraceSnapshot {
   readonly frames: readonly TraceSnapshotFrame[]
+  readonly activeScopes?: readonly string[]
   readonly truncated: boolean
   readonly cycleDetected: boolean
 }
@@ -146,7 +148,7 @@ export const appendTrace = (trace: Trace, parent?: Trace): Trace => {
     }
   }
 
-  return fromFrames(frames, truncated)
+  return fromFrames(frames, truncated, trace.activeScopes)
 }
 
 export const captureAppendTrace = (trace: Trace | undefined, parent?: Trace): Trace | undefined =>
@@ -204,6 +206,7 @@ export const snapshotTrace = (trace: Trace): TraceSnapshot => {
 
   return {
     frames,
+    ...(trace.activeScopes === undefined || trace.activeScopes.length === 0 ? {} : { activeScopes: trace.activeScopes }),
     truncated: trace.truncated,
     cycleDetected: current !== undefined
   }
@@ -240,7 +243,11 @@ export const formatError = (error: unknown): string => {
   const trace = getTrace(error)
   if (trace === undefined) return formatErrorValue(error)
 
-  return `${formatErrorValue(rootCause(error))}\n${formatTrace(trace)}`
+  return [
+    formatErrorValue(rootCause(error)),
+    ...formatActiveScopes(trace.activeScopes),
+    formatTrace(trace)
+  ].join('\n')
 }
 
 export const formatDiagnostic = (error: unknown, options?: DiagnosticFormatOptions): string => {
@@ -250,11 +257,13 @@ export const formatDiagnostic = (error: unknown, options?: DiagnosticFormatOptio
 }
 
 const prependFrame = (frame: TraceFrame, parent?: Trace): Trace => {
-  if (parent === undefined) return { frame, depth: 1, truncated: false, acyclic: true }
+  const scopes = traceActiveScopes(parent)
+  if (parent === undefined) return { frame, ...scopes, depth: 1, truncated: false, acyclic: true }
   if (parent.depth < MaxTraceDepth) {
     return {
       frame,
       parent,
+      ...scopes,
       depth: parent.depth + 1,
       truncated: parent.truncated,
       acyclic: parent.acyclic
@@ -268,16 +277,17 @@ const prependFrame = (frame: TraceFrame, parent?: Trace): Trace => {
     current = current.parent
   }
 
-  return fromFrames(frames, true)
+  return fromFrames(frames, true, scopes.activeScopes)
 }
 
-const fromFrames = (frames: readonly TraceFrame[], truncated: boolean): Trace => {
+const fromFrames = (frames: readonly TraceFrame[], truncated: boolean, activeScopes?: readonly string[]): Trace => {
   let trace: Trace | undefined
 
   for (let i = frames.length - 1; i >= 0; i--) {
     trace = {
       frame: frames[i],
       parent: trace,
+      ...(i === 0 && activeScopes !== undefined && activeScopes.length > 0 ? { activeScopes } : {}),
       depth: (trace?.depth ?? 0) + 1,
       truncated,
       acyclic: true
@@ -302,7 +312,14 @@ const appendTraceFast = (trace: Trace, parent: Trace): Trace => {
     current = current.parent
   }
 
-  return fromFrames(frames, false)
+  return fromFrames(frames, false, trace.activeScopes)
+}
+
+const traceActiveScopes = (parent: Trace | undefined): Pick<Trace, 'activeScopes'> => {
+  const scopes = activeScopes()
+  if (scopes.length > 0) return { activeScopes: scopes }
+  if (parent?.activeScopes !== undefined && parent.activeScopes.length > 0) return { activeScopes: parent.activeScopes }
+  return {}
 }
 
 const firstStackLocation = (stack: string | undefined): TraceLocation | undefined => {
@@ -375,6 +392,7 @@ const snapshotErrorValue = (error: unknown, seen: Set<unknown>): DiagnosticError
   }
 
   if (tracksCycles(error)) seen.add(error)
+  if (isFailEffect(error)) return snapshotFail(error, seen)
 
   const trace = getTrace(error)
   const base = error instanceof Error
@@ -394,6 +412,23 @@ const snapshotErrorValue = (error: unknown, seen: Set<unknown>): DiagnosticError
     ...(aggregate === undefined ? {} : { aggregate: { errors: aggregate.map(e => snapshotErrorValue(e, seen)) } })
   }
 }
+
+const snapshotFail = (failure: DiagnosticFail, seen: Set<unknown>): DiagnosticErrorSnapshot => ({
+  ...snapshotErrorValue(failure.arg, seen),
+  ...(failure.trace === undefined ? {} : { trace: snapshotTrace(failure.trace) })
+})
+
+// Avoid importing Fail here: Fail.ts depends on Trace.ts.
+interface DiagnosticFail {
+  readonly _fxEffectId: 'fx/Fail'
+  readonly arg: unknown
+  readonly trace?: Trace
+}
+
+const isFailEffect = (value: unknown): value is DiagnosticFail =>
+  typeof value === 'object'
+  && value !== null
+  && (value as Partial<DiagnosticFail>)._fxEffectId === 'fx/Fail'
 
 const snapshotErrorObject = (error: Error): DiagnosticErrorSnapshot => ({
   type: error.constructor.name,
@@ -425,6 +460,15 @@ const aggregateErrors = (error: unknown): readonly unknown[] | undefined => {
 
   return undefined
 }
+
+const formatActiveScopes = (scopes: readonly string[] | undefined, context?: FormatContext): readonly string[] => {
+  if (scopes === undefined || scopes.length === 0) return []
+  const label = context?.style.section('Active scopes') ?? 'Active scopes'
+  return [`${label}: ${compactActiveScopes(scopes).join(' > ')}`]
+}
+
+const compactActiveScopes = (scopes: readonly string[]): readonly string[] =>
+  scopes.length <= 4 ? scopes : [scopes[0], '...', ...scopes.slice(-3)]
 
 interface FormatContext {
   readonly style: DiagnosticStyle
@@ -476,6 +520,7 @@ const formatDiagnosticError = (
   const prefix = ' '.repeat(indent)
   lines.push(`${prefix}${formatDiagnosticHeader(error, context)}`)
   formatDiagnosticFields(error.fields, lines, indent, context)
+  formatDiagnosticActiveScopes(error.trace?.activeScopes, lines, indent, context)
 
   if (error.trace !== undefined) {
     const omitTraceSuffix = options.omitTraceSuffix ?? 0
@@ -497,6 +542,18 @@ const formatDiagnosticError = (
   if (error.aggregate !== undefined) {
     formatDiagnosticAggregate(error, lines, indent, context)
   }
+}
+
+const formatDiagnosticActiveScopes = (
+  scopes: readonly string[] | undefined,
+  lines: string[],
+  indent: number,
+  context: FormatContext
+): void => {
+  const formatted = formatActiveScopes(scopes, context)
+  if (formatted.length === 0) return
+  const prefix = ' '.repeat(indent)
+  lines.push(`${prefix}${formatted[0]}`)
 }
 
 const formatDiagnosticHeader = (error: DiagnosticErrorSnapshot, context: FormatContext): string => {
@@ -563,7 +620,7 @@ const formatDiagnosticTrace = (
 
   if (frames.length > 0) {
     lines.push(`${prefix}${context.style.section('Fx trace:')}`)
-    for (const frame of frames) {
+    for (const frame of compactConcurrencyFrames(frames)) {
       lines.push(`${prefix}  at ${formatSnapshotFrame(frame, context)}`)
       if (frame.location !== undefined) {
         lines.push(`${prefix}     ${formatTraceLocation(frame.location, context)}`)
@@ -579,6 +636,27 @@ const formatDiagnosticTrace = (
     else if (trace.truncated) lines.push(`${prefix}  ${context.style.section('<trace truncated; older frames omitted>')}`)
   }
 }
+
+const compactConcurrencyFrames = (frames: readonly TraceSnapshotFrame[]): readonly TraceSnapshotFrame[] =>
+  frames.filter((frame, i) => !isSameLocationConcurrencyParent(frame, frames[i - 1]))
+
+const isSameLocationConcurrencyParent = (
+  frame: TraceSnapshotFrame,
+  previous: TraceSnapshotFrame | undefined
+): boolean =>
+  previous !== undefined
+  && (frame.kind === 'all' || frame.kind === 'race')
+  && frame.kind === previous.kind
+  && frame.index === undefined
+  && previous.index !== undefined
+  && sameTraceLocation(frame, previous)
+
+const sameTraceLocation = (a: TraceSnapshotFrame, b: TraceSnapshotFrame): boolean =>
+  a.location !== undefined
+  && b.location !== undefined
+  && a.location.file === b.location.file
+  && a.location.line === b.location.line
+  && a.location.column === b.location.column
 
 const formatSnapshotFrame = (frame: TraceSnapshotFrame, context: FormatContext): string => {
   const metadata = formatFrameMetadata(frame)

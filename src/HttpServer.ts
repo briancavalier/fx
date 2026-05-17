@@ -3,8 +3,8 @@ import { Effect } from './Effect.js'
 import { Get, provide, provideFrom, type ExcludeEnv } from './Env.js'
 import { Fail } from './Fail.js'
 import { Fx, flatMap, ok } from './Fx.js'
-import { type Headers, type Method } from './HttpClient.js'
 import { HandlerCapture, captureHandlers, type CapturedHandler } from './HandlerCapture.js'
+import { type Headers, type Method } from './HttpClient.js'
 
 /**
  * A transport-neutral HTTP server request.
@@ -129,43 +129,40 @@ export const route = <E>(
   method: Method,
   path: string,
   handle: Fx<E, ServerResponse<any>>
-): Routes<RouteEffects<E>> => ({
-    type: 'route',
-    route: {
-      method,
-      path,
-      handle: handle as unknown as RouteHandler<RouteEffects<E>>
-    }
-  })
-
-export function routes<const E1>(r1: Routes<E1>): Routes<E1>
-export function routes<const E1, const E2>(r1: Routes<E1>, r2: Routes<E2>): Routes<E1 | E2>
-export function routes<const E1, const E2, const E3>(r1: Routes<E1>, r2: Routes<E2>, r3: Routes<E3>): Routes<E1 | E2 | E3>
-export function routes<const E1, const E2, const E3, const E4>(r1: Routes<E1>, r2: Routes<E2>, r3: Routes<E3>, r4: Routes<E4>): Routes<E1 | E2 | E3 | E4>
-export function routes<const E1, const E2, const E3, const E4, const E5>(r1: Routes<E1>, r2: Routes<E2>, r3: Routes<E3>, r4: Routes<E4>, r5: Routes<E5>): Routes<E1 | E2 | E3 | E4 | E5>
-export function routes<const Rs extends readonly Routes<any>[]>(
-  ...routes: Rs
-): Routes<EffectsOfRoutes<Rs[number]>>
-export function routes(
-  ...routes: readonly Routes<any>[]
-): Routes<any> {
-  return {
-    type: 'concat',
-    routes
+): SingleRoute<RouteEffects<E>> => ({
+  type: 'route',
+  route: {
+    method,
+    path,
+    handle: handle as unknown as RouteHandler<RouteEffects<E>>
   }
+})
+
+type RouteList<Rs extends readonly unknown[]> = {
+  readonly [K in keyof Rs]: Routes<unknown>
 }
+
+export const routes = <const Rs extends readonly unknown[]>(
+  ...routes: Rs & RouteList<Rs>
+): ConcatRoutes<EffectsOfRoutes<Rs[number]>> => ({
+  type: 'concat',
+  routes: routes as readonly Routes<EffectsOfRoutes<Rs[number]>>[]
+})
 
 export const mount = <E>(
   prefix: string,
   routes: Routes<E>
-): Routes<E> => ({
-    type: 'mount',
-    prefix,
-    routes
-  })
+): MountedRoutes<E> => ({
+  type: 'mount',
+  prefix,
+  routes
+})
 
 export type EffectsOfRoutes<R> =
-  R extends Routes<infer E> ? E : never
+  R extends SingleRoute<infer E> ? E
+  : R extends ConcatRoutes<infer E> ? E
+  : R extends MountedRoutes<infer E> ? E
+  : never
 
 export type RouteTransform<E1, E2> =
   <A>(fx: Fx<E1 | Get<RouteContext<any>>, A>) => Fx<E2 | Get<RouteContext<any>>, A>

@@ -318,14 +318,14 @@ const toFetchRequest = (r: Request, signal: AbortSignal): globalThis.RequestInit
 
 const toFetchBody = (r: Request): { readonly body?: NonNullable<globalThis.RequestInit['body']>; readonly headers?: globalThis.Headers } => {
   const h = r.headers
-    ? new globalThis.Headers(r.headers.map(([name, value]) => [name, value]))
+    ? new globalThis.Headers(r.headers.map(([name, value]) => [name, value] as [string, string]))
     : new globalThis.Headers()
 
   if (!r.body) return { headers: h }
 
   switch (r.body.type) {
     case 'text':
-      return { body: r.body.value, headers: h }
+      return { body: r.body.value as NonNullable<globalThis.RequestInit['body']>, headers: h }
 
     case 'json':
       if (!h.has('content-type')) {
@@ -339,7 +339,7 @@ const toFetchBody = (r: Request): { readonly body?: NonNullable<globalThis.Reque
         h.set('content-type', r.body.contentType)
       }
 
-      return { body: r.body.value, headers: h }
+      return { body: r.body.value as NonNullable<globalThis.RequestInit['body']>, headers: h }
 
     case 'stream':
       if (r.body.contentType !== undefined && !h.has('content-type')) {

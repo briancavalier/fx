@@ -26,6 +26,7 @@ import {
 } from './HttpServer.js'
 import { NodeHttpError, nodeHttp, type NodeHttpServerFactory } from './HttpServerNode.js'
 import { HandlerCapture } from './HandlerCapture.js'
+import type { Interrupt } from './Interrupt.js'
 import { emit, Stream } from './Stream.js'
 import { dispose } from './Task.js'
 
@@ -40,8 +41,10 @@ describe('HttpServer', () => {
       const rs = routes(r1, r2)
 
       type Actual = EffectsOfRoutes<typeof rs>
+      const actual: Actual = null as never as E1 | E2
+      const expected: E1 | E2 = null as never as Actual
       const _: Routes<E1 | E2> = rs
-      void (_ satisfies Routes<Actual>)
+      void ([_ , actual, expected] satisfies [Routes<Actual>, Actual, E1 | E2])
     })
 
     it('mount composes prefixes without mutating child routes', async () => {
@@ -90,7 +93,7 @@ describe('HttpServer', () => {
       void _
 
       const handled = unhandled.pipe(handle(CurrentValue, () => ok('handled')))
-      const runnable: Fx<Async | HandlerCapture<string>, void> = handled
+      const runnable: Fx<Async | Interrupt | HandlerCapture<string>, void> = handled
       void runnable
     })
 
@@ -99,7 +102,7 @@ describe('HttpServer', () => {
         return text(request.path)
       }))
 
-      const runnable: Fx<Async | HandlerCapture<string>, void> = serve(app, { port: 3000 }).pipe(
+      const runnable: Fx<Async | Interrupt | HandlerCapture<string>, void> = serve(app, { port: 3000 }).pipe(
         nodeHttp(),
         assertNoFail
       )
@@ -456,7 +459,7 @@ describe('HttpServer', () => {
         assertNoFail
       )
 
-      const _: Fx<Async | HandlerCapture<string> | Stream<ServerEvent>, void> = observed
+      const _: Fx<Async | Interrupt | HandlerCapture<string> | Stream<ServerEvent>, void> = observed
       void _
     })
 
@@ -547,7 +550,7 @@ const readBody = async (body: ResponseBody<any> | undefined): Promise<string> =>
 }
 
 const withServer = async (
-  program: (createServer: NodeHttpServerFactory) => Fx<Async | HandlerCapture<string> | Fail<NodeHttpError>, void>,
+  program: (createServer: NodeHttpServerFactory) => Fx<Async | Interrupt | HandlerCapture<string> | Fail<NodeHttpError>, void>,
   test: (port: number) => Promise<void>
 ) => {
   let port = 0

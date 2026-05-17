@@ -1,7 +1,7 @@
-import { defaultRuntime, flatMap, fx, runPromise } from "../../src"
-import { log } from "../../src/Console"
-import { all, bounded, defaultAll } from "../../src/Concurrent"
-import { sleep } from "../../src/Time"
+import { defaultRuntime, flatMap, fx, runPromise } from "../../src/index.js"
+import { log } from "../../src/Console.js"
+import { all, bounded, defaultAll } from "../../src/Concurrent.js"
+import { sleep } from "../../src/Time.js"
 
 const getUser = (id: number) => fx(function* () {
   yield* sleep(1000) // Simulate a delay

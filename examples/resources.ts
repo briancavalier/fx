@@ -1,11 +1,22 @@
-import { nodeSourceLookup } from "../src/TraceNode"
-import { assertSync, formatDiagnostic, fx, runPromise } from "../src"
-import { all, defaultAll, unbounded } from "../src/Concurrent"
-import { defaultConsole, error } from "../src/Console"
-import { catchAll, fail } from "../src/Fail"
-import { managed, usingManaged } from "../src/Finalization"
-import { scope } from "../src/Scope"
-import { defaultTime, sleep } from "../src/Time"
+import { nodeSourceLookup } from "../src/TraceNode.js"
+import { formatDiagnostic, fx, runPromise } from "../src/index.js"
+import { all, defaultAll, unbounded } from "../src/Concurrent.js"
+import { defaultConsole, error, log } from "../src/Console.js"
+import { catchAll, fail } from "../src/Fail.js"
+import { managed, usingManaged } from "../src/Finalization.js"
+import { scope } from "../src/Scope.js"
+import { defaultTime, sleep } from "../src/Time.js"
+
+/*
+ * Resource safety with structured concurrency.
+ *
+ * Two jobs run with `all`. One job fails while the other is still sleeping, so
+ * `defaultAll` interrupts the slow sibling. Both jobs acquire managed resources
+ * in the same named `scope`, and each resource has an async finalizer.
+ *
+ * The output shows both exit paths: the failing job releases after `failure`,
+ * while the slow sibling releases after `interrupted`.
+ */
 
 const Resources = 'examples/resources' as const
 
@@ -13,22 +24,35 @@ const myResource = (name: string) => fx(function* () {
   yield* sleep(100)
   return managed(
     name,
-    exit => assertSync(() => console.log(`releasing resource: ${name} after ${exit.type}`))
+    exit => fx(function* () {
+      yield* log(`releasing resource: ${name} after ${exit.type}`)
+      yield* sleep(250)
+      yield* log(`released resource: ${name}`)
+    })
   )
 })
 
-const f = (n: number) => fx(function* () {
-  const resource = yield* usingManaged(Resources, myResource(`my-resource-${n}`))
+const failingJob = fx(function* () {
+  const resource = yield* usingManaged(Resources, myResource('failing-job-resource'))
 
-  console.log(`using resource: ${resource}`)
+  yield* log(`using resource: ${resource}`)
 
-  yield* sleep(1000)
+  yield* sleep(250)
   yield* fail(new Error('Simulated failure'))
 
-  console.log(`done using resource: ${resource}`)
+  yield* log(`done using resource: ${resource}`)
 })
 
-await all([f(1), f(2)]).pipe(
+const slowJob = fx(function* () {
+  const resource = yield* usingManaged(Resources, myResource('slow-job-resource'))
+
+  yield* log(`using resource: ${resource}`)
+
+  yield* sleep(2000)
+  yield* log(`done using resource: ${resource}`)
+})
+
+await all([failingJob, slowJob]).pipe(
   defaultAll,
   scope(Resources),
   defaultTime,

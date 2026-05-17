@@ -1,10 +1,10 @@
-import { flatMap, runPromise, setTraceCapturePolicy, tap } from "../../src"
-import { defaultConsole, error, log } from "../../src/Console"
-import { catchAll } from "../../src/Fail"
-import { expectSuccess, json, request, w3cFetch } from "../../src/HttpClient"
-import { defaultRetry, retry } from "../../src/Retry"
-import { formatDiagnostic } from '../../src/Trace'
-import { nodeSourceLookup } from '../../src/TraceNode'
+import { flatMap, runPromise, setTraceCapturePolicy, tap } from "../../src/index.js"
+import { defaultConsole, error, log } from "../../src/Console.js"
+import { catchAll } from "../../src/Fail.js"
+import { expectSuccess, json, request, w3cFetch } from "../../src/HttpClient.js"
+import { defaultRetry, retry } from "../../src/Retry.js"
+import { formatDiagnostic } from '../../src/Trace.js'
+import { nodeSourceLookup } from '../../src/TraceNode.js'
 
 setTraceCapturePolicy('full')
 

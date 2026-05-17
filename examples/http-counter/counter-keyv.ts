@@ -1,3 +1,4 @@
+import KeyvSqlite from '@keyv/sqlite'
 import Keyv from 'keyv'
 import { Fx, assertSync, bracket, fx, handle } from '../../src/index.js'
 import { assertPromise } from '../../src/Async.js'
@@ -7,7 +8,7 @@ import { Next } from './counter.js'
 // another handler for the Counter effect
 
 export const keyvCounter = <E, A>(f: Fx<E, A>) => bracket(
-  assertSync(() => new Keyv<number>('sqlite://http-counter.sqlite')),
+  assertSync(() => new Keyv<number>({ store: new KeyvSqlite('sqlite://http-counter.sqlite') })),
   db => assertPromise(() => db.disconnect()),
   db => f.pipe(
     handle(Next, next => fx(function* () {

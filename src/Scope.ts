@@ -5,7 +5,9 @@ import { Finalizer, Finally } from './Finalization.js'
 import { Fx, fx } from './Fx.js'
 import { CapturedHandler, HandlerCapture } from './HandlerCapture.js'
 import { ReturnFrom } from './ReturnFrom.js'
+import { drainIteratorReturn, isInterpretingReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
+import { withActiveScope } from './internal/runtimeContext.js'
 
 export const brand = <Brand>() =>
   <const Name extends string>(name: Name): Name & Brand =>
@@ -21,6 +23,7 @@ export type Exit<
   | Failure<F>
   | ReturnedFrom<Scope, R>
   | Aborted<Scope>
+  | Interrupted<Scope>
 
 export interface Success<A> {
   readonly type: 'success'
@@ -40,6 +43,11 @@ export interface ReturnedFrom<Scope extends string, A> {
 
 export interface Aborted<Scope extends string> {
   readonly type: 'abort'
+  readonly scope: Scope
+}
+
+export interface Interrupted<Scope extends string> {
+  readonly type: 'interrupted'
   readonly scope: Scope
 }
 
@@ -78,34 +86,43 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
 
   *[Symbol.iterator](): Iterator<unknown, A> {
     const finalizers = [] as Finalizer[]
-    const i = this.fx[Symbol.iterator]()
-    try {
-      let ir = i.next()
-
+    const { scopeName } = this
+    const i = withActiveScope(scopeName, this.fx)[Symbol.iterator]()
+    const captured: CapturedHandler = {
+      wrap: fx => new ScopeBoundary(fx, scopeName)
+    }
+    let released = false
+    const release = function* (exit: Exit): Generator<unknown, readonly unknown[]> {
+      if (released) return []
+      released = true
+      return yield* withActiveScope(scopeName, releaseSafely(finalizers, exit))
+    }
+    const step = function* (ir: IteratorResult<unknown, A>): Generator<unknown, A, unknown> {
       while (!ir.done) {
         if (isEffect(ir.value)) {
           const effect = ir.value
+          const sameScope = (effect as { readonly scope?: unknown }).scope === scopeName
 
-          if (Finally.is(effect) && effect.arg.scope === this.scopeName) {
+          if (sameScope && Finally.is(effect)) {
             finalizers.push(effect.arg.finalizer)
             ir = i.next(undefined)
-          } else if (ReturnFrom.is(effect) && effect.arg.scope === this.scopeName) {
-            const exit = { type: 'returnFrom', scope: this.scopeName, value: effect.arg.value } satisfies Exit<Scope>
-            const failures = yield* releaseSafely(finalizers, exit)
-            if (failures.length > 0) return (yield* failCleanup(failures)) as A
-            return effect.arg.value as A
-          } else if (Abort.is(effect) && effect.arg === this.scopeName) {
-            const exit = { type: 'abort', scope: this.scopeName } satisfies Exit<Scope>
-            const failures = yield* releaseSafely(finalizers, exit)
-            if (failures.length > 0) return (yield* failCleanup(failures)) as A
-            return yield effect
+          } else if (sameScope && ReturnFrom.is(effect)) {
+            const exit = { type: 'returnFrom', scope: scopeName, value: effect.arg } satisfies Exit<Scope>
+            const failures = yield* release(exit)
+            if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup(failures))) as A
+            return effect.arg as A
+          } else if (sameScope && Abort.is(effect)) {
+            const exit = { type: 'abort', scope: scopeName } satisfies Exit<Scope>
+            const failures = yield* release(exit)
+            if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup(failures))) as A
+            return (yield effect) as A
           } else if (Fail.is(effect)) {
             const exit = { type: 'failure', failure: effect } satisfies Exit
-            const failures = yield* releaseSafely(finalizers, exit)
-            if (failures.length > 0) return (yield* failCleanup([effect.arg, ...failures])) as A
-            return yield effect
+            const failures = yield* release(exit)
+            if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup([effect.arg, ...failures]))) as A
+            return (yield effect) as A
           } else if (HandlerCapture.is(effect)) {
-            ir = i.next([this, ...(yield effect) as any])
+            ir = i.next([captured, ...(yield effect) as any])
           } else {
             ir = i.next(yield effect)
           }
@@ -115,12 +132,58 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
       }
 
       const exit = { type: 'success', value: ir.value } satisfies Exit<Scope, A>
-      const failures = yield* releaseSafely(finalizers, exit)
-      if (failures.length > 0) return (yield* failCleanup(failures)) as A
+      const failures = yield* release(exit)
+      if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup(failures))) as A
       return ir.value
-    } finally {
-      i.return?.()
     }
+
+    let completed = false
+    try {
+      const value = yield* step(i.next())
+      completed = true
+      return value
+    } finally {
+      const cleanupFailures = yield* collectInterruptedCleanupFailures(scopeName, release, completed, isInterpretingReturn(), i, step)
+      if (cleanupFailures.length > 0) yield* withActiveScope(scopeName, failCleanup(cleanupFailures))
+    }
+  }
+}
+
+const collectInterruptedCleanupFailures = function* <A, Scope extends string>(
+  scopeName: Scope,
+  release: (exit: Exit) => Generator<unknown, readonly unknown[]>,
+  completed: boolean,
+  shouldDrainReturn: boolean,
+  iterator: Iterator<unknown, A, unknown>,
+  step: (ir: IteratorResult<unknown, A>) => Generator<unknown, A, unknown>
+): Generator<unknown, readonly unknown[], unknown> {
+  const failures = [] as unknown[]
+  const exit = { type: 'interrupted', scope: scopeName } satisfies Exit<Scope>
+
+  yield* collectCleanupFailures(failures, function* () {
+    failures.push(...yield* release(exit))
+  })
+
+  if (!completed && shouldDrainReturn) {
+    yield* collectCleanupFailures(failures, function* () {
+      const result = yield* returnFail(fx(function* () {
+        return yield* drainIteratorReturn(iterator, step)
+      }))
+      if (Fail.is(result)) failures.push(result.arg)
+    })
+  }
+
+  return failures
+}
+
+const collectCleanupFailures = function* (
+  failures: unknown[],
+  cleanup: () => Generator<unknown, void, unknown>
+): Generator<unknown, void, unknown> {
+  try {
+    yield* cleanup()
+  } catch (e) {
+    failures.push(e)
   }
 }
 
@@ -133,5 +196,6 @@ const releaseSafely = (resources: readonly Finalizer[], exit: Exit) => fx(functi
   return failures
 })
 
-const failCleanup = (failures: readonly unknown[]) =>
-  fail(new AggregateError(failures, 'Resource release failed'))
+const failCleanup = (failures: readonly unknown[]) => fx(function* () {
+  return yield* fail(new AggregateError(failures, 'Resource release failed'))
+})

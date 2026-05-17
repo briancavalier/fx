@@ -1,7 +1,7 @@
-import { flatMap, ok, run } from "../../src"
-import { catchOnly, fail } from "../../src/Fail"
-import { defaultConsole, error, log } from "../../src/Console"
-import { float, defaultRandom } from "../../src/Random"
+import { flatMap, ok, run } from "../../src/index.js"
+import { catchOnly, fail } from "../../src/Fail.js"
+import { defaultConsole, error, log } from "../../src/Console.js"
+import { float, defaultRandom } from "../../src/Random.js"
 
 class CustomError {
   constructor(readonly value: number) { }

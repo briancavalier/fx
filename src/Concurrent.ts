@@ -307,21 +307,57 @@ type TaskErrorsOf<Tasks extends readonly Task<unknown, unknown>[]> = {
 }
 
 const taskAll = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) => {
+  tasks.forEach(t => t._markHandled())
   const d = new DisposeAll(tasks)
-  const p = Promise.all(tasks.map(t => t.promise)).finally(() => { d[Symbol.dispose]() })
-  return new Task(p, d, currentRuntimeContext()) as Task<{ readonly [K in keyof Tasks]: TaskResult<Tasks[K]> }, TaskErrors<Tasks[number]>>
+  const p = Promise.all(tasks.map(t => t.promise)).then(
+    async value => {
+      const cleanupFailures = await d.disposeAndWait()
+      if (cleanupFailures.length > 0) throw resourceReleaseFailed(cleanupFailures)
+      return value
+    },
+    async failure => {
+      const cleanupFailures = await d.disposeAndWait()
+      if (cleanupFailures.length > 0) throw resourceReleaseFailed([failure, ...cleanupFailures])
+      throw failure
+    }
+  )
+  return new Task(p, d, currentRuntimeContext(), d.disposed) as Task<{ readonly [K in keyof Tasks]: TaskResult<Tasks[K]> }, TaskErrors<Tasks[number]>>
 }
 
 const taskRace = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) => {
+  tasks.forEach(t => t._markHandled())
   const d = new DisposeAll(tasks)
-  const p = Promise.race(tasks.map(t => t.promise)).finally(() => { d[Symbol.dispose]() })
-  return new Task(p, d, currentRuntimeContext()) as Task<TaskResult<Tasks[number]>, TaskErrors<Tasks[number]>>
+  const p = Promise.race(tasks.map(t => t.promise)).then(
+    async value => {
+      const cleanupFailures = await d.disposeAndWait()
+      if (cleanupFailures.length > 0) throw resourceReleaseFailed(cleanupFailures)
+      return value as TaskResult<Tasks[number]>
+    },
+    async failure => {
+      const cleanupFailures = await d.disposeAndWait()
+      if (cleanupFailures.length > 0) throw resourceReleaseFailed([failure, ...cleanupFailures])
+      throw failure
+    }
+  )
+  return new Task(p, d, currentRuntimeContext(), d.disposed) as Task<TaskResult<Tasks[number]>, TaskErrors<Tasks[number]>>
 }
 
 const taskFirstSuccess = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) => {
+  tasks.forEach(t => t._markHandled())
   const d = new DisposeAll(tasks)
-  const p = firstSuccessfulPromise(tasks).finally(() => { d[Symbol.dispose]() })
-  return new Task(p, d, currentRuntimeContext()) as Task<TaskResult<Tasks[number]>, RaceAllFailed<TaskErrorsOf<Tasks>>>
+  const p = firstSuccessfulPromise(tasks).then(
+    async value => {
+      const cleanupFailures = await d.disposeAndWait()
+      if (cleanupFailures.length > 0) throw resourceReleaseFailed(cleanupFailures)
+      return value
+    },
+    async failure => {
+      const cleanupFailures = await d.disposeAndWait()
+      if (cleanupFailures.length > 0) throw resourceReleaseFailed([failure, ...cleanupFailures])
+      throw failure
+    }
+  )
+  return new Task(p, d, currentRuntimeContext(), d.disposed) as Task<TaskResult<Tasks[number]>, RaceAllFailed<TaskErrorsOf<Tasks>>>
 }
 
 const firstSuccessfulPromise = async <Tasks extends readonly Task<unknown, unknown>[]>(
@@ -350,6 +386,47 @@ const firstSuccessfulPromise = async <Tasks extends readonly Task<unknown, unkno
 }
 
 class DisposeAll {
-  constructor(private readonly tasks: Iterable<Task<unknown, unknown>>) { }
-  [Symbol.dispose]() { for (const t of this.tasks) t[Symbol.dispose]() }
+  private readonly disposedResolver = Promise.withResolvers<void>()
+  readonly disposed = this.disposedResolver.promise
+  private disposedPromise?: Promise<readonly unknown[]>
+
+  constructor(private readonly tasks: Iterable<Task<unknown, unknown>>) {
+    this.disposed.catch(() => { })
+  }
+
+  [Symbol.dispose]() { void this.disposeAndWait() }
+
+  disposeAndWait() {
+    this.disposedPromise ??= Promise.allSettled([...this.tasks].map(t => t._disposeAndWait())).then(
+      results => {
+        const failures = results.flatMap(result =>
+          result.status === 'rejected' ? cleanupFailuresOf(result.reason) : []
+        )
+        if (failures.length > 0) this.disposedResolver.reject(resourceReleaseFailed(failures))
+        else this.disposedResolver.resolve()
+        return failures
+      }
+    )
+    return this.disposedPromise
+  }
 }
+
+const resourceReleaseFailed = (failures: readonly unknown[]) =>
+  new AggregateError(failures, 'Resource release failed')
+
+const cleanupFailuresOf = (failure: unknown): readonly unknown[] => {
+  // TODO: Investigate focused unwrapping for disposal-time ForkError wrappers
+  // around rejected Async cleanup, while preserving useful runtime traces.
+  const cleanupFailure = isResourceReleaseFailure(failure)
+    ? failure
+    : typeof failure === 'object' && failure !== null && 'cause' in failure && isResourceReleaseFailure(failure.cause)
+    ? failure.cause
+    : undefined
+
+  return cleanupFailure === undefined
+    ? [failure]
+    : cleanupFailure.errors.flatMap(cleanupFailuresOf)
+}
+
+const isResourceReleaseFailure = (failure: unknown): failure is AggregateError =>
+  failure instanceof AggregateError && failure.message === 'Resource release failed'

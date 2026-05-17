@@ -193,8 +193,10 @@ describe('Timeout', () => {
   })
 
   it('does not handle timeout failures until defaultTimeout is applied', () => {
-    // @ts-expect-error Timeout is not handled
-    run(ok('ok').pipe(timeout({ ms: 1 })))
+    assert.throws(() => {
+      // @ts-expect-error Timeout is not handled
+      run(ok('ok').pipe(timeout({ ms: 1 })))
+    }, /Unhandled effect in run/)
   })
 })
 

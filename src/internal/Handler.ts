@@ -1,6 +1,7 @@
 import { EffectType, isEffect } from '../Effect.js'
 import { Fx } from '../Fx.js'
 import { HandlerCapture, type CapturedHandler } from '../HandlerCapture.js'
+import { drainIteratorReturn } from './iteratorClose.js'
 import { Pipeable, pipeThis } from './pipe.js'
 import { getRuntimeContext, withActiveRuntimeContext, withRuntimeContext } from './runtimeContext.js'
 
@@ -23,9 +24,8 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, CapturedHandler {
   *[Symbol.iterator](): Iterator<E, A> {
     const { effectId, handler, fx } = this
     const i = fx[Symbol.iterator]()
-    try {
-      let ir = i.next()
-
+    let captured: CapturedHandler | undefined
+    const step = function* (ir: IteratorResult<E, A>): Generator<E, A, unknown> {
       while (!ir.done) {
         if (isEffect(ir.value)) {
           const effect = ir.value
@@ -35,8 +35,11 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, CapturedHandler {
               ? handler(effect)
               : withActiveRuntimeContext(context, () => handler(effect))
             ir = i.next(yield* withRuntimeContext(context, handled) as any)
-          } else if (HandlerCapture.is(effect)) {
-            ir = i.next([this, ...(yield effect) as any])
+          } else if (effect._fxEffectId === HandlerCapture._fxEffectId) {
+            captured ??= {
+              wrap: fx => new Handler(fx, effectId, handler)
+            }
+            ir = i.next([captured, ...(yield effect) as any])
           } else {
             ir = i.next(yield effect as any)
           }
@@ -46,8 +49,16 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, CapturedHandler {
       }
 
       return ir.value
+    }
+    let completed = false
+    try {
+      const value = yield* step(i.next())
+      completed = true
+      return value
     } finally {
-      i.return?.()
+      if (!completed) {
+        yield* drainIteratorReturn(i, step)
+      }
     }
   }
 }
@@ -71,9 +82,7 @@ export class Control<E, A> implements Fx<E, A>, Pipeable {
 
     const { effectId, handler, fx } = this
     const i = fx[Symbol.iterator]()
-    try {
-      let ir = i.next()
-
+    const step = function* (ir: IteratorResult<E, A>): Generator<E, A, unknown> {
       while (!ir.done) {
         if (isEffect(ir.value)) {
           const effect = ir.value
@@ -83,7 +92,10 @@ export class Control<E, A> implements Fx<E, A>, Pipeable {
               ? handler(k, effect)
               : withActiveRuntimeContext(context, () => handler(k, effect))
             const hr = yield* withRuntimeContext(context, handled) as any
-            if (!done) return hr
+            if (!done) {
+              yield* drainIteratorReturn(i, step)
+              return hr
+            }
             done = false
             ir = i.next(hr)
           } else {
@@ -95,8 +107,16 @@ export class Control<E, A> implements Fx<E, A>, Pipeable {
       }
 
       return ir.value
+    }
+    let completed = false
+    try {
+      const value = yield* step(i.next())
+      completed = true
+      return value
     } finally {
-      i.return?.()
+      if (!completed) {
+        yield* drainIteratorReturn(i, step)
+      }
     }
   }
 }

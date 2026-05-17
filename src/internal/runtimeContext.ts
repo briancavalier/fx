@@ -11,6 +11,7 @@ import { Pipeable, pipeThis } from './pipe.js'
  */
 export interface RuntimeContext {
   readonly traceCapturePolicy?: TraceCapturePolicy
+  readonly activeScopes?: readonly string[]
 }
 
 export const RuntimeContextTypeId = Symbol('fx/RuntimeContext')
@@ -40,7 +41,7 @@ export const withRuntimeContext = <E, A>(
 
 export const attachRuntimeContext = (target: unknown, context: RuntimeContext | undefined = activeRuntimeContext): void => {
   if (context === undefined || typeof target !== 'object' || target === null) return
-  if (getRuntimeContext(target) !== undefined) return
+  if ((target as Partial<Record<typeof RuntimeContextTypeId, RuntimeContext>>)[RuntimeContextTypeId] !== undefined) return
 
   try {
     Object.defineProperty(target, RuntimeContextTypeId, {
@@ -67,6 +68,15 @@ export const capturesTrace = (context?: RuntimeContext): boolean =>
 
 export const capturesStack = (context?: RuntimeContext): boolean =>
   traceCapturePolicy(context) === 'full'
+
+export const activeScopes = (context: RuntimeContext | undefined = activeRuntimeContext): readonly string[] =>
+  context?.activeScopes ?? []
+
+export const withActiveScope = <E, A>(scope: string, fx: Fx<E, A>): Fx<E, A> => {
+  const scopes = activeScopes()
+  const nextScopes = scopes.at(-1) === scope ? scopes : [...scopes, scope]
+  return withRuntimeContext({ activeScopes: nextScopes }, fx)
+}
 
 const mergeRuntimeContext = (
   previous: RuntimeContext | undefined,

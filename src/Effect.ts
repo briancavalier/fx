@@ -43,6 +43,16 @@ export const Effect = <const T extends string>(id: T) => class <A, R = unknown> 
   }
 }
 
+export const ScopedEffect = <const T extends string>(id: T) => class <
+  const Scope extends string,
+  A = void,
+  R = unknown
+> extends Effect(id)<A, R> {
+  constructor(public readonly scope: Scope, arg: A) {
+    super(arg)
+  }
+}
+
 export const isEffect = <E>(e: E): e is E & AnyEffect =>
   !!e && (e as any)._fxTypeId === EffectTypeId
 

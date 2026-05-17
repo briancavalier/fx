@@ -20,6 +20,7 @@ import {
   dispatch
 } from './HttpServer.js'
 import { HandlerCapture, handleCaptured, withCapturedHandlers, withHandlerContext } from './HandlerCapture.js'
+import type { Interrupt } from './Interrupt.js'
 import * as Queue from './internal/Queue.js'
 
 export type NodeHttpOptions = {
@@ -65,13 +66,13 @@ export const nodeHttp = ({
     ) as Fx<NodeHttpHandled<E>, A>
 
 export type NodeHttpHandled<E> =
-  Handle<Handle<E, Serve<any, any>, Async | Fail<NodeHttpError>>, HandlerCapture<typeof ServeScope>>
+  Handle<Handle<E, Serve<any, any>, Async | Fail<NodeHttpError> | Interrupt>, HandlerCapture<typeof ServeScope>>
   | HandlerCapture<typeof ServeScope>
 
 const runNodeServer = <E, OE>(
   request: ServeRequest<E, OE>,
   createServer: NodeHttpServerFactory
-): Fx<OE | Async | Fail<NodeHttpError>, void> => {
+): Fx<OE | Async | Fail<NodeHttpError> | Interrupt, void> => {
   const compiled = compileRoutes(request.routes)
   const observe = request.options.observe ?? ignoreServerEvent as (event: ServerEvent) => Fx<OE, void>
 
@@ -85,11 +86,11 @@ const runNodeServer = <E, OE>(
       server => closeNodeServer(server).pipe(
         flatMap(() => observe({ type: 'closed', timestamp: eventTimestamp() }))
       ),
-      server => drainNodeHttpEvents(events, server, observe)
+      () => drainNodeHttpEvents(events, observe)
     )
   ).pipe(
     flatMap(rethrowObservedFail)
-  ) as Fx<OE | Async | Fail<NodeHttpError>, void>
+  ) as Fx<OE | Async | Fail<NodeHttpError> | Interrupt, void>
 }
 
 type ServerInternalEvent =
@@ -164,10 +165,9 @@ const closeNodeServer = (
 
 const drainNodeHttpEvents = <E>(
   events: Queue.Dequeue<ServerInternalEvent>,
-  server: StartedNodeHttpServer,
   observe: (event: ServerEvent) => Fx<E, void>
 ): Fx<Exclude<E, Fail<any>> | Async | Fail<NodeHttpError>, void | Extract<E, Fail<any>>> => fx(function* () {
-    const dequeue = dequeueNodeHttpEvent(events, server)
+    const dequeue = dequeueNodeHttpEvent(events)
 
     while (!events.disposed) {
       const next = yield* dequeue
@@ -183,8 +183,7 @@ const drainNodeHttpEvents = <E>(
   })
 
 const dequeueNodeHttpEvent = (
-  events: Queue.Dequeue<ServerInternalEvent>,
-  started: StartedNodeHttpServer
+  events: Queue.Dequeue<ServerInternalEvent>
 ): Fx<Async | Fail<NodeHttpError>, Queue.Dequeued<ServerInternalEvent> | Queue.Disposed> =>
   tryPromise(signal => new Promise<Queue.Dequeued<ServerInternalEvent> | Queue.Disposed>((resolve, reject) => {
     let settled = false
@@ -198,11 +197,8 @@ const dequeueNodeHttpEvent = (
       if (settled) return
       settled = true
       signal.removeEventListener('abort', onAbort)
-      started.cleanup()
       events[Symbol.dispose]()
-      started.server.close(error =>
-        error ? reject(error) : resolve({ tag: 'fx/Queue/Disposed' } as Queue.Disposed)
-      )
+      resolve({ tag: 'fx/Queue/Disposed' } as Queue.Disposed)
     }
 
     signal.addEventListener('abort', onAbort)

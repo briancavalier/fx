@@ -2,9 +2,10 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { abort, orReturn } from './Abort.js'
 import { fx, ok, run, type Fx } from './Fx.js'
+import { handleScoped } from './Handler.js'
 import { returnFrom } from './ReturnFrom.js'
 import { brand, scope } from './Scope.js'
-import { collectFrom, handleYieldFrom, YieldFrom, yieldFrom } from './YieldFrom.js'
+import { collectFrom, YieldFrom, yieldFrom } from './YieldFrom.js'
 import type { Yielding } from './YieldFrom.js'
 
 describe('YieldFrom', () => {
@@ -43,14 +44,15 @@ describe('YieldFrom', () => {
     const f = fx(function* () {
       yield* yieldFrom(OtherScope, 'other')
       return 'done'
-    }).pipe(handleYieldFrom(NumberScope, () => ok(undefined)))
+    }).pipe(handleScoped(YieldFrom<typeof NumberScope>, NumberScope, () => ok(undefined)))
 
     const _: typeof f extends Fx<YieldFrom<typeof OtherScope>, string> ? true : false = true
     const next = f[Symbol.iterator]().next()
 
     assert.equal(YieldFrom.is(next.value), true)
     const effect = next.value as YieldFrom<typeof OtherScope>
-    assert.deepEqual(effect.arg, { scope: OtherScope, value: 'other' })
+    assert.equal(effect.scope, OtherScope)
+    assert.equal(effect.arg, 'other')
   })
 
   it('handles nested named yield scopes independently', () => {
@@ -63,8 +65,8 @@ describe('YieldFrom', () => {
       yield* yieldFrom(InnerScope, 'inner')
       return 'done'
     }).pipe(
-      handleYieldFrom(InnerScope, value => ok(void inner.push(value))),
-      handleYieldFrom(NumberScope, value => ok(void outer.push(value))),
+      handleScoped(YieldFrom<typeof InnerScope>, InnerScope, effect => ok(void inner.push(effect.arg))),
+      handleScoped(YieldFrom<typeof NumberScope>, NumberScope, effect => ok(void outer.push(effect.arg))),
       run
     )
 
@@ -77,7 +79,7 @@ describe('YieldFrom', () => {
     const f = fx(function* () {
       yield* yieldFrom(ItemScope, 'item')
       return true
-    }).pipe(handleYieldFrom(ItemScope, () => ok(undefined)))
+    }).pipe(handleScoped(YieldFrom<typeof ItemScope>, ItemScope, () => ok(undefined)))
 
     const _: typeof f extends Fx<never, boolean> ? true : false = true
 
@@ -89,7 +91,7 @@ describe('YieldFrom', () => {
       const accepted = yield* yieldFrom(DecisionScope, 'item')
       const _: boolean = accepted
       return accepted ? 'accepted' : 'rejected'
-    }).pipe(handleYieldFrom(DecisionScope, value => ok(value === 'item')))
+    }).pipe(handleScoped(YieldFrom<typeof DecisionScope>, DecisionScope, effect => ok(effect.arg === 'item')))
 
     const _: typeof f extends Fx<never, 'accepted' | 'rejected'> ? true : false = true
 
@@ -110,7 +112,7 @@ describe('YieldFrom', () => {
       yield* yieldFrom(ItemScope, 'item')
       return 'late'
     }).pipe(
-      handleYieldFrom(ItemScope, () => returnFrom(ReturnScope, 'early')),
+      handleScoped(YieldFrom<typeof ItemScope>, ItemScope, () => returnFrom(ReturnScope, 'early')),
       scope(ReturnScope),
       run
     )
@@ -125,7 +127,7 @@ describe('YieldFrom', () => {
       yield* yieldFrom(ItemScope, 'item')
       return 'late'
     }).pipe(
-      handleYieldFrom(ItemScope, () => abort(AbortScope)),
+      handleScoped(YieldFrom<typeof ItemScope>, ItemScope, () => abort(AbortScope)),
       scope(AbortScope),
       orReturn(AbortScope, 'aborted'),
       run

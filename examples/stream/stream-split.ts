@@ -1,7 +1,7 @@
-import { flatMap, fx, run } from '../../src'
-import { log, defaultConsole } from '../../src/Console'
-import { next } from '../../src/Sink'
-import { emit, forEach, fromIterable, to } from '../../src/Stream'
+import { flatMap, fx, run } from '../../src/index.js'
+import { log, defaultConsole } from '../../src/Console.js'
+import { next } from '../../src/Sink.js'
+import { emit, forEach, fromIterable, to } from '../../src/Stream.js'
 
 // From Effect-TS discord
 // https://discord.com/channels/795981131316985866/1125094089281511474/1245070996621365318

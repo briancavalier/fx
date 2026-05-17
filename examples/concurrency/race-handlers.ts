@@ -1,9 +1,9 @@
-import { fx, runPromise } from '../../src'
-import { RaceAllFailed, firstSettled, firstSuccess, race, unbounded } from '../../src/Concurrent'
-import { Fail, fail, returnFail } from '../../src/Fail'
-import { defaultTime, sleep } from '../../src/Time'
-import { formatDiagnostic, formatError, snapshotError } from '../../src/Trace'
-import { nodeSourceLookup } from '../../src/TraceNode'
+import { fx, runPromise } from '../../src/index.js'
+import { RaceAllFailed, firstSettled, firstSuccess, race, unbounded } from '../../src/Concurrent.js'
+import { Fail, fail, returnFail } from '../../src/Fail.js'
+import { defaultTime, sleep } from '../../src/Time.js'
+import { formatDiagnostic, formatError, snapshotError } from '../../src/Trace.js'
+import { nodeSourceLookup } from '../../src/TraceNode.js'
  
 // This example builds one Race request and interprets it with two different
 // handlers. `firstSettled` is first-settled, like Promise.race: the fast failure

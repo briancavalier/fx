@@ -1,7 +1,7 @@
-import { Fx, HandlerCapture, fx, ok, runPromise } from '../../src'
-import { Async } from '../../src/Async'
-import { All, all, defaultAll, unbounded } from '../../src/Concurrent'
-import { sleep, defaultTime } from '../../src/Time'
+import { Fx, HandlerCapture, fx, ok, runPromise } from '../../src/index.js'
+import { Async } from '../../src/Async.js'
+import { All, all, defaultAll, unbounded } from '../../src/Concurrent.js'
+import { sleep, defaultTime } from '../../src/Time.js'
 
 // Concurrent map-reduce
 // Splits the input in half and runs mapReduce on each half concurrently

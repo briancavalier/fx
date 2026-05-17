@@ -1,4 +1,4 @@
-import { Effect } from '../../src'
+import { Effect } from '../../src/index.js'
 
 export type WeatherQuery = {
   readonly location?: string

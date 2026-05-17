@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { Fx, handle, map, ok, run } from '../../src'
-import { provide } from '../../src/Env'
+import { Fx, handle, map, ok, run } from '../../src/index.js'
+import { provide } from '../../src/Env.js'
 
-import { GenerateSecret, Print, Read, checkAnswer, main } from './main'
+import { GenerateSecret, Print, Read, checkAnswer, main } from './main.js'
 
 // -------------------------------------------------------------------
 // #region Handlers

@@ -1,8 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
     "target": "ESNext",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
@@ -14,12 +12,13 @@
     ],
     "checkJs": false,
     "allowJs": false,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
     "strict": true
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "examples/**/*.ts"
+  ],
+  "exclude": [
+    "examples/bookmarks/browser/**/*.ts"
   ]
 }

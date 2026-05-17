@@ -1,6 +1,6 @@
-import { fx, runPromise } from '../../src'
-import { all, bounded, defaultAll } from '../../src/Concurrent'
-import { sleep, defaultTime } from '../../src/Time'
+import { fx, runPromise } from '../../src/index.js'
+import { all, bounded, defaultAll } from '../../src/Concurrent.js'
+import { sleep, defaultTime } from '../../src/Time.js'
 
 // Number of tasks to fork
 const tasks = 4

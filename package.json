@@ -9,6 +9,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./platform-node": {
+      "types": "./dist/platform-node.d.ts",
+      "import": "./dist/platform-node.js"
+    },
     "./Abort": {
       "types": "./dist/Abort.d.ts",
       "import": "./dist/Abort.js"
@@ -52,6 +56,10 @@
     "./Log": {
       "types": "./dist/Log.d.ts",
       "import": "./dist/Log.js"
+    },
+    "./NodeRuntime": {
+      "types": "./dist/NodeRuntime.d.ts",
+      "import": "./dist/NodeRuntime.js"
     },
     "./Random": {
       "types": "./dist/Random.d.ts",

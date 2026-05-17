@@ -1,8 +1,8 @@
 import { setTimeout } from 'node:timers/promises'
-import { flatMap, fx, runPromise } from '../../src'
-import { firstSettled, race, unbounded } from '../../src/Concurrent'
-import { int, defaultRandom } from '../../src/Random'
-import { sleep, defaultTime } from '../../src/Time'
+import { flatMap, fx, runPromise } from '../../src/index.js'
+import { firstSettled, race, unbounded } from '../../src/Concurrent.js'
+import { int, defaultRandom } from '../../src/Random.js'
+import { sleep, defaultTime } from '../../src/Time.js'
 
 const randomWait = () => Math.floor(Math.random() * 100)
 

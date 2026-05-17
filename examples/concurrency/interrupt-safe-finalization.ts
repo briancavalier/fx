@@ -1,9 +1,10 @@
-import { fx, runPromise } from '../../src'
-import { firstSettled, race, unbounded } from '../../src/Concurrent'
-import { defaultConsole, log } from '../../src/Console'
-import { usingExit } from '../../src/Finalization'
-import { scope } from '../../src/Scope'
-import { defaultTime, sleep } from '../../src/Time'
+import { fx, runPromise } from '../../src/index.js'
+import { firstSettled, race, unbounded } from '../../src/Concurrent.js'
+import { defaultConsole, log } from '../../src/Console.js'
+import { assert as assertNoFail } from '../../src/Fail.js'
+import { usingExit } from '../../src/Finalization.js'
+import { scope } from '../../src/Scope.js'
+import { defaultTime, sleep } from '../../src/Time.js'
 
 /*
  * Interrupt-safe finalization with `race`.
@@ -62,5 +63,6 @@ await main.pipe(
   defaultTime,
   unbounded,
   defaultConsole,
+  assertNoFail,
   runPromise
 )

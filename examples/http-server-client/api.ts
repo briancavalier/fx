@@ -1,6 +1,8 @@
+import type { Async } from '../../src/Async.js'
+import type { Fail } from '../../src/Fail.js'
 import { handle } from '../../src/Handler.js'
-import { bytes as readBytes } from '../../src/HttpClient.js'
-import { mount, route, routes, type ServerRequest, type ServerResponse } from '../../src/HttpServer.js'
+import { bytes as readBytes, type DecodeError } from '../../src/HttpClient.js'
+import { mount, route, routes, type Routes, type ServerRequest, type ServerResponse } from '../../src/HttpServer.js'
 import { Effect, fx, map, ok, type Fx } from '../../src/index.js'
 
 export type Note = {
@@ -14,14 +16,16 @@ export class AddNote extends Effect('example/HttpServerClient/AddNote')<string, 
 export const listNotes = new ListNotes()
 export const createNote = (text: string) => new AddNote(text)
 
-const apiRoutes = routes(
-  route('GET', '/health', () => ok(text('ok'))),
+type ApiRouteEffects = ListNotes | AddNote | Async | Fail<DecodeError>
 
-  route('GET', '/notes', () => fx(function* () {
+const apiRoutes: Routes<ApiRouteEffects> = routes(
+  route<ApiRouteEffects>('GET', '/health', () => ok(text('ok'))),
+
+  route<ApiRouteEffects>('GET', '/notes', () => fx(function* () {
     return json(yield* listNotes)
   })),
 
-  route('POST', '/notes', (req: ServerRequest) => fx(function* () {
+  route<ApiRouteEffects>('POST', '/notes', (req: ServerRequest) => fx(function* () {
     const note = yield* createNote((yield* readText(req)).trim())
     return json(note, 201)
   }))

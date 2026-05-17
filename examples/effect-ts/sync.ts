@@ -1,5 +1,5 @@
-import { run } from "../../src"
-import { log, defaultConsole } from "../../src/Console"
+import { run } from "../../src/index.js"
+import { log, defaultConsole } from "../../src/Console.js"
 
 const main = log('Hello, World!')
 

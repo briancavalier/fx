@@ -1,10 +1,11 @@
-import { fx, runPromise } from '../../src'
-import { firstSettled, race, unbounded } from '../../src/Concurrent'
-import { defaultConsole, log } from '../../src/Console'
-import { andFinallyExit } from '../../src/Finalization'
-import { uninterruptibleMask } from '../../src/Interrupt'
-import { scope } from '../../src/Scope'
-import { defaultTime, sleep } from '../../src/Time'
+import { fx, runPromise } from '../../src/index.js'
+import { firstSettled, race, unbounded } from '../../src/Concurrent.js'
+import { defaultConsole, log } from '../../src/Console.js'
+import { assert as assertNoFail } from '../../src/Fail.js'
+import { andFinallyExit } from '../../src/Finalization.js'
+import { uninterruptibleMask } from '../../src/Interrupt.js'
+import { scope } from '../../src/Scope.js'
+import { defaultTime, sleep } from '../../src/Time.js'
 
 /*
  * `uninterruptibleMask` keeps a short critical section safe from interruption,
@@ -60,5 +61,6 @@ await main.pipe(
   defaultTime,
   unbounded,
   defaultConsole,
+  assertNoFail,
   runPromise
 )

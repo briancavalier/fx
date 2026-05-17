@@ -2,8 +2,8 @@ import { Async } from './Async.js'
 import { Effect } from './Effect.js'
 import { Fail } from './Fail.js'
 import { Fx, flatMap, ok } from './Fx.js'
-import { type Headers, type Method } from './HttpClient.js'
 import { HandlerCapture, captureHandlers, type CapturedHandler } from './HandlerCapture.js'
+import { type Headers, type Method } from './HttpClient.js'
 
 /**
  * A transport-neutral HTTP server request.
@@ -78,7 +78,7 @@ export type ResponseBody<_E = never> =
 export type ParamsRecord = Readonly<Record<string, string>>
 
 export type RouteHandler<E, Params extends ParamsRecord = ParamsRecord> =
-  (request: ServerRequest<Params>) => Fx<E, ServerResponse<E>>
+  (request: ServerRequest<Params>) => Fx<E, ServerResponse>
 
 /**
  * A composable HTTP route declaration tree.
@@ -121,29 +121,36 @@ export const route = <E, Params extends ParamsRecord = ParamsRecord>(
   method: Method,
   path: string,
   handle: RouteHandler<E, Params>
-): Routes<E> => ({
-    type: 'route',
-    route: { method, path, handle: handle as RouteHandler<E> }
-  })
+): SingleRoute<E> => ({
+  type: 'route',
+  route: { method, path, handle: handle as RouteHandler<E> }
+})
 
-export const routes = <const Rs extends readonly Routes<any>[]>(
-  ...routes: Rs
-): Routes<EffectsOfRoutes<Rs[number]>> => ({
-    type: 'concat',
-    routes
-  })
+type RouteList<Rs extends readonly unknown[]> = {
+  readonly [K in keyof Rs]: Routes<unknown>
+}
+
+export const routes = <const Rs extends readonly unknown[]>(
+  ...routes: Rs & RouteList<Rs>
+): ConcatRoutes<EffectsOfRoutes<Rs[number]>> => ({
+  type: 'concat',
+  routes: routes as readonly Routes<EffectsOfRoutes<Rs[number]>>[]
+})
 
 export const mount = <E>(
   prefix: string,
   routes: Routes<E>
-): Routes<E> => ({
-    type: 'mount',
-    prefix,
-    routes
-  })
+): MountedRoutes<E> => ({
+  type: 'mount',
+  prefix,
+  routes
+})
 
 export type EffectsOfRoutes<R> =
-  R extends Routes<infer E> ? E : never
+  R extends SingleRoute<infer E> ? E
+  : R extends ConcatRoutes<infer E> ? E
+  : R extends MountedRoutes<infer E> ? E
+  : never
 
 export type RouteTransform<E1, E2> =
   <A>(fx: Fx<E1, A>) => Fx<E2, A>

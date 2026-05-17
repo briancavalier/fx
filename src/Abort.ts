@@ -2,7 +2,7 @@ import { at } from './Breadcrumb.js'
 import { ScopedEffect, withOrigin } from './Effect.js'
 import { Fx, fx, ok } from './Fx.js'
 import { control } from './Handler.js'
-import { scope as scoped, type ScopeEffects } from './Scope.js'
+import { scope as scoped, type ReturnValue, type ScopeEffects } from './Scope.js'
 
 /**
  * Abort the named scope without returning a result.
@@ -43,7 +43,7 @@ export const restartOnAbort = <const Scope extends string>(
   options: RestartOnAbortOptions
 ) => <const E, const A>(
   f: Fx<E, A>
-): Fx<ScopeEffects<E, Scope> | Abort<Scope>, A> =>
+): Fx<ScopeEffects<E, Scope> | Abort<Scope>, A | ReturnValue<E, Scope>> =>
   fx(function* () {
     let restarts = 0
     let aborted: Abort<Scope> | undefined
@@ -59,10 +59,10 @@ export const restartOnAbort = <const Scope extends string>(
 
     while (true) {
       const result = yield* attempt
-      if (result !== Restart) return result as A
+      if (result !== Restart) return result as A | ReturnValue<E, Scope>
 
       if (restarts >= options.restarts) return yield* aborted!
 
       restarts += 1
     }
-  }) as Fx<ScopeEffects<E, Scope> | Abort<Scope>, A>
+  }) as Fx<ScopeEffects<E, Scope> | Abort<Scope>, A | ReturnValue<E, Scope>>

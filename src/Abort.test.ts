@@ -6,6 +6,7 @@ import { originOf, withOrigin } from './Effect.js'
 import { fail, Fail, returnFail } from './Fail.js'
 import { andFinally } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
+import { returnFrom } from './ReturnFrom.js'
 import { scope } from './Scope.js'
 
 describe('Abort', () => {
@@ -133,6 +134,16 @@ describe('Abort', () => {
 
       assert.equal(next.value, original)
       assert.equal(originOf(next.value), originOf(original))
+    })
+
+    it('includes same-scope returnFrom values in its result type', () => {
+      const returned = fx(function* () {
+        yield* returnFrom(TestScope, 'early')
+        return 'late'
+      }).pipe(restartOnAbort(TestScope, { restarts: 1 }))
+      const _: typeof returned extends Fx<Abort<typeof TestScope>, 'early' | 'late'> ? true : false = true
+
+      assert.equal(returned.pipe(orReturn(TestScope, 'aborted'), run), 'early')
     })
 
     it('does not restart Abort from a different scope', () => {

@@ -346,6 +346,112 @@ the same regardless of client.
 If a browser-side `fx` client is added later, it should demonstrate a distinct
 point, such as interpreting `HttpClient` differently in browser and CLI.
 
+## Browser-local IndexedDB Client
+
+An optional later browser mode can run without the Node API server by interpreting
+the same domain programs directly in the browser and storing bookmarks in
+IndexedDB.
+
+Purpose:
+
+- demonstrate a browser platform interpretation of `BookmarkStore`,
+- make the browser demo usable across refreshes without running the server,
+- keep the no-server mode honest by reusing `addBookmark`, `listBookmarks`,
+  `markRead`, `archiveBookmark`, and `refreshMetadata`,
+- avoid introducing a service container, client framework, or domain-specific
+  transport abstraction before there are multiple concrete uses.
+
+The IndexedDB client should be browser-only and should not change the domain
+module, HTTP routes, CLI, or server storage handlers.
+
+Suggested files:
+
+```text
+examples/bookmarks/browser/
+  store-indexeddb.ts
+  local-client.ts
+```
+
+`store-indexeddb.ts` should export an `indexedDbBookmarkStore` handler for the
+existing `BookmarkStore` effect. Keep the storage shape boring:
+
+- database name: `fx-bookmarks`,
+- object store: `bookmarks`,
+- key path: `id`,
+- index: `url`,
+- stored value: a plain structured-cloneable record,
+- dates stored as ISO strings and decoded back to `Date`,
+- `tags` and `metadataStatus` stored as plain values that match the domain
+  shape.
+
+The handler should implement:
+
+- `FindBookmarkById` with `objectStore.get(id)`,
+- `FindBookmarkByUrl` with the `url` index,
+- `SaveBookmark` with `objectStore.put(serializedBookmark)`,
+- `ListBookmarks` by loading all bookmarks, decoding them, applying the same
+  filter semantics as the in-memory and SQLite handlers, and sorting by
+  `createdAt` then `id`.
+
+Loading all bookmarks is acceptable for this example. It keeps the IndexedDB
+code small and makes the handler easier to compare with the in-memory handler.
+Do not add indexed query planning unless the example grows enough to justify it.
+
+`local-client.ts` should expose the same operation names as the HTTP client, but
+without a `baseUrl` argument:
+
+```ts
+createLocalBookmark(input)
+listLocalBookmarks(query)
+markLocalBookmarkRead(id)
+archiveLocalBookmark(id)
+refreshLocalBookmarkMetadata(id)
+```
+
+Each function should call the corresponding domain program and apply browser
+handlers:
+
+- `indexedDbBookmarkStore`,
+- a browser id handler based on `crypto.randomUUID()` when available, with a
+  small timestamp/random fallback for older browsers,
+- `defaultTime` if it is browser-compatible, otherwise a tiny browser time
+  handler local to the browser example,
+- `demoPageMetadata` or a browser-safe metadata handler.
+
+Do not attempt real arbitrary URL metadata fetching in the browser for this
+mode. Browser CORS rules will make many pages unavailable, and that would
+distract from the storage example. A deterministic demo metadata handler is
+enough, or metadata failures can be recorded recoverably on the bookmark.
+
+Mode selection should be explicit. Prefer a URL query parameter:
+
+```text
+/bookmarks/?store=api
+/bookmarks/?store=indexeddb
+```
+
+Default to `api` so the existing server-backed example remains unchanged. Do
+not silently fall back from API mode to IndexedDB mode when requests fail; that
+would make user-visible behavior harder to explain.
+
+The UI should not fork into two copies. Instead, adapt `browser/app.ts` so the
+event handlers call a small `BookmarkBrowserClient` value selected once at
+startup:
+
+```ts
+type BookmarkBrowserClient<E> = {
+  readonly create: (input: AddBookmarkInput) => Fx<E, Bookmark>
+  readonly list: (query: BookmarkQuery) => Fx<E, readonly Bookmark[]>
+  readonly markRead: (id: BookmarkId) => Fx<E, Bookmark>
+  readonly archive: (id: BookmarkId) => Fx<E, Bookmark>
+  readonly refreshMetadata: (id: BookmarkId) => Fx<E, Bookmark>
+}
+```
+
+The HTTP implementation can wrap the existing `client.ts` functions. The
+IndexedDB implementation can wrap the new local client functions. Keep this type
+local to the browser example; do not promote it into a library abstraction.
+
 ## Testing Strategy
 
 Focused tests should cover:
@@ -386,10 +492,12 @@ Optional later additions:
 
 ```text
 examples/bookmarks/
-  store-json.ts
+  store-sqlite.ts
   browser/
     index.html
     app.js
+    local-client.ts
+    store-indexeddb.ts
   package.json
 ```
 
@@ -425,13 +533,34 @@ Status: implemented.
 
 ### Phase 4: Browser client
 
+Status: implemented.
+
 - Add a static page that calls the API.
 - Keep UI minimal: add, list, mark read, archive, refresh metadata.
 
-### Phase 5: Optional persistence
+### Phase 5: SQLite persistence
 
-- Add JSON file storage if persistence improves the example.
+Status: implemented.
+
+- Add SQLite storage for bookmarks.
 - Keep it as a handler swap, not a domain change.
+- Use `BOOKMARKS_DB` to choose the database file.
+
+### Phase 6: Browser-local IndexedDB mode
+
+Status: proposed.
+
+- Add a browser-only IndexedDB `BookmarkStore` handler.
+- Add a browser-local client that calls domain programs directly.
+- Add explicit browser mode selection with `?store=api` and
+  `?store=indexeddb`.
+- Keep API mode as the default.
+- Use demo or recoverable-failure metadata in IndexedDB mode; do not fetch
+  arbitrary page metadata from the browser.
+- Reuse the existing browser UI and select a small client adapter at startup.
+- Add focused tests for IndexedDB serialization, persistence across reload-like
+  client instances, filtering, updates, and direct domain workflow execution.
+
 
 ## Open Questions
 
@@ -447,7 +576,13 @@ Status: implemented.
   later handler swap.
 - Should the browser client stay plain JavaScript, or should it also demonstrate
   `fx` on the client side?
-  Answer: deferred until the browser phase.
+  Answer: the implemented browser client uses `fx` for UI flow and HTTP client
+  effects. A browser-local IndexedDB mode is deferred to phase 6 to demonstrate
+  direct browser interpretation of domain effects.
+- Should the browser app silently fall back to local storage when the API server
+  is unavailable?
+  Answer: no. Storage mode should be explicit with `?store=api` or
+  `?store=indexeddb` so users can tell which persistence backend they are using.
 
 ## Recommended First Cut
 

@@ -66,6 +66,23 @@ describe('bookmarks example domain', () => {
     })
   })
 
+  it('fails duplicate active URLs after re-adding an archived URL', async () => {
+    const store = memoryBookmarkStore()
+    const ids = deterministicBookmarkIds(['bookmark-1', 'bookmark-2', 'bookmark-3'])
+    const archived = await runDomain(addBookmark({ url: 'https://example.com/read' }), { store, ids })
+    assertBookmark(archived)
+
+    await runDomain(archiveBookmark(archived.id), { store })
+    const active = await runDomain(addBookmark({ url: 'https://example.com/read' }), { store, ids })
+    assertBookmark(active)
+
+    assert.deepEqual(await runDomain(addBookmark({ url: 'https://example.com/read' }), { store, ids }), {
+      tag: 'DuplicateBookmark',
+      url: 'https://example.com/read',
+      id: active.id
+    })
+  })
+
   it('keeps bookmark creation successful when metadata fetch fails', async () => {
     const result = await runDomain(addBookmark({ url: 'https://example.com/offline' }), {
       metadata: {

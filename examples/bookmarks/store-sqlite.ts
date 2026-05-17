@@ -29,7 +29,12 @@ export const sqliteBookmarkStore = (path: string) => {
   initialize(db)
 
   const selectById = db.prepare('select * from bookmarks where id = ?')
-  const selectByUrl = db.prepare('select * from bookmarks where url = ? order by created_at, id limit 1')
+  const selectByUrl = db.prepare(`
+    select * from bookmarks
+    where url = ?
+    order by status = 'archived', created_at, id
+    limit 1
+  `)
   const selectAll = db.prepare('select * from bookmarks order by created_at, id')
   const selectByStatus = db.prepare('select * from bookmarks where status = ? order by created_at, id')
   const save = db.prepare(`

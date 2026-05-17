@@ -11,6 +11,7 @@ import { withClock, type Time } from '../../src/Time.js'
 import { VirtualClock } from '../../src/internal/time.js'
 import {
   addBookmark,
+  archiveBookmark,
   deterministicBookmarkIds,
   findBookmarkById,
   findBookmarkByUrl,
@@ -50,6 +51,31 @@ describe('sqlite bookmark store', () => {
 
       assert.deepEqual(await runStore(path, findBookmarkByUrl(bookmark.url)), bookmark)
       assert.equal(await runStore(path, findBookmarkByUrl('https://example.com/missing')), undefined)
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('finds active bookmarks before archived bookmarks by URL', async () => {
+    const { path, cleanup } = tempDatabase()
+    try {
+      const archived = bookmarkFixture({
+        id: 'bookmark-1',
+        url: 'https://example.com/read',
+        status: 'archived'
+      })
+      const active = bookmarkFixture({
+        id: 'bookmark-2',
+        url: 'https://example.com/read',
+        status: 'unread',
+        title: 'Active bookmark',
+        createdAt: new Date('2024-01-01T00:01:00.000Z')
+      })
+
+      await runStore(path, saveBookmark(archived))
+      await runStore(path, saveBookmark(active))
+
+      assert.deepEqual(await runStore(path, findBookmarkByUrl(active.url)), active)
     } finally {
       await cleanup()
     }
@@ -142,6 +168,27 @@ describe('sqlite bookmark store', () => {
       await cleanup()
     }
   })
+
+  it('fails duplicate active URLs after re-adding an archived URL', async () => {
+    const { path, cleanup } = tempDatabase()
+    try {
+      const ids = deterministicBookmarkIds(['bookmark-1', 'bookmark-2', 'bookmark-3'])
+      const archived = await runDomain(path, addBookmark({ url: 'https://example.com/read' }), { ids })
+      assertBookmark(archived)
+
+      await runDomain(path, archiveBookmark(archived.id), { ids })
+      const active = await runDomain(path, addBookmark({ url: 'https://example.com/read' }), { ids })
+      assertBookmark(active)
+
+      assert.deepEqual(await runDomain(path, addBookmark({ url: 'https://example.com/read' }), { ids }), {
+        tag: 'DuplicateBookmark',
+        url: 'https://example.com/read',
+        id: active.id
+      })
+    } finally {
+      await cleanup()
+    }
+  })
 })
 
 type BookmarkFixtureOptions = {
@@ -151,6 +198,7 @@ type BookmarkFixtureOptions = {
   readonly description?: string
   readonly tags?: readonly string[]
   readonly status?: Bookmark['status']
+  readonly createdAt?: Date
 }
 
 type TestOptions = {
@@ -198,7 +246,7 @@ const bookmarkFixture = (options: BookmarkFixtureOptions = {}): Bookmark => ({
   tags: options.tags ?? ['typescript'],
   status: options.status ?? 'unread',
   metadataStatus: { tag: 'available' },
-  createdAt: new Date('2024-01-01T00:00:00.000Z'),
+  createdAt: options.createdAt ?? new Date('2024-01-01T00:00:00.000Z'),
   updatedAt: new Date('2024-01-01T00:00:00.000Z')
 })
 

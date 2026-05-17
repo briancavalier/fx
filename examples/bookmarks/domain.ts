@@ -268,7 +268,9 @@ const pageMetadataFields = (result: MetadataResult): Pick<Bookmark, 'title' | 'd
     : {}
 
 const findByUrl = (bookmarks: Map<BookmarkId, Bookmark>, url: string): Bookmark | undefined =>
-  [...bookmarks.values()].find(bookmark => bookmark.url === url)
+  [...bookmarks.values()]
+    .filter(bookmark => bookmark.url === url)
+    .sort(compareDuplicateCandidates)[0]
 
 const filterBookmarks = (bookmarks: Map<BookmarkId, Bookmark>, query: BookmarkQuery): readonly Bookmark[] => {
   const normalized = normalizeQuery(query)
@@ -286,6 +288,11 @@ const bookmarkMatchesText = (bookmark: Bookmark, text: string): boolean =>
   bookmark.url.toLocaleLowerCase().includes(text) ||
     bookmark.title?.toLocaleLowerCase().includes(text) === true ||
     bookmark.description?.toLocaleLowerCase().includes(text) === true
+
+const compareDuplicateCandidates = (a: Bookmark, b: Bookmark): number =>
+  Number(a.status === 'archived') - Number(b.status === 'archived') ||
+  a.createdAt.getTime() - b.createdAt.getTime() ||
+  a.id.localeCompare(b.id)
 
 const isMetadataResult = (value: MetadataResult | PageMetadata): value is MetadataResult =>
   'tag' in value && (value.tag === 'available' || value.tag === 'failed')

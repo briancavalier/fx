@@ -142,6 +142,13 @@ describe('sqlite bookmark store', () => {
     }
   })
 
+  it('closes the database after each store run', async () => {
+    const { path, cleanup } = tempDatabase()
+
+    await runStore(path, saveBookmark(bookmarkFixture()))
+    await assert.doesNotReject(cleanup)
+  })
+
   it('runs domain workflows with sqlite persistence', async () => {
     const { path, cleanup } = tempDatabase()
     try {

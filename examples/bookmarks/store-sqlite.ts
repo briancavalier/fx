@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
-import { ok, type Fx } from '../../src/Fx.js'
+import { assertSync, bracket, ok, type Fx } from '../../src/Fx.js'
 import { handle } from '../../src/Handler.js'
 import {
   FindBookmarkById,
@@ -24,10 +24,20 @@ type BookmarkRow = {
   readonly updated_at: string
 }
 
-export const sqliteBookmarkStore = (path: string) => {
+export const sqliteBookmarkStore = (path: string) => <E, A>(program: Fx<E, A>) =>
+  bracket(
+    assertSync(() => openDatabase(path)),
+    db => assertSync(() => db.close()),
+    db => interpretBookmarkStore(db, program)
+  )
+
+const openDatabase = (path: string): DatabaseSync => {
   const db = new DatabaseSync(path)
   initialize(db)
+  return db
+}
 
+const interpretBookmarkStore = <E, A>(db: DatabaseSync, program: Fx<E, A>) => {
   const selectById = db.prepare('select * from bookmarks where id = ?')
   const selectByUrl = db.prepare(`
     select * from bookmarks
@@ -60,7 +70,7 @@ export const sqliteBookmarkStore = (path: string) => {
       updated_at = excluded.updated_at
   `)
 
-  const handleBookmarkStore = <E, A>(program: Fx<E, A>) => program.pipe(
+  return program.pipe(
     handle(FindBookmarkById, effect => ok(bookmarkFromRow(selectById.get(effect.arg)))),
     handle(FindBookmarkByUrl, effect => ok(bookmarkFromRow(selectByUrl.get(effect.arg)))),
     handle(ListBookmarks, effect => ok(listBookmarks(selectAll, selectByStatus, effect.arg))),
@@ -79,8 +89,6 @@ export const sqliteBookmarkStore = (path: string) => {
       return ok(effect.arg)
     })
   )
-
-  return handleBookmarkStore
 }
 
 const initialize = (db: DatabaseSync): void => {

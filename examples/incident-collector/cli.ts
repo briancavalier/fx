@@ -22,14 +22,14 @@ const runSnapshot = (label: string, failDeploy: boolean) => fx(function* () {
     incidentId: failDeploy ? 'INC-2026-05-17-B' : 'INC-2026-05-17-A',
     services: ['api', 'worker', 'billing']
   }).pipe(
-    firstSuccess,
-    defaultAll,
-    bounded(6),
     scope(CollectorScope),
-    scope(BundleScope),
     fixture.handle,
     logConsole,
     defaultTime,
+    firstSuccess,
+    defaultAll,
+    bounded(6),
+    scope(BundleScope),
     returnAll,
   )
 

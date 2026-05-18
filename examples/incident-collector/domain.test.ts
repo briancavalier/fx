@@ -102,14 +102,14 @@ describe('incident collector example', () => {
 
     const fixture = createIncidentCollectorFixture()
     const handled = program.pipe(
-      firstSuccess,
-      defaultAll,
-      bounded(6),
       scope(CollectorScope),
-      scope(BundleScope),
       fixture.handle,
       withClock(new VirtualClock(0)),
       collect,
+      firstSuccess,
+      defaultAll,
+      bounded(6),
+      scope(BundleScope),
       returnAll
     )
 
@@ -126,14 +126,14 @@ const runSnapshot = async (
     incidentId: 'INC-1',
     services: ['api', 'worker', 'billing']
   }).pipe(
-    firstSuccess,
-    defaultAll,
-    bounded(6),
     scope(CollectorScope),
-    scope(BundleScope),
     fixture.handle,
     withClock(clock),
     collect,
+    firstSuccess,
+    defaultAll,
+    bounded(6),
+    scope(BundleScope),
     returnAll,
     runPromise
   )

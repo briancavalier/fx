@@ -9,6 +9,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./platform-node": {
+      "types": "./dist/platform-node.d.ts",
+      "import": "./dist/platform-node.js"
+    },
     "./Abort": {
       "types": "./dist/Abort.d.ts",
       "import": "./dist/Abort.js"
@@ -56,6 +60,10 @@
     "./Log": {
       "types": "./dist/Log.d.ts",
       "import": "./dist/Log.js"
+    },
+    "./NodeRuntime": {
+      "types": "./dist/NodeRuntime.d.ts",
+      "import": "./dist/NodeRuntime.js"
     },
     "./Random": {
       "types": "./dist/Random.d.ts",
@@ -131,7 +139,7 @@
     "benchmark:runtime-context": "tsx benchmarks/runtime-context.ts",
     "benchmark:runtime-loops": "tsx benchmarks/runtime-loops.ts",
     "lint": "oxlint --type-aware",
-    "test": "node --import tsx --test 'src/**/*.test.ts'",
+    "test": "node --import tsx --test 'src/**/*.test.ts' 'examples/**/*.test.ts'",
     "test:watch": "node --import tsx --test --test-reporter=dot --watch './src/**/*.test.ts'",
     "typecheck": "tsc --noEmit"
   },
@@ -139,11 +147,11 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^25.6.2",
-    "oxfmt": "^0.48.0",
-    "oxlint": "^1.63.0",
+    "@types/node": "^25.9.0",
+    "oxfmt": "^0.50.0",
+    "oxlint": "^1.65.0",
     "oxlint-tsgolint": "^0.22.1",
-    "tsx": "^4.21.0",
+    "tsx": "^4.22.1",
     "typescript": "^6.0.3"
   }
 }

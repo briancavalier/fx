@@ -7,7 +7,7 @@ export class Get<E extends Record<PropertyKey, unknown>> extends Effect('fx/Env'
 export const get = <const E extends Record<PropertyKey, unknown>>() =>
   new Get<E>()
 
-type ExcludeEnv<E, S> =
+export type ExcludeEnv<E, S> =
   E extends Get<Record<PropertyKey, unknown>>
   ? S extends E['R'] ? never
   : S extends Record<PropertyKey, unknown>

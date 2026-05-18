@@ -1,9 +1,10 @@
 import { Async } from './Async.js'
 import { Effect } from './Effect.js'
+import { Get, provide, provideFrom, type ExcludeEnv } from './Env.js'
 import { Fail } from './Fail.js'
 import { Fx, flatMap, ok } from './Fx.js'
-import { type Headers, type Method } from './HttpClient.js'
 import { HandlerCapture, captureHandlers, type CapturedHandler } from './HandlerCapture.js'
+import { type Headers, type Method } from './HttpClient.js'
 
 /**
  * A transport-neutral HTTP server request.
@@ -77,8 +78,15 @@ export type ResponseBody<_E = never> =
 
 export type ParamsRecord = Readonly<Record<string, string>>
 
+export type RouteContext<Params extends ParamsRecord = ParamsRecord> = {
+  readonly request: ServerRequest<Params>
+}
+
+export type RouteEffects<E> =
+  ExcludeEnv<E, RouteContext<any>>
+
 export type RouteHandler<E, Params extends ParamsRecord = ParamsRecord> =
-  (request: ServerRequest<Params>) => Fx<E, ServerResponse<E>>
+  Fx<E | Get<RouteContext<Params>>, ServerResponse<E>>
 
 /**
  * A composable HTTP route declaration tree.
@@ -88,6 +96,7 @@ export type Routes<E = never> =
   | SingleRoute<E>
   | ConcatRoutes<E>
   | MountedRoutes<E>
+  | TransformedRoutes<any, E>
 
 export type EmptyRoutes = {
   readonly type: 'empty'
@@ -109,6 +118,12 @@ export type MountedRoutes<E> = {
   readonly routes: Routes<E>
 }
 
+export type TransformedRoutes<E1, E2> = {
+  readonly type: 'transform'
+  readonly routes: Routes<E1>
+  readonly transform: RouteTransform<E1, E2>
+}
+
 export type Route<E, Params extends ParamsRecord = ParamsRecord> = {
   readonly method: Method
   readonly path: string
@@ -117,75 +132,63 @@ export type Route<E, Params extends ParamsRecord = ParamsRecord> = {
 
 export const emptyRoutes: Routes<never> = { type: 'empty' }
 
-export const route = <E, Params extends ParamsRecord = ParamsRecord>(
+export const route = <E>(
   method: Method,
   path: string,
-  handle: RouteHandler<E, Params>
-): Routes<E> => ({
-    type: 'route',
-    route: { method, path, handle: handle as RouteHandler<E> }
-  })
+  handle: Fx<E, ServerResponse<any>>
+): SingleRoute<RouteEffects<E>> => ({
+  type: 'route',
+  route: {
+    method,
+    path,
+    handle: handle as unknown as RouteHandler<RouteEffects<E>>
+  }
+})
 
-export const routes = <const Rs extends readonly Routes<any>[]>(
-  ...routes: Rs
-): Routes<EffectsOfRoutes<Rs[number]>> => ({
-    type: 'concat',
-    routes
-  })
+type RouteList<Rs extends readonly unknown[]> = {
+  readonly [K in keyof Rs]: Routes<unknown>
+}
+
+export const routes = <const Rs extends readonly unknown[]>(
+  ...routes: Rs & RouteList<Rs>
+): ConcatRoutes<EffectsOfRoutes<Rs[number]>> => ({
+  type: 'concat',
+  routes: routes as readonly Routes<EffectsOfRoutes<Rs[number]>>[]
+})
 
 export const mount = <E>(
   prefix: string,
   routes: Routes<E>
-): Routes<E> => ({
-    type: 'mount',
-    prefix,
-    routes
-  })
+): MountedRoutes<E> => ({
+  type: 'mount',
+  prefix,
+  routes
+})
 
 export type EffectsOfRoutes<R> =
-  R extends Routes<infer E> ? E : never
+  R extends SingleRoute<infer E> ? E
+  : R extends ConcatRoutes<infer E> ? E
+  : R extends MountedRoutes<infer E> ? E
+  : R extends TransformedRoutes<any, infer E> ? E
+  : never
 
-export type RouteTransform<E1, E2> =
-  <A>(fx: Fx<E1, A>) => Fx<E2, A>
+export type RouteTransform<E1, E2> = {
+  transform<A>(fx: Fx<E1 | Get<RouteContext<any>>, A>): Fx<E2 | Get<RouteContext<any>>, A>
+}['transform']
 
-export const mapRoutes = <E1, E2>(
-  routes: Routes<E1>,
-  transform: (handle: RouteHandler<E1>) => RouteHandler<E2>
-): Routes<E2> => {
-  switch (routes.type) {
-    case 'empty':
-      return emptyRoutes
-
-    case 'route':
-      return {
-        type: 'route',
-        route: {
-          ...routes.route,
-          handle: transform(routes.route.handle)
-        }
-      }
-
-    case 'concat':
-      return {
-        type: 'concat',
-        routes: routes.routes.map(r => mapRoutes(r, transform))
-      }
-
-    case 'mount':
-      return {
-        type: 'mount',
-        prefix: routes.prefix,
-        routes: mapRoutes(routes.routes, transform)
-      }
-  }
-}
-
-export const handleRoutes = <E1, E2>(
+export const transformRoutes = <E1, E2>(
   transform: RouteTransform<E1, E2>
 ) =>
-  (routes: Routes<E1>): Routes<E2> =>
-    mapRoutes(routes, handleRequest => request =>
-      transform(handleRequest(request)))
+  (routes: Routes<E1>): TransformedRoutes<E1, E2> => ({
+    type: 'transform',
+    routes,
+    transform
+  })
+
+export const provideRoutesFrom =
+  <const PE, const C extends Record<PropertyKey, unknown>>(context: Fx<PE, C>) =>
+    transformRoutes(provideFrom(context)) as
+      <const E>(routes: Routes<E>) => Routes<RouteEffects<PE | ExcludeEnv<E, C>>>
 
 export type ServerRouteEffects = Async | Fail<any> | HandlerCapture<string>
 
@@ -230,7 +233,7 @@ export type CompiledRoute<E> = {
 export type PathMatcher = (path: string) => false | ParamsRecord
 
 export const compileRoutes = <E>(routes: Routes<E>): CompiledRoutes<E> => ({
-  routes: compile(routes, '')
+  routes: compile(routes, '', [])
 })
 
 export const dispatch = <E>(
@@ -241,7 +244,9 @@ export const dispatch = <E>(
     if (route.method !== request.method) continue
 
     const params = route.match(request.path)
-    if (params !== false) return route.handle({ ...request, params })
+    if (params !== false) return route.handle.pipe(
+      provide({ request: { ...request, params } })
+    ) as Fx<E, ServerResponse<E>>
   }
 
   return ok({
@@ -251,7 +256,11 @@ export const dispatch = <E>(
   })
 }
 
-const compile = <E>(routes: Routes<E>, prefix: string): readonly CompiledRoute<E>[] => {
+const compile = <E>(
+  routes: Routes<E>,
+  prefix: string,
+  transforms: readonly RouteTransform<any, any>[]
+): readonly CompiledRoute<E>[] => {
   switch (routes.type) {
     case 'empty':
       return []
@@ -262,17 +271,29 @@ const compile = <E>(routes: Routes<E>, prefix: string): readonly CompiledRoute<E
         method: routes.route.method,
         path,
         match: compilePath(path),
-        handle: routes.route.handle
+        handle: applyRouteTransforms(routes.route.handle, transforms)
       }]
     }
 
     case 'concat':
-      return routes.routes.flatMap(r => compile(r, prefix))
+      return routes.routes.flatMap(r => compile(r, prefix, transforms))
 
     case 'mount':
-      return compile(routes.routes, joinPaths(prefix, routes.prefix))
+      return compile(routes.routes, joinPaths(prefix, routes.prefix), transforms)
+
+    case 'transform':
+      return compile(routes.routes, prefix, [...transforms, routes.transform]) as readonly CompiledRoute<E>[]
   }
 }
+
+const applyRouteTransforms = <E>(
+  handle: RouteHandler<E>,
+  transforms: readonly RouteTransform<any, any>[]
+): RouteHandler<E> =>
+  transforms.reduceRight(
+    (handle, transform) => transform(handle),
+    handle as Fx<unknown, ServerResponse<unknown>>
+  ) as RouteHandler<E>
 
 const joinPaths = (prefix: string, path: string): string => {
   const p1 = trimSlashes(prefix)

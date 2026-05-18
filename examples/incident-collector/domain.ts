@@ -9,7 +9,6 @@ import { sleep, type Time } from '../../src/Time.js'
 import type { HandlerCapture } from '../../src/HandlerCapture.js'
 import type { Interrupt } from '../../src/Interrupt.js'
 
-export const SnapshotScope = 'examples/incident-collector/Snapshot' as const
 export const BundleScope = 'examples/incident-collector/Bundle' as const
 export const CollectorScope = 'examples/incident-collector/Collector' as const
 
@@ -60,8 +59,7 @@ export type BundleEntry =
   | { readonly type: 'manifest'; readonly incidentId: IncidentId; readonly entries: readonly string[] }
 
 export type IncidentCollectorError =
-  | { readonly tag: 'CollectorUnavailable'; readonly collector: CollectorName; readonly reason: string }
-  | { readonly tag: 'ServiceLogUnavailable'; readonly service: ServiceName; readonly reason: string }
+  { readonly tag: 'CollectorUnavailable'; readonly collector: CollectorName; readonly reason: string }
 
 export type IncidentCollectorEffects =
   | OpenBundle

@@ -47,7 +47,7 @@ const printableResult = (result: unknown): unknown =>
 
 await fx(function* () {
   yield* runSnapshot('successful snapshot', false)
-  yield* runSnapshot('failing collector cancels siblings', true)
+  yield* runSnapshot('failing snapshot interrupts collectors and fails bundle', true)
 }).pipe(
   defaultConsole,
   runPromise

@@ -48,7 +48,7 @@ describe('incident collector example', () => {
     ])
   })
 
-  it('cancels sibling collectors and closes the bundle when a required collector fails', async () => {
+  it('interrupts collectors but fails the bundle when a required collector fails', async () => {
     const fixture = createIncidentCollectorFixture({
       failDeploy: true,
       slowLogMs: 500
@@ -65,7 +65,11 @@ describe('incident collector example', () => {
     assert.ok(!state.events.includes('read-log:done:api'))
     assert.ok(!state.events.includes('read-log:done:billing'))
     assert.ok(!state.events.includes('write:manifest'))
-    assert.ok(state.events.some(event => event.startsWith('collector:deploy:')))
+    assert.ok(state.events.includes('collector:logs:interrupted'))
+    assert.ok(state.events.includes('collector:metrics:interrupted'))
+    assert.ok(state.events.includes('collector:deploy:interrupted'))
+    assert.ok(state.events.includes('collector:runtime:interrupted'))
+    assert.ok(state.events.includes('bundle:INC-1:failure'))
   })
 
   it('uses the first successful runtime source when the primary source fails', async () => {

@@ -7,7 +7,7 @@ import { provide } from '../../src/Env.js'
 import { assert as assertNoFail, catchAll, returnAll, type Fail } from '../../src/Fail.js'
 import { flatMap, fx, map, ok, trySync, type Fx } from '../../src/Fx.js'
 import { bytes as readBytes } from '../../src/HttpClient.js'
-import { mount, route, routes, serve, type Routes, type ServerEvent, type ServerListening, type ServerRequest, type ServerResponse } from '../../src/HttpServer.js'
+import { mount, route, routes, serve, type RouteContext, type Routes, type ServerEvent, type ServerListening, type ServerRequest, type ServerResponse } from '../../src/HttpServer.js'
 import { info, console as logConsole, type Log } from '../../src/Log.js'
 import { nodeHttp, runNodeMain } from '../../src/platform-node.js'
 import { defaultRandom } from '../../src/Random.js'
@@ -58,33 +58,45 @@ const createBookmark = (request: ServerRequest): Fx<BookmarkRouteEffects, Server
 })
 
 const apiRoutes = routes(
-  route<BookmarkRouteEffects>('GET', '/health', () => ok(text('ok'))),
+  route('GET', '/health', fx(function* () {
+    return text('ok')
+  })),
 
-  route<BookmarkRouteEffects>('POST', '/bookmarks', createBookmark),
+  route('POST', '/bookmarks', fx(function* ({ request }: RouteContext) {
+    return yield* createBookmark(request)
+  })),
 
-  route<BookmarkRouteEffects>('GET', '/bookmarks', request => {
+  route('GET', '/bookmarks', fx(function* ({ request }: RouteContext) {
     const query = bookmarkQuery(request.query)
-    return query === undefined
-      ? ok(json({ error: 'InvalidBookmarkQuery' }, 400))
-      : respond(listBookmarks(query), json)
-  }),
+    if (query === undefined) return json({ error: 'InvalidBookmarkQuery' }, 400)
+    return yield* respond(listBookmarks(query), json)
+  })),
 
-  route<BookmarkRouteEffects>('PATCH', '/bookmarks/:id/read', request =>
-    respond(markRead(request.params.id), json)),
+  route('PATCH', '/bookmarks/:id/read', fx(function* ({ request }: RouteContext<{ readonly id: string }>) {
+    return yield* respond(markRead(request.params.id), json)
+  })),
 
-  route<BookmarkRouteEffects>('PATCH', '/bookmarks/:id/archive', request =>
-    respond(archiveBookmark(request.params.id), json)),
+  route('PATCH', '/bookmarks/:id/archive', fx(function* ({ request }: RouteContext<{ readonly id: string }>) {
+    return yield* respond(archiveBookmark(request.params.id), json)
+  })),
 
-  route<BookmarkRouteEffects>('POST', '/bookmarks/:id/metadata/refresh', request =>
-    respond(refreshMetadata(request.params.id), json))
+  route('POST', '/bookmarks/:id/metadata/refresh', fx(function* ({ request }: RouteContext<{ readonly id: string }>) {
+    return yield* respond(refreshMetadata(request.params.id), json)
+  }))
 )
 
 const browserDir = join(dirname(fileURLToPath(import.meta.url)), 'browser')
 
 const browserRoutes = routes(
-  route('GET', '/', () => ok(fileResponse('index.html', 'text/html; charset=utf-8'))),
-  route('GET', '/bookmarks/styles.css', () => ok(fileResponse('styles.css', 'text/css; charset=utf-8'))),
-  route('GET', '/bookmarks/assets/*', request => ok(assetResponse(request.params['*'] ?? '')))
+  route('GET', '/', fx(function* () {
+    return fileResponse('index.html', 'text/html; charset=utf-8')
+  })),
+  route('GET', '/bookmarks/styles.css', fx(function* () {
+    return fileResponse('styles.css', 'text/css; charset=utf-8')
+  })),
+  route('GET', '/bookmarks/assets/*', fx(function* ({ request }: RouteContext<{ readonly '*': string }>) {
+    return assetResponse(request.params['*'] ?? '')
+  }))
 )
 
 const appRoutes = routes(

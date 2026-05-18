@@ -33,6 +33,10 @@
       "types": "./dist/Fail.d.ts",
       "import": "./dist/Fail.js"
     },
+    "./GlobalScope": {
+      "types": "./dist/GlobalScope.d.ts",
+      "import": "./dist/GlobalScope.js"
+    },
     "./Concurrent": {
       "types": "./dist/Concurrent.d.ts",
       "import": "./dist/Concurrent.js"

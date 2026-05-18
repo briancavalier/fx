@@ -22,8 +22,8 @@ const runSnapshot = (label: string, failDeploy: boolean) => fx(function* () {
     incidentId: failDeploy ? 'INC-2026-05-17-B' : 'INC-2026-05-17-A',
     services: ['api', 'worker', 'billing']
   }).pipe(
-    scope(CollectorScope),
     fixture.handle,
+    scope(CollectorScope),
     logConsole,
     defaultTime,
     firstSuccess,
@@ -47,7 +47,7 @@ const printableResult = (result: unknown): unknown =>
 
 await fx(function* () {
   yield* runSnapshot('successful snapshot', false)
-  yield* runSnapshot('failing snapshot interrupts collectors and fails bundle', true)
+  yield* runSnapshot('failing collector fails while siblings are interrupted', true)
 }).pipe(
   defaultConsole,
   runPromise

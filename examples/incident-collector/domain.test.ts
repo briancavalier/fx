@@ -48,7 +48,7 @@ describe('incident collector example', () => {
     ])
   })
 
-  it('interrupts collectors but fails the bundle when a required collector fails', async () => {
+  it('fails the collector that caused cancellation and interrupts sibling collectors', async () => {
     const fixture = createIncidentCollectorFixture({
       failDeploy: true,
       slowLogMs: 500
@@ -67,7 +67,7 @@ describe('incident collector example', () => {
     assert.ok(!state.events.includes('write:manifest'))
     assert.ok(state.events.includes('collector:logs:interrupted'))
     assert.ok(state.events.includes('collector:metrics:interrupted'))
-    assert.ok(state.events.includes('collector:deploy:interrupted'))
+    assert.ok(state.events.includes('collector:deploy:failure'))
     assert.ok(state.events.includes('collector:runtime:interrupted'))
     assert.ok(state.events.includes('bundle:INC-1:failure'))
   })
@@ -118,8 +118,8 @@ describe('incident collector example', () => {
 
     const fixture = createIncidentCollectorFixture()
     const handled = program.pipe(
-      scope(CollectorScope),
       fixture.handle,
+      scope(CollectorScope),
       withClock(new VirtualClock(0)),
       collect,
       firstSuccess,
@@ -142,8 +142,8 @@ const runSnapshot = async (
     incidentId: 'INC-1',
     services: ['api', 'worker', 'billing']
   }).pipe(
-    scope(CollectorScope),
     fixture.handle,
+    scope(CollectorScope),
     withClock(clock),
     collect,
     firstSuccess,

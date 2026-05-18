@@ -19,6 +19,6 @@
     "examples/**/*.ts"
   ],
   "exclude": [
-    "examples/bookmarks/browser/**/*.ts"
+    "examples/advanced/bookmarks/browser/**/*.ts"
   ]
 }

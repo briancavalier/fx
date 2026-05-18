@@ -181,14 +181,16 @@ export const createIncidentCollectorFixture = (options: FixtureOptions = {}) => 
   const slowLogMs = options.slowLogMs ?? 200
 
   const handleFixture = <E, A>(program: Fx<E, A>) => program.pipe(
-    handle(OpenBundle, effect => ok(managed(
-      openBundleRecord(bundles, effect.arg),
-      exit => fx(function* () {
-        const record = bundles.find(bundle => bundle.incidentId === effect.arg)
-        if (record !== undefined) record.exit = exit.type
-        events.push(`bundle:${effect.arg}:${exit.type}`)
-      })
-    ))),
+    handle(OpenBundle, effect => {
+      const record = openBundleRecord(bundles, effect.arg)
+      return ok(managed(
+        { id: record.id } satisfies Bundle,
+        exit => fx(function* () {
+          record.exit = exit.type
+          events.push(`bundle:${effect.arg}:${exit.type}`)
+        })
+      ))
+    }),
     handle(StartCollector, effect => ok(managed(
       effect.arg,
       exit => fx(function* () {
@@ -319,12 +321,12 @@ interface MutableBundleRecord {
   exit?: string
 }
 
-const openBundleRecord = (bundles: MutableBundleRecord[], incidentId: IncidentId): Bundle => {
+const openBundleRecord = (bundles: MutableBundleRecord[], incidentId: IncidentId): MutableBundleRecord => {
   const record = {
     id: `snapshot-${bundles.length + 1}`,
     incidentId,
     entries: []
   } satisfies MutableBundleRecord
   bundles.push(record)
-  return { id: record.id }
+  return record
 }

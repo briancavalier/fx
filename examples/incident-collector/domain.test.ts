@@ -95,6 +95,18 @@ describe('incident collector example', () => {
     assert.ok(events.includes('collector:runtime:success'))
   })
 
+  it('records exit on each opened bundle when incident ids repeat', async () => {
+    const fixture = createIncidentCollectorFixture()
+    await runSnapshot(fixture)
+    await runSnapshot(fixture)
+
+    const bundles = fixture.state().bundles
+    assert.deepEqual(bundles.map(bundle => [bundle.id, bundle.incidentId, bundle.exit]), [
+      ['snapshot-1', 'INC-1', 'success'],
+      ['snapshot-2', 'INC-1', 'success']
+    ])
+  })
+
   it('keeps domain effects visible until handlers remove them', () => {
     const program = collectIncidentSnapshot({
       incidentId: 'INC-types',

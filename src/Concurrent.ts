@@ -13,8 +13,10 @@ import { acquireAndRunFork } from './internal/runFork.js'
 import { currentRuntimeContext } from './internal/runtimeContext.js'
 
 /**
- * Request that a computation be started concurrently, returning a {@link Task}
- * handle for the running computation.
+ * Request that a computation be started concurrently.
+ *
+ * A `Fork` request returns a {@link Task} handle. The scheduling policy is
+ * supplied by handlers such as {@link bounded} or {@link unbounded}.
  */
 export class Fork extends Effect('fx/Concurrent/Fork')<ForkContext, Task<unknown, unknown>> { }
 
@@ -93,8 +95,11 @@ export const forkEach = <const Fxs extends readonly Fx<unknown, unknown>[]>(
 }>
 
 /**
- * Run a tuple of Fx computations concurrently in a structured scope, returning
- * the tuple of child results directly.
+ * Request that a tuple of Fx computations run concurrently in a structured
+ * scope, returning the tuple of child results directly.
+ *
+ * Pair `all` with {@link defaultAll} and a fork scheduler such as
+ * {@link bounded} or {@link unbounded}.
  *
  * @example
  * const [user, posts] = yield* all([fetchUser, fetchPosts])
@@ -115,8 +120,10 @@ export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(
 }
 
 /**
- * Race a tuple of Fx computations in a structured scope, returning the first
- * child result or failure to settle.
+ * Request that a tuple of Fx computations race in a structured scope.
+ *
+ * Pair `race` with {@link firstSettled} for first-settled semantics or
+ * {@link firstSuccess} when failed children should be ignored until all fail.
  *
  * @example
  * const value = yield* race([primary, fallback])
@@ -208,6 +215,11 @@ export class RaceAllFailed<Errors extends readonly unknown[]> extends Error {
  * Structured handlers such as {@link defaultAll} and {@link firstSettled}
  * elaborate into Fork requests, so `bounded` also limits their child
  * concurrency.
+ *
+ * @example
+ * ```ts
+ * program.pipe(defaultAll, bounded(4), runPromise)
+ * ```
  */
 export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, Fork>, HandlerCapture<'fx/Concurrent/Fork'>> | HandlerCapture<'fx/Concurrent/Fork'>, A> =>
   withCapturedHandlers('fx/Concurrent/Fork', f).pipe(

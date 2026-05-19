@@ -14,18 +14,30 @@ import { RunForkOptions, runFork } from './internal/runFork.js'
 import { TrySync } from './internal/sync.js'
 
 /**
- * A computation that produces a value of type `A`, and may produce effects of
- * type `E`.
+ * A computation that returns a value of type `A` and may request effects `E`.
+ *
+ * Application programs usually build `Fx` values with {@link fx}, request
+ * effects with `yield*`, and then eliminate those effects with handlers before
+ * running the program.
  */
 export interface Fx<E, A> extends Pipeable {
   [Symbol.iterator](): Iterator<E, A, unknown>
 }
 
 /**
- * Construct an Fx from a generator that uses `yield*` to produce effects.
- * A generator with a declared runtime parameter receives contextual parameters
- * from {@link Get}; defaulted contextual parameters are not supported because
- * they have runtime arity 0.
+ * Construct an Fx from a generator that uses `yield*` to request effects.
+ *
+ * A generator with a declared runtime parameter receives contextual values from
+ * {@link Get}; defaulted contextual parameters are not supported because they
+ * have runtime arity 0.
+ *
+ * @example
+ * ```ts
+ * const greet = fx(function* () {
+ *   const name = yield* askName
+ *   return `Hello, ${name}`
+ * })
+ * ```
  */
 export const fx: {
   <const E, const A>(f: () => Generator<E, A>): Fx<E, A>
@@ -108,7 +120,10 @@ export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E
   x.pipe(flatMap(x => x))
 
 /**
- * Execute all the effects of the provided Fx, and return a {@link Task} for its result.
+ * Execute a runtime-ready Fx and return a cancellable {@link Task}.
+ *
+ * Use `runTask` when the caller needs to dispose the running computation or wait
+ * for cleanup. All non-runtime effects must be handled before calling it.
  */
 export const runTask = <const R>(f: Fx<Async | HandlerCapture<string> | Interrupt, R>, options: RunForkOptions = {}): Task<R, never> => {
   return runFork(f.pipe(provideAll({})), {
@@ -118,8 +133,10 @@ export const runTask = <const R>(f: Fx<Async | HandlerCapture<string> | Interrup
 }
 
 /**
- * Execute all the effects of the provided Fx, and return a Promise for its result,
- * discarding the ability to cancel the computation.
+ * Execute a runtime-ready Fx and return a Promise for its result.
+ *
+ * This discards explicit cancellation. Use {@link runTask} when the caller needs
+ * to cancel or wait for disposal.
  */
 export const runPromise = <const R>(f: Fx<Async | HandlerCapture<string> | Interrupt, R>, options: RunForkOptions = {}): Promise<R> => {
   return runTask(f, {
@@ -129,7 +146,11 @@ export const runPromise = <const R>(f: Fx<Async | HandlerCapture<string> | Inter
 }
 
 /**
- * Execute all the effects of the provided Fx, and return its result.
+ * Execute a synchronous Fx and return its result.
+ *
+ * Use `run` only after handlers have eliminated all effects except
+ * {@link Interrupt}. Use {@link runPromise} or {@link runTask} for async
+ * programs.
  */
 export const run = <const R>(f: Fx<Interrupt, R>): R =>
   f.pipe(provideAll({}), f => {
@@ -164,10 +185,11 @@ export const run = <const R>(f: Fx<Interrupt, R>): R =>
   })
 
 /**
- * Ensures that a resource is acquired, used, and then released,
- * even if an error occurs. Runs the `initially` effect to acquire a resource,
- * passes it to `f`, and guarantees that `andFinally` is run with the
- * resource after `f` returns or throws.
+ * Acquire a resource, use it, and release it even if use fails or is
+ * interrupted.
+ *
+ * `bracket` is useful for local acquire/use/release flows. For named resource
+ * scopes, prefer the helpers in `Finalization`.
  */
 export const bracket = <const IE, const FE, const E, const R, const A>(
   initially: Fx<IE, R>,

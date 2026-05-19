@@ -44,6 +44,10 @@ type EffectScope<T extends ScopedEffectType> =
 /**
  * Handle effects of the given type.
  *
+ * The handler receives the requested effect and returns an Fx for the answer.
+ * `handle` removes the handled effect from the program's effect union and adds
+ * any effects requested by the handler.
+ *
  * @example
  * ```ts
  * class AskName extends Effect('app/AskName')<void, string> { }
@@ -103,6 +107,10 @@ export const handleScoped = <T extends ScopedEffectType, const Scope extends Eff
 
 /**
  * Handle effects of the given type with control over resuming the program.
+ *
+ * Use `control` when a handler needs to choose whether, when, or how often to
+ * resume the suspended computation. Use {@link handle} for simple one-request,
+ * one-answer interpretation.
  *
  * @example
  * ```ts

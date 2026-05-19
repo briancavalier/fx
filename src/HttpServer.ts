@@ -90,6 +90,9 @@ export type RouteHandler<E, Params extends ParamsRecord = ParamsRecord> =
 
 /**
  * A composable HTTP route declaration tree.
+ *
+ * Routes are transport-neutral declarations. A server handler such as the Node
+ * HTTP interpreter decides how requests are received and responses are written.
  */
 export type Routes<E = never> =
   | EmptyRoutes
@@ -132,6 +135,21 @@ export type Route<E, Params extends ParamsRecord = ParamsRecord> = {
 
 export const emptyRoutes: Routes<never> = { type: 'empty' }
 
+/**
+ * Declare one HTTP route.
+ *
+ * The handler is an Fx program that can request route context with `get` and
+ * may perform application effects. Those application effects remain visible in
+ * the route tree until handlers eliminate them.
+ *
+ * @example
+ * ```ts
+ * const health = route('GET', '/health', ok({
+ *   status: 200,
+ *   body: { type: 'text', value: 'ok' }
+ * }))
+ * ```
+ */
 export const route = <E>(
   method: Method,
   path: string,
@@ -149,6 +167,9 @@ type RouteList<Rs extends readonly unknown[]> = {
   readonly [K in keyof Rs]: Routes<unknown>
 }
 
+/**
+ * Concatenate route trees while preserving their combined effect requirements.
+ */
 export const routes = <const Rs extends readonly unknown[]>(
   ...routes: Rs & RouteList<Rs>
 ): ConcatRoutes<EffectsOfRoutes<Rs[number]>> => ({
@@ -156,6 +177,9 @@ export const routes = <const Rs extends readonly unknown[]>(
   routes: routes as readonly Routes<EffectsOfRoutes<Rs[number]>>[]
 })
 
+/**
+ * Mount a route tree under a path prefix.
+ */
 export const mount = <E>(
   prefix: string,
   routes: Routes<E>
@@ -176,6 +200,12 @@ export type RouteTransform<E1, E2> = {
   transform<A>(fx: Fx<E1 | Get<RouteContext<any>>, A>): Fx<E2 | Get<RouteContext<any>>, A>
 }['transform']
 
+/**
+ * Apply a lazy transform to every route handler in a route tree.
+ *
+ * Use this to provide route context, add logging, or interpret application
+ * effects without eagerly rewriting route handlers.
+ */
 export const transformRoutes = <E1, E2>(
   transform: RouteTransform<E1, E2>
 ) =>
@@ -185,6 +215,12 @@ export const transformRoutes = <E1, E2>(
     transform
   })
 
+/**
+ * Provide request-derived context to every route handler in a route tree.
+ *
+ * The context program can read {@link RouteContext}, perform effects, and
+ * provide the resulting fields to each route under the transform.
+ */
 export const provideRoutesFrom =
   <const PE, const C extends Record<PropertyKey, unknown>>(context: Fx<PE, C>) =>
     transformRoutes(provideFrom(context)) as
@@ -211,6 +247,12 @@ export type ServeOptions<OE = never> = {
   readonly observe?: (event: ServerEvent) => Fx<OE, void>
 }
 
+/**
+ * Request that an HTTP server run the provided routes.
+ *
+ * `serve` captures the surrounding handler context so route handlers can use
+ * application handlers installed at the server boundary.
+ */
 export const serve = <E, OE = never>(
   routes: Routes<E>,
   options: ServeOptions<OE>

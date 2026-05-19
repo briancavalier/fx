@@ -72,7 +72,7 @@ export type IncidentCollectorEffects =
   | Time
   | Log
   | Finally<typeof BundleScope>
-  | Finally<typeof CollectorScope>
+  | Finally<typeof CollectorScope, Log>
   | Interrupt
   | Fail<IncidentCollectorError>
 
@@ -303,7 +303,7 @@ const collectRuntime = (bundle: Bundle) => withCollector('runtime', fx(function*
   return runtime
 }))
 
-const withCollector = <E, A>(collector: CollectorName, program: Fx<E, A>): Fx<E | StartCollector | Log | Finally<typeof CollectorScope> | Interrupt, A> => fx(function* () {
+const withCollector = <E, A>(collector: CollectorName, program: Fx<E, A>): Fx<E | StartCollector | Log | Finally<typeof CollectorScope, Log> | Interrupt, A> => fx(function* () {
   const name = yield* usingManaged(CollectorScope, startCollector(collector))
   yield* usingExit(
     CollectorScope,

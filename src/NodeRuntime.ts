@@ -2,12 +2,9 @@ import type { Async } from './Async.js'
 import { type Fx, runTask } from './Fx.js'
 import type { HandlerCapture } from './HandlerCapture.js'
 import type { Interrupt } from './Interrupt.js'
+import type { ProcessSignalName } from './Process.js'
 
-export type NodeSignalName =
-  | 'SIGINT'
-  | 'SIGTERM'
-  | 'SIGHUP'
-  | 'SIGQUIT'
+export type NodeSignalName = ProcessSignalName
 
 export type NodeSignalProcess = {
   readonly once: (signal: NodeSignalName, listener: () => void) => unknown

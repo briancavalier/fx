@@ -2,16 +2,40 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { abort, orReturn } from './Abort.js'
 import { fx, ok, run, type Fx } from './Fx.js'
+import { GlobalScope } from './GlobalScope.js'
 import { handleScoped } from './Handler.js'
 import { returnFrom } from './ReturnFrom.js'
 import { brand, scope } from './Scope.js'
 import { collectFrom, YieldFrom, yieldFrom } from './YieldFrom.js'
-import type { Yielding } from './YieldFrom.js'
+import type { Yielding, YieldInput, YieldOutput } from './YieldFrom.js'
 
 describe('YieldFrom', () => {
   const NumberScope = brand<Yielding<number>>()('test/YieldFrom/numbers')
   const ItemScope = brand<Yielding<'item'>>()('test/YieldFrom/item')
   const DecisionScope = brand<Yielding<string, boolean>>()('test/YieldFrom/decision')
+
+  it('coalesces global scope yield outputs by union and inputs by intersection', () => {
+    type AskUser = Yielding<
+      { readonly type: 'askUser'; readonly id: string },
+      { readonly askUser: { readonly name: string } }
+    >
+    type AskConfig = Yielding<
+      { readonly type: 'askConfig'; readonly key: string },
+      { readonly askConfig: { readonly value: string } }
+    >
+    type GlobalYieldScope = typeof GlobalScope & AskUser & AskConfig
+
+    const out = null as unknown as YieldOutput<GlobalYieldScope>
+    const _: { readonly type: 'askUser'; readonly id: string } | { readonly type: 'askConfig'; readonly key: string } = out
+    const input = null as unknown as YieldInput<GlobalYieldScope>
+    const __: {
+      readonly askUser: { readonly name: string }
+    } & {
+      readonly askConfig: { readonly value: string }
+    } = input
+
+    assert.equal(GlobalScope, 'fx/Scope/Global')
+  })
 
   it('collects one-way yields from the matching scope', () => {
     const result = fx(function* () {

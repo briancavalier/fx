@@ -3,6 +3,7 @@ import { isEffect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { Finalizer, Finally } from './Finalization.js'
 import { Fx, fx } from './Fx.js'
+import { GlobalScope } from './GlobalScope.js'
 import { CapturedHandler, HandlerCapture } from './HandlerCapture.js'
 import { ReturnFrom } from './ReturnFrom.js'
 import { drainIteratorReturn, isInterpretingReturn } from './internal/iteratorClose.js'
@@ -12,6 +13,8 @@ import { withActiveScope } from './internal/runtimeContext.js'
 export const brand = <Brand>() =>
   <const Name extends string>(name: Name): Name & Brand =>
     name as Name & Brand
+
+export { GlobalScope }
 
 export type Exit<
   Scope extends string = string,
@@ -51,11 +54,15 @@ export interface Interrupted<Scope extends string> {
   readonly scope: Scope
 }
 
+export function scope(): <const E, const A>(f: Fx<E, A>) => Fx<ScopeEffects<E, typeof GlobalScope>, A | ReturnValue<E, typeof GlobalScope>>
 export function scope<const Scope extends string>(
   name: Scope
-): <const E, const A>(f: Fx<E, A>) => Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>> {
+): <const E, const A>(f: Fx<E, A>) => Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>>
+export function scope(
+  name: string = GlobalScope
+): unknown {
   return <const E, const A>(f: Fx<E, A>) =>
-    new ScopeBoundary(f, name) as Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>>
+    new ScopeBoundary(f, name) as Fx<ScopeEffects<E, string>, A | ReturnValue<E, string>>
 }
 
 export type ScopeEffects<E, Scope extends string> =

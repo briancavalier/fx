@@ -6,6 +6,13 @@ import { control } from './Handler.js'
 import type { TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
 
+/**
+ * Recoverable failure represented as an effect.
+ *
+ * Use `Fail<E>` for validation, domain, and platform-boundary failures that
+ * callers can handle. Throw JavaScript exceptions only for hard crashes or
+ * internal invariants.
+ */
 export class Fail<const E> extends Effect('fx/Fail')<E, never> {
   readonly origin: Breadcrumb
   readonly trace?: Trace
@@ -21,7 +28,9 @@ export class Fail<const E> extends Effect('fx/Fail')<E, never> {
 }
 
 /**
- * Fail with an error e.
+ * Fail with a recoverable error value.
+ *
+ * The returned Fx never produces a value until a failure handler recovers it.
  */
 export const fail = <const E>(
   e: E,
@@ -74,8 +83,11 @@ export const catchOnly = <const E1, const E extends AnyConstructor, const E2, co
 
 /**
  * Catch all failures and handle them with the provided function.
+ *
  * @example
- *   computation.pipe(catchAll(e => recoverFx))
+ * ```ts
+ * computation.pipe(catchAll(error => recover(error)))
+ * ```
  */
 export const catchAll = <const E1, const E2, const B>(handle: (e: ExtractFail<E1>) => Fx<E2, B>) =>
   catchIf((_: ExtractFail<E1>): _ is ExtractFail<E1> => true, handle)

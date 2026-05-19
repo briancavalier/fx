@@ -23,6 +23,22 @@ export interface EffectOrigin {
   readonly [EffectOriginTypeId]: TraceOrigin
 }
 
+/**
+ * Define an effect type with a stable string identity.
+ *
+ * Extend the returned class to describe one kind of request. The first type
+ * parameter is the request argument stored in `arg`; the second is the answer
+ * type received by `yield*`.
+ *
+ * @example
+ * ```ts
+ * class FindUser extends Effect('app/User/Find')<string, User | undefined> { }
+ *
+ * const findUser = (id: string) => new FindUser(id)
+ *
+ * const user = yield* findUser('user-1')
+ * ```
+ */
 export const Effect = <const T extends string>(id: T) => class <A, R = unknown> implements AnyEffect, Pipeable {
   public readonly _fxTypeId: typeof EffectTypeId = EffectTypeId;
   public readonly _fxEffectId = id;
@@ -43,6 +59,22 @@ export const Effect = <const T extends string>(id: T) => class <A, R = unknown> 
   }
 }
 
+/**
+ * Define an effect type whose requests are associated with a named scope.
+ *
+ * Scoped effects let handlers interpret only requests from a matching scope.
+ * Use them when a request should be local to a resource, region, or control
+ * boundary.
+ *
+ * @example
+ * ```ts
+ * class Stop<const Scope extends string>
+ *   extends ScopedEffect('app/Stop')<Scope, void, never> { }
+ *
+ * const stop = <const Scope extends string>(scope: Scope) =>
+ *   new Stop(scope, undefined)
+ * ```
+ */
 export const ScopedEffect = <const T extends string>(id: T) => class <
   const Scope extends string,
   A = void,
@@ -56,6 +88,12 @@ export const ScopedEffect = <const T extends string>(id: T) => class <
 export const isEffect = <E>(e: E): e is E & AnyEffect =>
   !!e && (e as any)._fxTypeId === EffectTypeId
 
+/**
+ * Attach diagnostic origin information to an effect request.
+ *
+ * Runtime handlers use this metadata to preserve request-site traces when an
+ * interpretation fails later at an async or platform boundary.
+ */
 export const withOrigin = <E extends object>(
   effect: E,
   origin: Breadcrumb,

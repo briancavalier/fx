@@ -17,7 +17,5 @@ export class Signal extends Effect('fx/Process/Signal')<readonly ProcessSignalNa
 /**
  * Wait for the next matching process signal.
  */
-export const signal = (
-  signals: readonly ProcessSignalName[] = ['SIGINT', 'SIGTERM']
-) =>
+export const signal = (signals: readonly ProcessSignalName[]) =>
   withOrigin(new Signal(signals), at('fx/Process/signal', signal))

@@ -7,10 +7,10 @@ import { signal, type ProcessSignalName } from './Process.js'
 import { runNodeMain } from './NodeRuntime.js'
 
 describe('NodeProcess', () => {
-  it('handles Signal with SIGINT and SIGTERM by default', async () => {
+  it('handles Signal with the requested signals', async () => {
     const process = fakeProcess()
 
-    const running = runPromise(signal().pipe(
+    const running = runPromise(signal(['SIGINT', 'SIGTERM']).pipe(
       nodeProcess({ process }),
       assertNoFail
     ))
@@ -65,7 +65,7 @@ describe('NodeProcess', () => {
 
   it('removes listeners when the waiting computation is aborted', async () => {
     const process = fakeProcess()
-    const task = runTask(signal().pipe(
+    const task = runTask(signal(['SIGINT', 'SIGTERM']).pipe(
       nodeProcess({ process }),
       assertNoFail
     ))
@@ -90,7 +90,7 @@ describe('NodeProcess', () => {
       }
     })
 
-    const result = await runPromise(signal().pipe(
+    const result = await runPromise(signal(['SIGINT', 'SIGTERM']).pipe(
       nodeProcess({ process }),
       returnFail
     ))
@@ -105,7 +105,7 @@ describe('NodeProcess', () => {
   it('requires Signal to be handled before runNodeMain', () => {
     if (process.env.FX_TYPECHECK_ONLY === '1') {
       const program = fx(function* () {
-        yield* signal()
+        yield* signal(['SIGINT'])
       })
 
       // @ts-expect-error Signal remains unhandled.

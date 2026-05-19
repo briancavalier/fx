@@ -1,0 +1,33 @@
+# fx
+
+> A small, strongly typed algebraic effects and handlers library for TypeScript.
+
+Use these files when helping someone write or modify code that uses `fx`.
+
+## Start here
+
+- `README.md`: high-level model, design tradeoffs, and a small first example.
+- `docs/agent-guide.md`: consumer-facing guide for coding agents using `fx` in application code.
+- `docs/recipes/`: compact task recipes for common implementation patterns.
+- `examples/README.md`: route from a user task to the closest runnable example.
+
+## Common tasks
+
+- Define a custom effect: `docs/recipes/define-an-effect.md`.
+- Write a handler: `docs/recipes/write-a-handler.md`.
+- Model recoverable errors: `docs/recipes/recover-with-fail.md`.
+- Wrap platform promises: `docs/recipes/wrap-a-promise.md`.
+- Test with pure handlers: `docs/recipes/test-with-pure-handlers.md`.
+- Run a Node program: `docs/recipes/run-a-node-program.md`.
+- Use structured concurrency: `docs/recipes/use-structured-concurrency.md`.
+- Manage resources and cleanup: `docs/recipes/manage-resources-and-finalizers.md`.
+- Build HTTP routes: `docs/recipes/build-http-routes.md`.
+
+## Contributor guidance
+
+- `AGENTS.md`: repo-wide contributor guidance for coding agents.
+- `src/AGENTS.md`: source-level implementation guidance.
+- `examples/AGENTS.md`: example style guidance.
+
+Do not treat contributor guidance as public API documentation. For application code,
+prefer `docs/agent-guide.md` and the recipes.

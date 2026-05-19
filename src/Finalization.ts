@@ -21,6 +21,10 @@ export type Finalizer<E = unknown> = (exit: Exit) => Fx<E, void>
 
 /**
  * Request that a cleanup operation be run when the named scope exits.
+ *
+ * A `scope(...)` handler interprets `Finally` requests for its matching scope
+ * and runs registered finalizers when that scope succeeds, fails, returns,
+ * aborts, or is interrupted.
  */
 export class Finally<const Scope extends string, E = never> extends ScopedEffect('fx/Finally')<Scope, {
   readonly finalizer: Finalizer<E>
@@ -28,6 +32,8 @@ export class Finally<const Scope extends string, E = never> extends ScopedEffect
 
 /**
  * Register a cleanup operation to run when the named scope exits.
+ *
+ * Use this when the finalizer does not need to inspect the scope exit.
  */
 export const andFinally = <const Scope extends string, E>(
   scope: Scope,
@@ -37,6 +43,9 @@ export const andFinally = <const Scope extends string, E>(
 
 /**
  * Register a cleanup operation that receives the named scope's exit.
+ *
+ * Use this when cleanup behavior depends on whether the scope succeeded,
+ * failed, returned, aborted, or was interrupted.
  */
 export const andFinallyExit = <const Scope extends string, E>(
   scope: Scope,
@@ -46,6 +55,9 @@ export const andFinallyExit = <const Scope extends string, E>(
 
 /**
  * Run an initial operation, register cleanup for its result, and return it.
+ *
+ * Acquisition and finalizer registration happen in an uninterruptible region so
+ * an acquired resource is not left without cleanup.
  */
 export const using = <const Scope extends string, const IE, const FE, const R>(
   scope: Scope,
@@ -82,7 +94,11 @@ export const managed = <const A, const E>(
 })
 
 /**
- * Run an initial operation that returns a managed value, register its cleanup, and return its value.
+ * Run an initial operation that returns a managed value, register its cleanup,
+ * and return its value.
+ *
+ * Use this when acquisition naturally returns the value and its finalizer
+ * together.
  */
 export const usingManaged = <const Scope extends string, const IE, const FE, const A>(
   scope: Scope,

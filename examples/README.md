@@ -5,6 +5,25 @@ if you are learning the core model, use `intermediate` for focused runtime
 features, and use `advanced` for app-shaped examples that combine several
 features.
 
+## Agent routing
+
+Use the smallest example that demonstrates the task:
+
+| Task | Start with | Why |
+| --- | --- | --- |
+| Minimal runnable program | `basic/hello.ts` | Shows one effect, one handler, and `run` without extra structure. |
+| Custom domain effects and pure tests | `basic/guessing-game` | Shows business logic written against effects and interpreted by handlers. |
+| HTTP boundary code | `basic/http-server-client` | Shows routes, request context, client/server boundaries, and in-memory handlers. |
+| Handler-chosen concurrency semantics | `intermediate/race-handlers.ts` | Shows one request interpreted by different race handlers. |
+| Interruption and cleanup | `intermediate/interrupt-safe-finalization.ts` | Shows cancellation, named scopes, and async finalizers. |
+| Scoped data-flow or early return | `intermediate/read-csv.ts` | Shows scoped `YieldFrom`, managed resources, transforms, and early return. |
+| App-shaped domain organization | `advanced/bookmarks` | Shows domain effects, HTTP, CLI/browser clients, persistence handlers, and tests. |
+| Structured concurrency plus resources | `advanced/incident-collector` | Shows `all`, `race`, named scopes, managed resources, finalization, and fixture handlers. |
+| Diagnostics and trace formatting | `advanced/diagnostics.ts` | Shows trace capture policy, regional traces, source lookup, and formatted output. |
+
+Avoid starting from an advanced example when a basic or intermediate example
+already matches the requested pattern.
+
 ## Basic
 
 | Example | What it shows | Best for | Run |

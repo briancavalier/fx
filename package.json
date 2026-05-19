@@ -61,6 +61,14 @@
       "types": "./dist/NodeRuntime.d.ts",
       "import": "./dist/NodeRuntime.js"
     },
+    "./NodeProcess": {
+      "types": "./dist/NodeProcess.d.ts",
+      "import": "./dist/NodeProcess.js"
+    },
+    "./Process": {
+      "types": "./dist/Process.d.ts",
+      "import": "./dist/Process.js"
+    },
     "./Random": {
       "types": "./dist/Random.d.ts",
       "import": "./dist/Random.js"

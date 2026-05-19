@@ -16,6 +16,9 @@ export class Signal extends Effect('fx/Process/Signal')<readonly ProcessSignalNa
 
 /**
  * Wait for the next matching process signal.
+ *
+ * When a program owns shutdown signal handling, run it with the runner's
+ * default signal handling disabled, for example `runNodeMain(f, { signals: false })`.
  */
 export const signal = (signals: readonly ProcessSignalName[]) =>
   withOrigin(new Signal(signals), at('fx/Process/signal', signal))

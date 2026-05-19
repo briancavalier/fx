@@ -4,8 +4,8 @@ import { assert as assertNoFail } from '../../src/Fail.js'
 import { managed, usingManaged } from '../../src/Finalization.js'
 import { handleScoped } from '../../src/Handler.js'
 import { returnFrom } from '../../src/ReturnFrom.js'
-import { brand, scope } from '../../src/Scope.js'
-import { yieldFrom, YieldFrom, type Yielding } from '../../src/YieldFrom.js'
+import { scope } from '../../src/Scope.js'
+import { yieldFrom, YieldFrom, yieldScope } from '../../src/YieldFrom.js'
 
 const ImportCsv = 'examples/intermediate/ImportCsv' as const
 
@@ -25,8 +25,8 @@ type IndexedCsvRow = {
   readonly value: CsvRow
 }
 
-const CsvRows = brand<Yielding<CsvRow>>()('examples/intermediate/CsvRows')
-const IndexedCsvRows = brand<Yielding<IndexedCsvRow>>()('examples/intermediate/IndexedCsvRows')
+const CsvRows = yieldScope<CsvRow>()('examples/intermediate/CsvRows')
+const IndexedCsvRows = yieldScope<IndexedCsvRow>()('examples/intermediate/IndexedCsvRows')
 
 const stopImport = (reason: string) =>
   returnFrom(ImportCsv, { type: 'skipped', reason } satisfies ImportResult)

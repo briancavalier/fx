@@ -7,12 +7,12 @@ import { fx, ok, run, type Fx } from './Fx.js'
 import { andFinally, andFinallyExit, managed, using, usingExit, usingManaged, type Finally, type Managed } from './Finalization.js'
 import type { Interrupt } from './Interrupt.js'
 import { returnFrom } from './ReturnFrom.js'
-import { brand, scope, type Exit } from './Scope.js'
-import { collectFrom, YieldFrom, yieldFrom, type Yielding } from './YieldFrom.js'
+import { scope, type Exit } from './Scope.js'
+import { collectFrom, YieldFrom, yieldFrom, yieldScope } from './YieldFrom.js'
 
 describe('Finalization', () => {
   const TestScope = 'test/Finalization' as const
-  const CleanupEvents = brand<Yielding<'cleanup'>>()('test/Finalization/cleanup')
+  const CleanupEvents = yieldScope<'cleanup'>()('test/Finalization/cleanup')
 
   it('preserves finalizer effects in constructor types', () => {
     const releaseFailure = new Error('release failed')

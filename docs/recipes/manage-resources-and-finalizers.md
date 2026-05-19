@@ -27,6 +27,10 @@ const program = fx(function* () {
 Use `using`, `usingExit`, or `usingManaged` to acquire and register cleanup in a
 small uninterruptible region.
 
+Use `scope()` only for small local programs with one obvious cleanup or control
+region. Prefer named scopes when resources are nested, reusable, or exposed from
+a helper.
+
 Handler pipeline:
 
 ```ts

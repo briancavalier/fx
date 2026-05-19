@@ -2,16 +2,69 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { abort, orReturn } from './Abort.js'
 import { fx, ok, run, type Fx } from './Fx.js'
+import { GlobalScope } from './GlobalScope.js'
 import { handleScoped } from './Handler.js'
 import { returnFrom } from './ReturnFrom.js'
-import { brand, scope } from './Scope.js'
-import { collectFrom, YieldFrom, yieldFrom } from './YieldFrom.js'
-import type { Yielding } from './YieldFrom.js'
+import { scope } from './Scope.js'
+import { collectFrom, YieldFrom, yieldFrom, yieldScope } from './YieldFrom.js'
+import type { Yielding, YieldInput, YieldOutput } from './YieldFrom.js'
 
 describe('YieldFrom', () => {
-  const NumberScope = brand<Yielding<number>>()('test/YieldFrom/numbers')
-  const ItemScope = brand<Yielding<'item'>>()('test/YieldFrom/item')
-  const DecisionScope = brand<Yielding<string, boolean>>()('test/YieldFrom/decision')
+  const NumberScope = yieldScope<number>()('test/YieldFrom/numbers')
+  const ItemScope = yieldScope<'item'>()('test/YieldFrom/item')
+  const DecisionScope = yieldScope<string, boolean>()('test/YieldFrom/decision')
+
+  it('coalesces global scope yield outputs by union and inputs by intersection', () => {
+    type AskUser = Yielding<
+      'askUser',
+      { readonly type: 'askUser'; readonly id: string },
+      { readonly askUser: { readonly name: string } }
+    >
+    type AskConfig = Yielding<
+      'askConfig',
+      { readonly type: 'askConfig'; readonly key: string },
+      { readonly askConfig: { readonly value: string } }
+    >
+    type AskLocale = Yielding<
+      'askLocale',
+      { readonly type: 'askLocale' },
+      { readonly askLocale: string }
+    >
+    type AskTrace = Yielding<
+      'askTrace',
+      { readonly type: 'askTrace' },
+      { readonly askTrace: string }
+    >
+    type AskFeature = Yielding<
+      'askFeature',
+      { readonly type: 'askFeature'; readonly name: string },
+      { readonly askFeature: boolean }
+    >
+    type GlobalYieldScope = typeof GlobalScope & AskUser & AskConfig & AskLocale & AskTrace & AskFeature
+
+    const out = null as unknown as YieldOutput<GlobalYieldScope>
+    const _: { readonly type: 'askUser'; readonly id: string }
+      | { readonly type: 'askConfig'; readonly key: string }
+      | { readonly type: 'askLocale' }
+      | { readonly type: 'askTrace' }
+      | { readonly type: 'askFeature'; readonly name: string } = out
+    const __: YieldOutput<GlobalYieldScope> = { type: 'askUser', id: '1' }
+    const ___: YieldOutput<GlobalYieldScope> = { type: 'askFeature', name: 'beta' }
+    const input = null as unknown as YieldInput<GlobalYieldScope>
+    const ____: {
+      readonly askUser: { readonly name: string }
+    } & {
+      readonly askConfig: { readonly value: string }
+    } & {
+      readonly askLocale: string
+    } & {
+      readonly askTrace: string
+    } & {
+      readonly askFeature: boolean
+    } = input
+
+    assert.equal(GlobalScope, 'fx/Scope/Global')
+  })
 
   it('collects one-way yields from the matching scope', () => {
     const result = fx(function* () {
@@ -38,8 +91,26 @@ describe('YieldFrom', () => {
     assert.deepEqual(result, [4, [0, 1, 2, 3]])
   })
 
+  it('collectFrom requires every protocol in the scope to be one-way', () => {
+    type OneWay = Yielding<'oneWay', { readonly type: 'oneWay' }, void>
+    type Ask = Yielding<'ask', { readonly type: 'ask' }, { readonly answer: string }>
+    const OneWayScope = GlobalScope as typeof GlobalScope & OneWay
+    const AskScope = GlobalScope as typeof GlobalScope & Ask
+    const MixedScope = GlobalScope as typeof GlobalScope & OneWay & Ask
+
+    const _ = collectFrom(OneWayScope)
+    // @ts-expect-error bidirectional scopes require a response
+    const __ = collectFrom(AskScope)
+    // @ts-expect-error mixed scopes may include yields that require a response
+    const ___ = collectFrom(MixedScope)
+
+    assert.equal(typeof _, 'function')
+    assert.equal(typeof __, 'function')
+    assert.equal(typeof ___, 'function')
+  })
+
   it('propagates yields from a different scope', () => {
-    const OtherScope = brand<Yielding<'other'>>()('test/YieldFrom/other')
+    const OtherScope = yieldScope<'other'>()('test/YieldFrom/other')
 
     const f = fx(function* () {
       yield* yieldFrom(OtherScope, 'other')
@@ -56,7 +127,7 @@ describe('YieldFrom', () => {
   })
 
   it('handles nested named yield scopes independently', () => {
-    const InnerScope = brand<Yielding<'inner'>>()('test/YieldFrom/inner')
+    const InnerScope = yieldScope<'inner'>()('test/YieldFrom/inner')
     const outer = [] as number[]
     const inner = [] as string[]
 

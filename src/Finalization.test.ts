@@ -3,13 +3,96 @@ import { describe, it } from 'node:test'
 
 import { abort, Abort, orReturn } from './Abort.js'
 import { Fail, fail, returnFail } from './Fail.js'
-import { fx, ok, run } from './Fx.js'
-import { andFinally, andFinallyExit, managed, using, usingExit, usingManaged } from './Finalization.js'
+import { fx, ok, run, type Fx } from './Fx.js'
+import { andFinally, andFinallyExit, managed, using, usingExit, usingManaged, type Finally, type Managed } from './Finalization.js'
+import type { Interrupt } from './Interrupt.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope, type Exit } from './Scope.js'
+import { brand, scope, type Exit } from './Scope.js'
+import { collectFrom, YieldFrom, yieldFrom, type Yielding } from './YieldFrom.js'
 
 describe('Finalization', () => {
   const TestScope = 'test/Finalization' as const
+  const CleanupEvents = brand<Yielding<'cleanup'>>()('test/Finalization/cleanup')
+
+  it('preserves finalizer effects in constructor types', () => {
+    const releaseFailure = new Error('release failed')
+    const finalizer = andFinally(TestScope, yieldFrom(CleanupEvents, 'cleanup'))
+    const exitFinalizer = andFinallyExit(TestScope, () => fail(releaseFailure))
+
+    const _: typeof finalizer extends Fx<Finally<typeof TestScope, YieldFrom<typeof CleanupEvents>>, void> ? true : false = true
+    const __: typeof exitFinalizer extends Fx<Finally<typeof TestScope, Fail<Error>>, void> ? true : false = true
+
+    assert.equal(typeof _, 'boolean')
+    assert.equal(typeof __, 'boolean')
+  })
+
+  it('preserves finalizer effects in resource helper types', () => {
+    const releaseFailure = new Error('release failed')
+    const resource = using(TestScope, ok('resource'), () => yieldFrom(CleanupEvents, 'cleanup'))
+    const exitResource = usingExit(TestScope, ok('resource'), () => fail(releaseFailure))
+    const managedResource = usingManaged(TestScope, ok(managed(
+      'resource',
+      () => yieldFrom(CleanupEvents, 'cleanup')
+    )))
+
+    const _: typeof resource extends Fx<Finally<typeof TestScope, YieldFrom<typeof CleanupEvents>> | Interrupt, 'resource'> ? true : false = true
+    const __: typeof exitResource extends Fx<Finally<typeof TestScope, Fail<Error>> | Interrupt, 'resource'> ? true : false = true
+    const ___: typeof managedResource extends Fx<Finally<typeof TestScope, YieldFrom<typeof CleanupEvents>> | Interrupt, 'resource'> ? true : false = true
+
+    assert.equal(typeof _, 'boolean')
+    assert.equal(typeof __, 'boolean')
+    assert.equal(typeof ___, 'boolean')
+  })
+
+  it('exposes non-failure finalizer effects after scope', () => {
+    const scoped = fx(function* () {
+      yield* andFinally(TestScope, yieldFrom(CleanupEvents, 'cleanup'))
+      return 'done'
+    }).pipe(scope(TestScope))
+
+    const _: typeof scoped extends Fx<YieldFrom<typeof CleanupEvents> | Fail<AggregateError>, 'done'> ? true : false = true
+
+    const result = run(scoped.pipe(
+      collectFrom(CleanupEvents),
+      returnFail
+    ))
+
+    assert.equal(typeof _, 'boolean')
+    assert.deepEqual(result, ['done', ['cleanup']])
+  })
+
+  it('exposes cleanup failures as AggregateError after scope', () => {
+    const releaseFailure = new Error('release failed')
+    const scoped = fx(function* () {
+      yield* andFinally(TestScope, fail(releaseFailure))
+      return 'done'
+    }).pipe(scope(TestScope))
+
+    const _: typeof scoped extends Fx<Fail<AggregateError>, 'done'> ? true : false = true
+
+    const result = run(scoped.pipe(returnFail))
+
+    assert.equal(typeof _, 'boolean')
+    assert.ok(Fail.is(result))
+    assert.ok(result.arg instanceof AggregateError)
+    assert.deepEqual(result.arg.errors, [releaseFailure])
+  })
+
+  it('leaves finalizers from a different scope visible after scope', () => {
+    const OtherScope = 'test/Finalization/other' as const
+    const scoped = fx(function* () {
+      yield* andFinally(OtherScope, yieldFrom(CleanupEvents, 'cleanup'))
+      return 'done'
+    }).pipe(scope(TestScope))
+
+    const _: typeof scoped extends Fx<Finally<typeof OtherScope, YieldFrom<typeof CleanupEvents>>, 'done'> ? true : false = true
+    const next = scoped[Symbol.iterator]().next()
+
+    assert.equal(typeof _, 'boolean')
+    assert.equal(next.done, false)
+    assert.equal((next.value as { readonly scope?: unknown }).scope, OtherScope)
+  })
+
   it('releases finalizers in reverse registration order after success', () => {
     const released = [] as string[]
 
@@ -268,7 +351,7 @@ describe('Finalization', () => {
     const initFailure = new Error('init failed')
 
     const result = run(fx(function* () {
-      return yield* usingManaged(TestScope, fail(initFailure))
+      return yield* usingManaged(TestScope, fail(initFailure) as Fx<Fail<Error>, Managed<string>>)
     }).pipe(scope(TestScope), returnFail))
 
     assert.ok(Fail.is(result))

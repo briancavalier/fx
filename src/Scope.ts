@@ -59,15 +59,26 @@ export function scope<const Scope extends string>(
 }
 
 export type ScopeEffects<E, Scope extends string> =
-  HandleScopeEffect<E, Scope> | CleanupFailure<E, Scope>
+  HandleScopeEffect<E, Scope> | CleanupEffects<E, Scope> | CleanupFailure<E, Scope>
 
 type HandleScopeEffect<E, Scope extends string> =
-  E extends Finally<Scope> ? never
+  E extends Finally<Scope, any> ? never
   : E extends ReturnFrom<Scope, any> ? never
   : E
 
+type MatchingFinally<E, Scope extends string> =
+  Extract<E, Finally<Scope, any>>
+
+type FinalizerEffects<E, Scope extends string> =
+  MatchingFinally<E, Scope> extends never
+    ? never
+    : MatchingFinally<E, Scope> extends Finally<Scope, infer FE> ? FE : never
+
+type CleanupEffects<E, Scope extends string> =
+  Exclude<FinalizerEffects<E, Scope>, Fail<any>>
+
 type CleanupFailure<E, Scope extends string> =
-  Extract<E, Finally<Scope>> extends never ? never : Fail<AggregateError>
+  MatchingFinally<E, Scope> extends never ? never : Fail<AggregateError>
 
 export type ReturnValue<E, Scope extends string> =
   E extends ReturnFrom<Scope, infer A> ? A : never
@@ -85,7 +96,7 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
   }
 
   *[Symbol.iterator](): Iterator<unknown, A> {
-    const finalizers = [] as Finalizer[]
+    const finalizers = [] as Finalizer<unknown>[]
     const { scopeName } = this
     const i = withActiveScope(scopeName, this.fx)[Symbol.iterator]()
     const captured: CapturedHandler = {

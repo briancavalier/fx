@@ -126,15 +126,18 @@ named boundary is real and useful for the application.
 
 ## Default global scope
 
-`GlobalScope` is a real typed scope value, not ambient state. Default scope
+`GlobalScope` is a real typed scope value, not ambient state. Use the default
+global scope when the program and its handler are owned together in local
+application code and there is only one intended control region. Default scope
 overloads such as `scope()`, `abort()`, `orReturn(value)`, and
-`returnFrom(value)` are useful for small app-local programs with one obvious
-control region.
+`returnFrom(value)` keep that case compact while preserving the effect
+requirement in the type.
 
-Prefer explicit named scopes for reusable code, public APIs, nested control
-regions, library code, and examples that teach handler composition. A handler
-for the global scope can catch any same-scope exit, so do not use it as a
-catch-all for unrelated control effects.
+Use a named scope when the control region has an owner that should remain
+visible to callers: reusable helpers, public APIs, nested regions, resources,
+retries, or examples that teach handler composition. A handler for the global
+scope can catch any same-scope exit, so do not use it as a catch-all for
+unrelated control effects.
 
 ## Choose the right runner
 

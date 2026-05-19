@@ -41,8 +41,9 @@ Development guidance:
 - Preserve strong effect typing. Changes should keep `E` unions meaningful and narrowed by handlers.
 - Default global scope discipline:
   - `GlobalScope` is a real exported scope value, not an ambient capability.
-  - Default-scope overloads are for concrete ergonomic use cases in small app-local code.
-  - Prefer explicit named scopes in reusable functions, public APIs, libraries, nested control regions, and examples that teach composition.
+  - Choose `GlobalScope` only when the producer and handler are owned together in local app code.
+  - Choose a named scope when the scope is part of a reusable or composable boundary.
+  - Prefer explicit named scopes in reusable functions, public APIs, libraries, nested control regions, resources, retries, and examples that teach composition.
   - Do not broaden default-scope overloads to every scoped effect by default; add focused runtime and type tests for each new default-scope API.
   - Keep default-scope requirements visible in types as `typeof GlobalScope` rather than hiding scope requirements behind ambient state.
   - Do not use `GlobalScope` as a catch-all for unrelated control effects; a global-scope handler may catch exits it did not intend to own.

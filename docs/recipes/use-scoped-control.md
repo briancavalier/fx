@@ -2,9 +2,9 @@
 
 Use this when a computation needs to exit a delimited region early.
 
-For small app-local programs with one obvious control region, the default global
-scope keeps the call site compact while preserving the effect requirement in the
-type.
+Use the default global scope when the program and its handler are owned together
+in local application code and there is only one intended control region. It
+keeps that case compact while preserving the effect requirement in the type.
 
 ```ts
 import { abort, orReturn } from "@briancavalier/fx/Abort"
@@ -24,8 +24,9 @@ const user = loadUser(input.id).pipe(
 )
 ```
 
-Prefer an explicit named scope when the code is reusable, nested, or part of a
-public boundary.
+Use an explicit named scope when the control region has an owner that should
+remain visible to callers. That includes reusable helpers, public APIs, nested
+regions, resources, retries, and examples that teach handler composition.
 
 ```ts
 import { abort, orReturn, restartOnAbort } from "@briancavalier/fx/Abort"
@@ -52,8 +53,8 @@ const response = loadRequest(request).pipe(
 )
 ```
 
-`restartOnAbort` takes an explicit scope; do not treat the global scope as the
-default for retryable or nested control regions.
+`restartOnAbort` takes an explicit scope. Retryable control has a visible owner,
+so do not treat the global scope as its default.
 
 `YieldFrom` global-scope support is type-level only in the current prototype.
 When multiple protocols share one runtime scope, output types compose by union

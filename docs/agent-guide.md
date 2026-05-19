@@ -124,6 +124,18 @@ const main = program.pipe(
 Do not hide large handler stacks behind broad framework-like layers unless the
 named boundary is real and useful for the application.
 
+## Default global scope
+
+`GlobalScope` is a real typed scope value, not ambient state. Default scope
+overloads such as `scope()`, `abort()`, `orReturn(value)`, and
+`returnFrom(value)` are useful for small app-local programs with one obvious
+control region.
+
+Prefer explicit named scopes for reusable code, public APIs, nested control
+regions, library code, and examples that teach handler composition. A handler
+for the global scope can catch any same-scope exit, so do not use it as a
+catch-all for unrelated control effects.
+
 ## Choose the right runner
 
 - Use `run` only after all async, failure, handler-capture, and platform effects

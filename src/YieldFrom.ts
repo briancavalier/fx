@@ -48,11 +48,14 @@ export type YieldValue<E, Scope extends string & AnyYielding> =
 export type ExcludeYieldFrom<E, Scope extends string & AnyYielding, E2 = never> =
   E extends YieldFrom<Scope> ? E2 : E
 
+type CollectableScope<Scope> =
+  Exclude<YieldProtocolRawInput<YieldProtocolValue<Scope>>, void> extends never ? Scope : never
+
 /**
  * Collect all one-way yields from the named scope.
  */
 export const collectFrom = <const Scope extends string & AnyYielding>(
-  scope: YieldInput<Scope> extends void ? Scope : never
+  scope: CollectableScope<Scope>
 ) =>
   <const E, const A>(
     f: Fx<E, A>
@@ -74,6 +77,9 @@ type YieldProtocolValue<Scope> =
 
 type YieldProtocolOutput<Protocol> =
   Protocol extends { readonly out: infer Out } ? Out : never
+
+type YieldProtocolRawInput<Protocol> =
+  Protocol extends { readonly in: infer In } ? In : never
 
 type YieldProtocolInput<Protocol> =
   Protocol extends { readonly in: infer In } ? (input: In) => void : never

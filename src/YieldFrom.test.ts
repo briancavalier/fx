@@ -91,6 +91,24 @@ describe('YieldFrom', () => {
     assert.deepEqual(result, [4, [0, 1, 2, 3]])
   })
 
+  it('collectFrom requires every protocol in the scope to be one-way', () => {
+    type OneWay = Yielding<'oneWay', { readonly type: 'oneWay' }, void>
+    type Ask = Yielding<'ask', { readonly type: 'ask' }, { readonly answer: string }>
+    const OneWayScope = GlobalScope as typeof GlobalScope & OneWay
+    const AskScope = GlobalScope as typeof GlobalScope & Ask
+    const MixedScope = GlobalScope as typeof GlobalScope & OneWay & Ask
+
+    const _ = collectFrom(OneWayScope)
+    // @ts-expect-error bidirectional scopes require a response
+    const __ = collectFrom(AskScope)
+    // @ts-expect-error mixed scopes may include yields that require a response
+    const ___ = collectFrom(MixedScope)
+
+    assert.equal(typeof _, 'function')
+    assert.equal(typeof __, 'function')
+    assert.equal(typeof ___, 'function')
+  })
+
   it('propagates yields from a different scope', () => {
     const OtherScope = yieldScope<'other'>()('test/YieldFrom/other')
 

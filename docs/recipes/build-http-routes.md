@@ -4,6 +4,7 @@ Use this when exposing domain programs through a transport-neutral HTTP server.
 
 ```ts
 import { get } from "@briancavalier/fx/Env"
+import { assert as assertNoFail } from "@briancavalier/fx/Fail"
 import { route, routes, type RouteContext } from "@briancavalier/fx/HttpServer"
 import { fx, ok } from "@briancavalier/fx"
 
@@ -34,6 +35,7 @@ Handler pipeline:
 serve(appRoutes, { port: 3000 }).pipe(
   appHandlers,
   nodeHttp(),
+  assertNoFail,
   runNodeMain
 )
 ```

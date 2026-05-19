@@ -4,6 +4,8 @@ Use this at async platform boundaries such as HTTP, files, databases, and timers
 
 ```ts
 import { tryPromise } from "@briancavalier/fx/Async"
+import { catchAll } from "@briancavalier/fx/Fail"
+import { ok, runPromise } from "@briancavalier/fx"
 
 const fetchJson = (url: string) =>
   tryPromise(signal =>
@@ -19,6 +21,7 @@ Handler pipeline:
 
 ```ts
 fetchJson("https://example.com/data.json").pipe(
+  catchAll(error => ok({ error })),
   runPromise
 )
 ```

@@ -49,6 +49,7 @@ already matches the requested pattern.
 | --- | --- | --- | --- |
 | `advanced/bookmarks` | A fuller app with domain effects, HTTP, CLI/browser clients, persistence handlers, and tests. | Readers studying how larger Fx applications can be organized. | Server and browser app: `node --import tsx examples/advanced/bookmarks/server.ts`, then open `http://127.0.0.1:3000/`. CLI: with the server running, use `node --import tsx examples/advanced/bookmarks/cli.ts add https://example.com --tag demo` and `node --import tsx examples/advanced/bookmarks/cli.ts list`. |
 | `advanced/incident-collector` | Structured concurrency, named scopes, resource finalization, cancellation, fixture handlers, and tests. | Readers studying a realistic concurrent workflow without HTTP/browser scaffolding. | `node --import tsx examples/advanced/incident-collector/cli.ts` |
+| `advanced/tool-agent` | Tool-planning workflow with model effects, parallel tool calls, sandbox policy handlers, fixture handlers, and optional OpenAI model integration. | Readers studying agent-like workflows built from explicit effects and handlers. | `node --import tsx examples/advanced/tool-agent/cli.ts` |
 | `advanced/diagnostics.ts` | Trace capture policy, regional trace capture, source lookup, formatted diagnostics, and snapshots. | Readers debugging failures and tuning diagnostic detail. | `node --import tsx examples/advanced/diagnostics.ts` |
 
 Most examples import from local `src` paths so they can be run directly from

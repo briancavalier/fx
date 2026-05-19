@@ -4,22 +4,27 @@ import { handleScoped } from './Handler.js'
 
 declare const YieldingTypeId: unique symbol
 
-export type Yielding<Out, In = void> = {
+export type Yielding<Protocol extends PropertyKey, Out, In = void> = {
   readonly [YieldingTypeId]: {
-    readonly out: (_: Out) => void
-    readonly in: In
+    readonly [P in Protocol]: {
+      readonly out: Out
+      readonly in: In
+    }
   }
 }
 
+export const yieldScope =
+  <Out, In = void>() =>
+    <const Scope extends string>(scope: Scope): Scope & Yielding<Scope, Out, In> =>
+      scope as Scope & Yielding<Scope, Out, In>
+
 export type YieldOutput<Scope> =
-  Scope extends { readonly [YieldingTypeId]: { readonly out: infer Out } }
-  ? YieldOutputUnion<Out>
-  : never
+  YieldProtocolOutput<YieldProtocolValue<Scope>>
 
 export type YieldInput<Scope> =
-  Scope extends { readonly [YieldingTypeId]: { readonly in: infer In } } ? In : never
+  YieldProtocolInput<YieldProtocolValue<Scope>> extends (input: infer In) => void ? In : never
 
-type AnyYielding = Yielding<never, unknown>
+type AnyYielding = { readonly [YieldingTypeId]: object }
 
 /**
  * Yield a value to the named scope.
@@ -46,7 +51,9 @@ export type ExcludeYieldFrom<E, Scope extends string & AnyYielding, E2 = never> 
 /**
  * Collect all one-way yields from the named scope.
  */
-export const collectFrom = <const Scope extends string & Yielding<never, void>>(scope: Scope) =>
+export const collectFrom = <const Scope extends string & AnyYielding>(
+  scope: YieldInput<Scope> extends void ? Scope : never
+) =>
   <const E, const A>(
     f: Fx<E, A>
   ): Fx<ExcludeYieldFrom<E, Scope>, readonly [A, readonly YieldValue<E, Scope>[]]> => {
@@ -59,20 +66,14 @@ export const collectFrom = <const Scope extends string & Yielding<never, void>>(
     ) as Fx<ExcludeYieldFrom<E, Scope>, readonly [A, readonly YieldValue<E, Scope>[]]>
   }
 
-type YieldOutputUnion<F> =
-  F extends {
-    (_: infer A): void
-    (_: infer B): void
-    (_: infer C): void
-    (_: infer D): void
-  } ? A | B | C | D
-    : F extends {
-      (_: infer A): void
-      (_: infer B): void
-      (_: infer C): void
-    } ? A | B | C
-      : F extends {
-        (_: infer A): void
-        (_: infer B): void
-      } ? A | B
-        : F extends (_: infer A) => void ? A : never
+type YieldProtocols<Scope> =
+  Scope extends { readonly [YieldingTypeId]: infer Protocols } ? Protocols : never
+
+type YieldProtocolValue<Scope> =
+  YieldProtocols<Scope>[keyof YieldProtocols<Scope>]
+
+type YieldProtocolOutput<Protocol> =
+  Protocol extends { readonly out: infer Out } ? Out : never
+
+type YieldProtocolInput<Protocol> =
+  Protocol extends { readonly in: infer In } ? (input: In) => void : never

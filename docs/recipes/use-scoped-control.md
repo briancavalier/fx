@@ -56,10 +56,12 @@ const response = loadRequest(request).pipe(
 `restartOnAbort` takes an explicit scope. Retryable control has a visible owner,
 so do not treat the global scope as its default.
 
-`YieldFrom` global-scope support is type-level only in the current prototype.
-When multiple protocols share one runtime scope, output types compose by union
-and input types compose by intersection. Prefer explicit scopes when request and
-response protocols need tighter correlation.
+For `YieldFrom`, use `yieldScope<Out, In>()("scope/name")` when one named scope
+has one yield protocol. When one runtime scope intentionally carries multiple
+protocols, compose protocol-map `Yielding<Protocol, Out, In>` brands on that
+scope. Output types compose by union and input types compose by intersection.
+Prefer explicit scopes when request and response protocols need tighter
+correlation.
 
 Common mistake: using the global scope as a catch-all for unrelated exits. A
 global-scope handler can catch any exit that uses the same global scope.

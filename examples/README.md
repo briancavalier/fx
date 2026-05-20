@@ -54,5 +54,5 @@ already matches the requested pattern.
 
 Runnable TypeScript examples import from `@briancavalier/fx` and the curated
 feature subpaths so they match package-consumer code. Run `pnpm build` before
-executing examples directly; package self-imports resolve through
-`package.json#exports` to `dist/exports/*`.
+`pnpm typecheck`, `pnpm test`, or direct example execution; package self-imports
+resolve through `package.json#exports` to `dist/exports/*`.

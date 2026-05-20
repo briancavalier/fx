@@ -38,9 +38,17 @@ Avoid:
 - adding a `main` generator solely to yield one already-constructed `Fx`,
 - depending on generated `dist/`.
 
-Runnable TypeScript examples should import from `@briancavalier/fx` and the
-curated feature subpaths so they demonstrate the package-consumer API. Because
-package self-imports resolve through `package.json#exports` to `dist/exports/*`,
-run `pnpm build` before executing examples directly with `node --import tsx`.
+Runnable TypeScript examples, example tests, and example helper modules should
+import from `@briancavalier/fx` and the curated feature subpaths so they
+demonstrate the package-consumer API. Do not use relative `src/*`
+implementation imports in `examples/**/*.ts`, including tests, unless a
+narrowly scoped internals example explicitly documents why the public surface is
+insufficient.
+
+Package self-imports resolve through `package.json#exports` to
+`dist/exports/*`. For example work, run `pnpm build` before `pnpm typecheck`,
+`pnpm test`, or direct execution with `node --import tsx` so checks use current
+build output rather than stale or missing `dist`.
+
 Generated browser asset JS may keep generated relative imports until its
 separate build flow regenerates it.

@@ -53,5 +53,6 @@ Development guidance:
   `package.json#exports`, and `src/exports.test.ts`.
 - New package subpaths should represent stable feature areas, not implementation
   file names. Public docs should use `@briancavalier/fx` and curated subpaths;
-  in-repo examples may use local `src` imports for direct source execution.
+  runnable TypeScript examples and example tests should also use those curated
+  package imports rather than relative `src/*` implementation imports.
 - Never force push to a remote PR branch or PR worktree unless specifically told to do so. Always maintain full history on PR branches and PR worktrees.

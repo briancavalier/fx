@@ -26,9 +26,7 @@ export type Finalizer<E = unknown> = (exit: Exit) => Fx<E, void>
  * and runs registered finalizers when that scope succeeds, fails, returns,
  * aborts, or is interrupted.
  */
-export class Finally<const Scope extends string, E = never> extends ScopedEffect('fx/Finally')<Scope, {
-  readonly finalizer: Finalizer<E>
-}, void> { }
+export class Finally<const Scope extends string, E = never> extends ScopedEffect('fx/Finally')<Scope, Finalizer<E>, void> { }
 
 /**
  * Register a cleanup operation to run when the named scope exits.
@@ -39,7 +37,7 @@ export const andFinally = <const Scope extends string, E>(
   scope: Scope,
   f: Fx<E, void>
 ): Fx<Finally<Scope, E>, void> =>
-  new Finally(scope, { finalizer: () => f })
+  new Finally(scope, () => f)
 
 /**
  * Register a cleanup operation that receives the named scope's exit.
@@ -51,7 +49,7 @@ export const andFinallyExit = <const Scope extends string, E>(
   scope: Scope,
   f: (exit: Exit) => Fx<E, void>
 ): Fx<Finally<Scope, E>, void> =>
-  new Finally(scope, { finalizer: f })
+  new Finally(scope, f)
 
 /**
  * Run an initial operation, register cleanup for its result, and return it.

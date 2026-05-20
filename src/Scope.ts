@@ -115,7 +115,7 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
           const sameScope = (effect as { readonly scope?: unknown }).scope === scopeName
 
           if (sameScope && Finally.is(effect)) {
-            finalizers.push(effect.arg.finalizer)
+            finalizers.push(effect.arg)
             ir = i.next(undefined)
           } else if (sameScope && ReturnFrom.is(effect)) {
             const exit = { type: 'returnFrom', scope: scopeName, value: effect.arg } satisfies Exit<Scope>

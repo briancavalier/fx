@@ -24,8 +24,9 @@ const program = fx(function* () {
 )
 ```
 
-Use `using`, `usingExit`, or `usingManaged` to acquire and register cleanup in a
-small uninterruptible region.
+Use `using` or `usingManaged` to acquire and register cleanup in a small
+uninterruptible region. `using` finalizers receive the acquired value and the
+scope exit, and may ignore the exit when cleanup does not depend on it.
 
 Handler pipeline:
 

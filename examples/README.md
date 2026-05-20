@@ -17,6 +17,7 @@ Use the smallest example that demonstrates the task:
 | Handler-chosen concurrency semantics | `intermediate/race-handlers.ts` | Shows one request interpreted by different race handlers. |
 | Interruption and cleanup | `intermediate/interrupt-safe-finalization.ts` | Shows cancellation, named scopes, and async finalizers. |
 | Scoped data-flow or early return | `intermediate/read-csv.ts` | Shows scoped `YieldFrom`, managed resources, transforms, and early return. |
+| Scoped producer/receiver pipelines | `intermediate/yield-sink-pipeline.ts` | Shows scoped `YieldFrom`, `Sink`, and explicit pipe outcomes. |
 | App-shaped domain organization | `advanced/bookmarks` | Shows domain effects, HTTP, CLI/browser clients, persistence handlers, and tests. |
 | Structured concurrency plus resources | `advanced/incident-collector` | Shows `all`, `race`, named scopes, managed resources, finalization, and fixture handlers. |
 | Diagnostics and trace formatting | `advanced/diagnostics.ts` | Shows trace capture policy, regional traces, source lookup, and formatted output. |
@@ -41,6 +42,7 @@ already matches the requested pattern.
 | `intermediate/uninterruptible-mask.ts` | A protected acquire/register critical section with interruptible use. | Readers who need precise interruption boundaries. | `node --import tsx examples/intermediate/uninterruptible-mask.ts` |
 | `intermediate/ref.ts` | Atomic shared state updates across concurrent tasks. | Readers modeling safe mutable references. | `node --import tsx examples/intermediate/ref.ts` |
 | `intermediate/read-csv.ts` | Scoped `YieldFrom`, row transforms, managed resources, and early return. | Readers exploring scoped data-flow patterns. | `node --import tsx examples/intermediate/read-csv.ts` |
+| `intermediate/yield-sink-pipeline.ts` | Scoped `YieldFrom`, `Sink`, and discriminated pipe results. | Readers connecting push-style producers to pull-style receivers. | `node --import tsx examples/intermediate/yield-sink-pipeline.ts` |
 | `intermediate/restart-on-abort.ts` | Scoped abort recovery, restart limits, and cleanup across attempts. | Readers handling recoverable scoped aborts. | `node --import tsx examples/intermediate/restart-on-abort.ts` |
 
 ## Advanced

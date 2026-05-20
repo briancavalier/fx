@@ -6,6 +6,8 @@ import { Fx, assertSync, bracket, fx, map, ok, unit } from './Fx.js'
 import { handleScoped } from './Handler.js'
 import { Sink, ExcludeSink } from './Sink.js'
 import type { Interrupt } from './Interrupt.js'
+import * as Queue from './internal/Queue.js'
+import { dispose } from './internal/disposable.js'
 import { drainIteratorReturn } from './internal/iteratorClose.js'
 import { IfAny } from './internal/type.js'
 
@@ -129,6 +131,34 @@ export const takeFrom = <const Scope extends string & Yielding<unknown, void>>(s
       (i-- > 0 ? yieldFrom(scope, effect.arg as YieldOutput<Scope>) : abort(TakeScope)) as Fx<YieldFrom<Scope> | Abort<typeof TakeScope>, YieldInput<Scope>>
     )) as Fx<ExcludeYieldFrom<E, Scope, YieldFrom<Scope> | Abort<typeof TakeScope>>, R>
   }
+
+/**
+ * Create a scoped yield source from a {@link Queue.Dequeue}.
+ */
+export const fromDequeue = <const Scope extends string & Yielding<unknown, void>>(
+  scope: Scope,
+  queue: Queue.Dequeue<YieldOutput<Scope>>
+): Fx<Async | YieldFrom<Scope>, void> => fx(function* () {
+  const take = Queue.dequeue(queue)
+
+  while (!queue.disposed) {
+    const next = yield* take
+    if (next.tag === 'fx/Queue/Dequeued') yield* yieldFrom(scope, next.value)
+  }
+})
+
+/**
+ * Create a scoped yield source from values enqueued by f.
+ */
+export const withEnqueue = <const Scope extends string & Yielding<unknown, void>>(
+  scope: Scope,
+  f: (o: Queue.Enqueue<YieldOutput<Scope>>) => Disposable,
+  queue: Queue.Queue<YieldOutput<Scope>> = new Queue.UnboundedQueue()
+) => bracket(
+  assertSync(() => f(queue)),
+  disposable => ok(dispose(disposable)),
+  _ => fromDequeue(scope, queue)
+)
 
 /**
  * Create a scoped yield source from an Iterable.

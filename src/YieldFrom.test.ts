@@ -12,16 +12,20 @@ import {
   filterFrom,
   forEachFrom,
   fromAsyncIterable,
+  fromDequeue,
   fromIterable,
   mapFrom,
   takeFrom,
   TakeScope,
   to,
   toAsyncIterable,
+  withEnqueue,
   YieldFrom,
   yieldFrom,
   type PipeResult
 } from './YieldFrom.js'
+import { Enqueue, UnboundedQueue } from './internal/Queue.js'
+import { dispose } from './internal/disposable.js'
 import type { Yielding } from './YieldFrom.js'
 
 describe('YieldFrom', () => {
@@ -199,6 +203,43 @@ describe('YieldFrom', () => {
     assert.deepEqual(values, [0, 1, 2])
   })
 
+  it('converts a dequeue to scoped yields', async () => {
+    const expected = [1, 2, 3]
+    const queue = new UnboundedQueue<number>()
+
+    enqueueAllAsync(queue, expected)
+
+    const [result, values] = await fromDequeue(NumberScope, queue).pipe(
+      collectFrom(NumberScope),
+      runPromise
+    )
+
+    assert.equal(result, undefined)
+    assert.deepEqual(values, expected)
+  })
+
+  it('converts enqueued values to scoped yields and disposes the producer', async () => {
+    const expected = [1, 2, 3]
+    const queue = new UnboundedQueue<number>()
+    let disposed = false
+
+    const [result, values] = await withEnqueue(NumberScope, q => {
+      enqueueAllAsync(q, expected)
+
+      return {
+        [Symbol.dispose]: () => { disposed = true }
+      }
+    }, queue).pipe(
+      collectFrom(NumberScope),
+      runPromise
+    )
+
+    assert.equal(result, undefined)
+    assert.deepEqual(values, expected)
+    assert.equal(disposed, true)
+    assert.equal(queue.disposed, true)
+  })
+
   it('converts an iterable to scoped yields', () => {
     const inputs = [1, 2, 3]
 
@@ -343,3 +384,11 @@ describe('YieldFrom', () => {
     })
   })
 })
+
+const enqueueAllAsync = <A>(queue: Enqueue<A>, values: readonly A[]) => {
+  if (values.length === 0) return dispose(queue)
+
+  const [a, ...rest] = values
+  queue.enqueue(a)
+  setTimeout(enqueueAllAsync, 0, queue, rest)
+}

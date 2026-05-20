@@ -3,9 +3,7 @@
 Use this at async platform boundaries such as HTTP, files, databases, and timers.
 
 ```ts
-import { tryPromise } from "@briancavalier/fx/Async"
-import { catchAll } from "@briancavalier/fx/Fail"
-import { ok, runPromise } from "@briancavalier/fx"
+import { catchAll, ok, runPromise, tryPromise } from "@briancavalier/fx"
 
 const fetchJson = (url: string) =>
   tryPromise(signal =>

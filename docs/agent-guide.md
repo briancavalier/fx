@@ -74,7 +74,7 @@ JavaScript exceptions. Use `fail`, `trySync`, and `tryPromise` to convert
 recoverable exceptional states into effects.
 
 ```ts
-import { fail, catchOnly } from "@briancavalier/fx/Fail"
+import { catchOnly, fail } from "@briancavalier/fx"
 
 class InvalidEmail extends Error {}
 
@@ -97,7 +97,7 @@ Use `tryPromise` when a promise can reject and the rejection is recoverable.
 Use `assertPromise` only when rejection should crash the running program.
 
 ```ts
-import { tryPromise } from "@briancavalier/fx/Async"
+import { tryPromise } from "@briancavalier/fx"
 
 const readUser = (id: string) =>
   tryPromise(signal =>
@@ -130,7 +130,7 @@ named boundary is real and useful for the application.
   have been eliminated.
 - Use `runPromise` for async programs when the caller does not need cancellation.
 - Use `runTask` when the caller needs to cancel or wait for disposal.
-- Use `runNodeMain` from `@briancavalier/fx/NodeRuntime` for Node entrypoints
+- Use `runNodeMain` from `@briancavalier/fx/platform-node` for Node entrypoints
   that should shut down on process signals.
 
 ## Concurrency and resources

@@ -4,8 +4,7 @@ Use this when acquiring a resource that must be released when a named scope
 exits.
 
 ```ts
-import { usingManaged, managed } from "@briancavalier/fx/Finalization"
-import { scope } from "@briancavalier/fx/Scope"
+import { managed, scope, usingManaged } from "@briancavalier/fx/scope"
 
 const RequestScope = "app/Request" as const
 

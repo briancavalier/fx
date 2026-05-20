@@ -51,10 +51,10 @@ Handlers progressively eliminate effects until the program can run.
 
 ```ts
 import { fx, handle, runPromise } from "@briancavalier/fx"
-import { defaultConsole, log } from "@briancavalier/fx/Console"
+import { consoleLog, defaultConsole } from "@briancavalier/fx/log"
 
 const getUser = fx(function* () {
-  yield* log("fetching user")
+  yield* consoleLog("fetching user")
 
   const user = yield* Db.query(
     "select * from users where id = ?",
@@ -72,13 +72,11 @@ const program =
   )
 ```
 
-Core primitives are exported from `@briancavalier/fx`. Built-in effects are
+Core primitives are exported from `@briancavalier/fx`. Optional features are
 exported from named subpaths, so effect signatures stay concise:
 
 ```ts
-import { Fx } from "@briancavalier/fx"
-import { Async, tryPromise } from "@briancavalier/fx/Async"
-import { Fail } from "@briancavalier/fx/Fail"
+import { tryPromise, type Async, type Fail, type Fx } from "@briancavalier/fx"
 
 const load: Fx<Async | Fail<unknown>, string> =
   tryPromise(() => fetch("/").then(r => r.text()))

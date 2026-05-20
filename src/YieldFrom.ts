@@ -3,7 +3,7 @@ import { ScopedEffect } from './Effect.js'
 import { Fail } from './Fail.js'
 import { Fx, assertSync, bracket, fx, map, ok } from './Fx.js'
 import { handleScoped } from './Handler.js'
-import { Sink, ExcludeSink, type Sinking } from './Sink.js'
+import { Sink, ExcludeSink, type Receiving } from './Sink.js'
 import type { Interrupt } from './Interrupt.js'
 import * as Queue from './internal/Queue.js'
 import { dispose } from './internal/disposable.js'
@@ -191,7 +191,7 @@ export const toAsyncIterable = <const Scope extends string & Yielding<unknown, v
  */
 export const to = <
   const SourceScope extends string & Yielding<unknown, void>,
-  const SinkScope extends string & Sinking<YieldOutput<SourceScope>>,
+  const SinkScope extends string & Receiving<YieldOutput<SourceScope>>,
   E1,
   E2,
   R1,

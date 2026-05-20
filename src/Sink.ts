@@ -1,27 +1,27 @@
 import { ScopedEffect } from './Effect.js'
 
-declare const SinkingTypeId: unique symbol
+declare const ReceivingTypeId: unique symbol
 
-export type Sinking<In> = {
-  readonly [SinkingTypeId]: {
+export type Receiving<In> = {
+  readonly [ReceivingTypeId]: {
     readonly in: In
   }
 }
 
 export type SinkInput<Scope> =
-  Scope extends Sinking<infer In> ? In : never
+  Scope extends Receiving<infer In> ? In : never
 
 export class Sink<
-  const Scope extends string & Sinking<unknown>
+  const Scope extends string & Receiving<unknown>
 > extends ScopedEffect('fx/Sink')<Scope, void, SinkInput<Scope>> { }
 
-export const next = <const Scope extends string & Sinking<unknown>>(
+export const next = <const Scope extends string & Receiving<unknown>>(
   scope: Scope
 ): Sink<Scope> =>
   new Sink(scope, undefined)
 
-export type SinkValue<E, Scope extends string & Sinking<unknown>> =
+export type SinkValue<E, Scope extends string & Receiving<unknown>> =
   E extends Sink<Scope> ? SinkInput<Scope> : never
 
-export type ExcludeSink<E, Scope extends string & Sinking<unknown>, E2 = never> =
+export type ExcludeSink<E, Scope extends string & Receiving<unknown>, E2 = never> =
   E extends Sink<Scope> ? E2 : E

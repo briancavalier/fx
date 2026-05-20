@@ -7,7 +7,7 @@ import { handleScoped } from './Handler.js'
 import { returnFrom } from './ReturnFrom.js'
 import { brand, scope } from './Scope.js'
 import { next as nextSink, Sink } from './Sink.js'
-import type { Sinking } from './Sink.js'
+import type { Receiving } from './Sink.js'
 import {
   collectFrom,
   forEachFrom,
@@ -27,12 +27,12 @@ import type { Yielding } from './YieldFrom.js'
 
 describe('YieldFrom', () => {
   const NumberScope = brand<Yielding<number>>()('test/YieldFrom/numbers')
-  const NumberSinkScope = brand<Sinking<number>>()('test/YieldFrom/number-sink')
+  const NumberSinkScope = brand<Receiving<number>>()('test/YieldFrom/number-sink')
   const ItemScope = brand<Yielding<'item'>>()('test/YieldFrom/item')
   const DecisionScope = brand<Yielding<string, boolean>>()('test/YieldFrom/decision')
 
   it('allows sink scopes independent of YieldFrom protocols', () => {
-    const SinkOnlyScope = brand<Sinking<number>>()('test/YieldFrom/sink-only')
+    const SinkOnlyScope = brand<Receiving<number>>()('test/YieldFrom/sink-only')
     const f = fx(function* () {
       const value = yield* nextSink(SinkOnlyScope)
       return value + 1
@@ -336,7 +336,7 @@ describe('YieldFrom', () => {
 
     it('leaves unrelated YieldFrom and Sink scopes visible', () => {
       const OtherScope = brand<Yielding<'other'>>()('test/YieldFrom/other-to')
-      const OtherSinkScope = brand<Sinking<'other'>>()('test/YieldFrom/other-sink-to')
+      const OtherSinkScope = brand<Receiving<'other'>>()('test/YieldFrom/other-sink-to')
       const source = fx(function* () {
         yield* yieldFrom(OtherScope, 'other')
         return 'source'
@@ -353,7 +353,7 @@ describe('YieldFrom', () => {
     })
 
     it('rejects bidirectional YieldFrom scopes', () => {
-      const DecisionSinkScope = brand<Sinking<string>>()('test/YieldFrom/decision-sink')
+      const DecisionSinkScope = brand<Receiving<string>>()('test/YieldFrom/decision-sink')
       const source = fx(function* () {
         yield* yieldFrom(DecisionScope, 'item')
       })
@@ -368,7 +368,7 @@ describe('YieldFrom', () => {
     })
 
     it('rejects sinks that cannot receive the yielded values', () => {
-      const StringSinkScope = brand<Sinking<string>>()('test/YieldFrom/string-sink')
+      const StringSinkScope = brand<Receiving<string>>()('test/YieldFrom/string-sink')
       const source = fx(function* () {
         yield* yieldFrom(NumberScope, 1)
       })

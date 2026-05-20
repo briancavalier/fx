@@ -9,11 +9,11 @@ export class Finally extends ScopedEffect('fx/Finally') {
 /**
  * Register a cleanup operation to run when the named scope exits.
  */
-export const andFinally = (scope, f) => new Finally(scope, { finalizer: () => f });
+export const andFinally = (scope, f) => new Finally(scope, () => f);
 /**
  * Register a cleanup operation that receives the named scope's exit.
  */
-export const andFinallyExit = (scope, f) => new Finally(scope, { finalizer: exit => f(exit) });
+export const andFinallyExit = (scope, f) => new Finally(scope, exit => f(exit));
 /**
  * Run an initial operation, register cleanup for its result, and return it.
  */

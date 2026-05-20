@@ -43,7 +43,7 @@ class ScopeBoundary {
                     const effect = ir.value;
                     const sameScope = effect.scope === scopeName;
                     if (sameScope && Finally.is(effect)) {
-                        finalizers.push(effect.arg.finalizer);
+                        finalizers.push(effect.arg);
                         ir = i.next(undefined);
                     }
                     else if (sameScope && ReturnFrom.is(effect)) {

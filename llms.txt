@@ -14,7 +14,8 @@ Use these files when helping someone write or modify code that uses `fx`.
 ## Import surface
 
 - Use `@briancavalier/fx` for core program construction, effects, handlers,
-  failure, async boundaries, env, task, interrupt, and trace diagnostics.
+  failure, async boundaries, env, task, interrupt, simple console output, and
+  trace diagnostics.
 - Use named feature subpaths for optional areas: `scope`, `concurrent`,
   `stream`, `time`, `random`, `log`, `retry`, `timeout`, `http-client`,
   `http-server`, `platform-node`, and `ref`.

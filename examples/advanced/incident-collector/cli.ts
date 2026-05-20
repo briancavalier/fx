@@ -2,7 +2,7 @@ import { bounded, defaultAll, firstSuccess } from '../../../src/Concurrent.js'
 import { defaultConsole, error as consoleError, log } from '../../../src/Console.js'
 import { returnAll } from '../../../src/Fail.js'
 import { fx, runPromise } from '../../../src/Fx.js'
-import { console as logConsole } from '../../../src/Log.js'
+import { withConsoleLog } from '../../../src/Log.js'
 import { scope } from '../../../src/Scope.js'
 import { defaultTime } from '../../../src/Time.js'
 import {
@@ -24,7 +24,7 @@ const runSnapshot = (label: string, failDeploy: boolean) => fx(function* () {
   }).pipe(
     fixture.handle,
     scope(CollectorScope),
-    logConsole,
+    withConsoleLog,
     defaultTime,
     firstSuccess,
     defaultAll,

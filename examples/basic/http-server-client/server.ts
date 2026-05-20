@@ -4,7 +4,7 @@ import { provide } from '../../../src/Env.js'
 import { assert as assertNoFail } from '../../../src/Fail.js'
 import { serve, type ServerEvent, type ServerListening } from '../../../src/HttpServer.js'
 import { nodeHttp } from '../../../src/HttpServerNode.js'
-import { console as logConsole, info } from '../../../src/Log.js'
+import { info, withConsoleLog } from '../../../src/Log.js'
 import { emit, forEach as forEachStream } from '../../../src/Stream.js'
 import { defaultTime } from '../../../src/Time.js'
 import { appRoutes, memoryNotes } from './api.js'
@@ -25,7 +25,7 @@ await server.pipe(
   nodeHttp(),
   f => forEachStream(f, logHttpServerEvent),
   memoryNotes(),
-  logConsole,
+  withConsoleLog,
   defaultTime,
   assertNoFail,
   provide({ port: Number(process.env.PORT ?? 3000) }),

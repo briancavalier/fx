@@ -21,8 +21,8 @@ Good examples:
   `function withFoo(program) { return program.pipe(...) }`,
 - provide one or more handlers,
 - compose handlers with `.pipe(...)`,
-- use library effects for observable behavior, e.g. `Console.log`/`consoleLog`
-  with `defaultConsole`, rather than direct `console.log` inside `Fx` programs,
+- use library effects for observable behavior, e.g. `consoleLog` with
+  `defaultConsole`, rather than direct `console.log` inside `Fx` programs,
 - show effect constructors in their pipeable form when available, e.g. `work.pipe(timeout({ ms: 500 }))`,
 - keep the focus on user-facing effects and explicit handler composition,
 - recover or log failures without obscuring the handler composition,

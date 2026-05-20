@@ -5,7 +5,7 @@ import { returnAll } from '../../../src/Fail.js'
 import { fx, runPromise } from '../../../src/Fx.js'
 import { handleScoped } from '../../../src/Handler.js'
 import { w3cFetch } from '../../../src/HttpClient.js'
-import { console as logConsole } from '../../../src/Log.js'
+import { withConsoleLog } from '../../../src/Log.js'
 import { scope } from '../../../src/Scope.js'
 import { defaultTime } from '../../../src/Time.js'
 import { YieldFrom } from '../../../src/YieldFrom.js'
@@ -30,7 +30,7 @@ const main = fx(function* ({ openAIApiKey }: OpenAIModelContext) {
       withToolSandbox(defaultToolSandboxPolicy),
       fixture.handleTools,
       withFakeModel(),
-      logConsole,
+      withConsoleLog,
       defaultTime,
       defaultAll,
       bounded(4),
@@ -42,7 +42,7 @@ const main = fx(function* ({ openAIApiKey }: OpenAIModelContext) {
       withToolSandbox(defaultToolSandboxPolicy),
       fixture.handleTools,
       withOpenAIModel,
-      logConsole,
+      withConsoleLog,
       defaultTime,
       defaultAll,
       bounded(4),

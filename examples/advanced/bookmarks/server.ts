@@ -8,7 +8,7 @@ import { assert as assertNoFail, catchAll, returnAll, type Fail } from '../../..
 import { flatMap, fx, map, ok, trySync, type Fx } from '../../../src/Fx.js'
 import { bytes as readBytes } from '../../../src/HttpClient.js'
 import { mount, route, routes, serve, type RouteContext, type Routes, type ServerEvent, type ServerListening, type ServerRequest, type ServerResponse } from '../../../src/HttpServer.js'
-import { info, console as logConsole, type Log } from '../../../src/Log.js'
+import { info, withConsoleLog, type Log } from '../../../src/Log.js'
 import { nodeHttp, runNodeMain } from '../../../src/platform-node.js'
 import { defaultRandom } from '../../../src/Random.js'
 import { emit, forEach as forEachStream } from '../../../src/Stream.js'
@@ -290,7 +290,7 @@ await server.pipe(
   sqliteBookmarkStore(process.env.BOOKMARKS_DB ?? 'bookmarks.sqlite'),
   demoPageMetadata,
   randomBookmarkIds,
-  logConsole,
+    withConsoleLog,
   defaultTime,
   defaultRandom(),
   assertNoFail,

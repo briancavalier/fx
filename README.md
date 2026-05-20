@@ -50,8 +50,7 @@ Handlers progressively eliminate effects until the program can run.
 ## Example
 
 ```ts
-import { fx, handle, runPromise } from "@briancavalier/fx"
-import { consoleLog, defaultConsole } from "@briancavalier/fx/log"
+import { consoleLog, defaultConsole, fx, handle, runPromise } from "@briancavalier/fx"
 
 const getUser = fx(function* () {
   yield* consoleLog("fetching user")
@@ -88,13 +87,13 @@ boundaries, env, tasks, interrupts, and diagnostics come from
 
 | Capability | Import from |
 | --- | --- |
-| Core programs, effects, handlers, failure, async, env, task, trace | `@briancavalier/fx` |
+| Core programs, effects, handlers, failure, async, env, task, console, trace | `@briancavalier/fx` |
 | Named scopes, abort, finalization, early return, scoped yielding | `@briancavalier/fx/scope` |
 | Structured concurrency | `@briancavalier/fx/concurrent` |
 | Streams and sinks | `@briancavalier/fx/stream` |
 | Time and clock handlers | `@briancavalier/fx/time` |
 | Random effects and handlers | `@briancavalier/fx/random` |
-| Console and structured logging | `@briancavalier/fx/log` |
+| Structured logging | `@briancavalier/fx/log` |
 | Retry and timeout policies | `@briancavalier/fx/retry`, `@briancavalier/fx/timeout` |
 | HTTP client and transport-neutral HTTP server routes | `@briancavalier/fx/http-client`, `@briancavalier/fx/http-server` |
 | Node runtime, process, diagnostics, and HTTP transport | `@briancavalier/fx/platform-node` |

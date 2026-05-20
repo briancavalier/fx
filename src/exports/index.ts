@@ -54,6 +54,14 @@ export {
 } from '../Fail.js'
 export { assertPromise, Async, tryPromise, type AsyncContext } from '../Async.js'
 export {
+  defaultConsole,
+  error as consoleError,
+  Error as ConsoleError,
+  log as consoleLog,
+  Log as ConsoleLog,
+  type Console
+} from '../Console.js'
+export {
   get,
   Get,
   provide,

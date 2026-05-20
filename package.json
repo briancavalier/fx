@@ -50,9 +50,9 @@
       "types": "./dist/exports/scope.d.ts",
       "import": "./dist/exports/scope.js"
     },
-    "./stream": {
-      "types": "./dist/exports/stream.d.ts",
-      "import": "./dist/exports/stream.js"
+    "./sink": {
+      "types": "./dist/exports/sink.d.ts",
+      "import": "./dist/exports/sink.js"
     },
     "./time": {
       "types": "./dist/exports/time.d.ts",

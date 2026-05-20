@@ -11,7 +11,7 @@ import * as Random from './exports/random.js'
 import * as Ref from './exports/ref.js'
 import * as Retry from './exports/retry.js'
 import * as Scope from './exports/scope.js'
-import * as Stream from './exports/stream.js'
+import * as Sink from './exports/sink.js'
 import * as Time from './exports/time.js'
 import * as Timeout from './exports/timeout.js'
 import * as Trace from './exports/trace.js'
@@ -61,7 +61,8 @@ test('feature export surfaces group related functionality', () => {
   assert.equal(typeof Ref.of, 'function')
   assert.equal(typeof Retry.retry, 'function')
   assert.equal(typeof Scope.scope, 'function')
-  assert.equal(typeof Stream.emit, 'function')
+  assert.equal(typeof Scope.yieldFrom, 'function')
+  assert.equal(typeof Sink.next, 'function')
   assert.equal(typeof Time.sleep, 'function')
   assert.equal(typeof Timeout.timeout, 'function')
   assert.equal(typeof Trace.withTraceCapture, 'function')

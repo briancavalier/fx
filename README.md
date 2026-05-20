@@ -91,8 +91,8 @@ their named subpaths.
 | Core programs, effects, handlers, failure, async, env, task, console, basic diagnostics | `@briancavalier/fx` |
 | Advanced trace capture, snapshots, and trace formatting options | `@briancavalier/fx/trace` |
 | Named scopes, abort, finalization, early return, scoped yielding | `@briancavalier/fx/scope` |
+| Sinks for receiving values | `@briancavalier/fx/sink` |
 | Structured concurrency | `@briancavalier/fx/concurrent` |
-| Streams and sinks | `@briancavalier/fx/stream` |
 | Time and clock handlers | `@briancavalier/fx/time` |
 | Random effects and handlers | `@briancavalier/fx/random` |
 | Structured logging | `@briancavalier/fx/log` |

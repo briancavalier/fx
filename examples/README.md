@@ -52,5 +52,7 @@ already matches the requested pattern.
 | `advanced/tool-agent` | Tool-planning workflow with model effects, parallel tool calls, sandbox policy handlers, fixture handlers, and optional OpenAI model integration. | Readers studying agent-like workflows built from explicit effects and handlers. | `node --import tsx examples/advanced/tool-agent/cli.ts` |
 | `advanced/diagnostics.ts` | Trace capture policy, regional trace capture, source lookup, formatted diagnostics, and snapshots. | Readers debugging failures and tuning diagnostic detail. | `node --import tsx examples/advanced/diagnostics.ts` |
 
-Most examples import from local `src` paths so they can be run directly from
-the repository while developing Fx.
+Runnable TypeScript examples import from `@briancavalier/fx` and the curated
+feature subpaths so they match package-consumer code. Run `pnpm build` before
+`pnpm typecheck`, `pnpm test`, or direct example execution; package self-imports
+resolve through `package.json#exports` to `dist/exports/*`.

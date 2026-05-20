@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { Fx, handle, map, ok, run } from '../../../src/index.js'
-import { provide } from '../../../src/Env.js'
+import { Fx, handle, map, ok, provide, run } from '@briancavalier/fx'
 
 import { GenerateSecret, Print, Read, checkAnswer, main } from './main.js'
 

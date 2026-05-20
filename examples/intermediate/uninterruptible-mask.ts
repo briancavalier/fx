@@ -1,11 +1,9 @@
-import { fx, runPromise } from '../../src/index.js'
-import { firstSettled, race, unbounded } from '../../src/Concurrent.js'
-import { defaultConsole, log } from '../../src/Console.js'
-import { assert as assertNoFail } from '../../src/Fail.js'
-import { andFinallyExit } from '../../src/Finalization.js'
-import { uninterruptibleMask } from '../../src/Interrupt.js'
-import { scope } from '../../src/Scope.js'
-import { defaultTime, sleep } from '../../src/Time.js'
+import { assert as assertNoFail, consoleLog, defaultConsole, fx, runPromise, uninterruptibleMask } from '@briancavalier/fx'
+import { firstSettled, race, unbounded } from '@briancavalier/fx/concurrent'
+
+import { andFinallyExit, scope } from '@briancavalier/fx/scope'
+
+import { defaultTime, sleep } from '@briancavalier/fx/time'
 
 /*
  * `uninterruptibleMask` keeps a short critical section safe from interruption,
@@ -19,24 +17,24 @@ import { defaultTime, sleep } from '../../src/Time.js'
 const ExampleScope = 'examples/intermediate/uninterruptible-mask' as const
 
 const acquireResource = fx(function* () {
-  yield* log('slow: acquiring resource')
+  yield* consoleLog('slow: acquiring resource')
   yield* sleep(250)
-  yield* log('slow: acquired resource')
+  yield* consoleLog('slow: acquired resource')
   return 'connection'
 })
 
 const useResource = (resource: string) => fx(function* () {
-  yield* log(`slow: using ${resource}`)
+  yield* consoleLog(`slow: using ${resource}`)
   yield* sleep(1000)
-  yield* log(`slow: done using ${resource}`)
+  yield* consoleLog(`slow: done using ${resource}`)
 })
 
 const slow = uninterruptibleMask(restore => fx(function* () {
   const resource = yield* acquireResource
   yield* andFinallyExit(ExampleScope, exit => fx(function* () {
-    yield* log(`slow: releasing ${resource} after ${exit.type}`)
+    yield* consoleLog(`slow: releasing ${resource} after ${exit.type}`)
     yield* sleep(100)
-    yield* log(`slow: released ${resource}`)
+    yield* consoleLog(`slow: released ${resource}`)
   }))
 
   yield* restore(useResource(resource))
@@ -44,15 +42,15 @@ const slow = uninterruptibleMask(restore => fx(function* () {
 }))
 
 const fast = fx(function* () {
-  yield* log('fast: starting')
+  yield* consoleLog('fast: starting')
   yield* sleep(50)
-  yield* log('fast: done')
+  yield* consoleLog('fast: done')
   return 'fast result'
 })
 
 const main = fx(function* () {
   const result = yield* race([slow, fast])
-  yield* log('winner:', result)
+  yield* consoleLog('winner:', result)
 })
 
 await main.pipe(

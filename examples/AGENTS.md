@@ -21,7 +21,7 @@ Good examples:
   `function withFoo(program) { return program.pipe(...) }`,
 - provide one or more handlers,
 - compose handlers with `.pipe(...)`,
-- use library effects for observable behavior, e.g. `Console.log` with
+- use library effects for observable behavior, e.g. `consoleLog` with
   `defaultConsole`, rather than direct `console.log` inside `Fx` programs,
 - show effect constructors in their pipeable form when available, e.g. `work.pipe(timeout({ ms: 500 }))`,
 - keep the focus on user-facing effects and explicit handler composition,
@@ -38,4 +38,17 @@ Avoid:
 - adding a `main` generator solely to yield one already-constructed `Fx`,
 - depending on generated `dist/`.
 
-Examples may import from local `src` paths while developing locally.
+Runnable TypeScript examples, example tests, and example helper modules should
+import from `@briancavalier/fx` and the curated feature subpaths so they
+demonstrate the package-consumer API. Do not use relative `src/*`
+implementation imports in `examples/**/*.ts`, including tests, unless a
+narrowly scoped internals example explicitly documents why the public surface is
+insufficient.
+
+Package self-imports resolve through `package.json#exports` to
+`dist/exports/*`. For example work, run `pnpm build` before `pnpm typecheck`,
+`pnpm test`, or direct execution with `node --import tsx` so checks use current
+build output rather than stale or missing `dist`.
+
+Generated browser asset JS may keep generated relative imports until its
+separate build flow regenerates it.

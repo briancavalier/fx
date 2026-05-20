@@ -574,7 +574,7 @@ describe('Trace', () => {
       trace: prependTrace(breadcrumb('failed here'))
     })
 
-    assert.equal(formatDiagnostic(failure), [
+    assert.equal(formatDiagnostic(failure, { colors: 'never' }), [
       'Error: boom',
       'Fx trace:',
       '  at failed here'

@@ -28,7 +28,7 @@ Most solutions rely on dependency injection or implicit runtime behavior.
 Everything is an effect.
 
 ```ts
-yield* log("hello")
+yield* consoleLog("hello")
 yield* Db.query("select * from users")
 yield* fail(new Error("boom"))
 yield* fork(otherProgram)
@@ -50,11 +50,10 @@ Handlers progressively eliminate effects until the program can run.
 ## Example
 
 ```ts
-import { fx, handle, runPromise } from "@briancavalier/fx"
-import { defaultConsole, log } from "@briancavalier/fx/Console"
+import { consoleLog, defaultConsole, fx, handle, runPromise } from "@briancavalier/fx"
 
 const getUser = fx(function* () {
-  yield* log("fetching user")
+  yield* consoleLog("fetching user")
 
   const user = yield* Db.query(
     "select * from users where id = ?",
@@ -72,17 +71,35 @@ const program =
   )
 ```
 
-Core primitives are exported from `@briancavalier/fx`. Built-in effects are
+Core primitives are exported from `@briancavalier/fx`. Optional features are
 exported from named subpaths, so effect signatures stay concise:
 
 ```ts
-import { Fx } from "@briancavalier/fx"
-import { Async, tryPromise } from "@briancavalier/fx/Async"
-import { Fail } from "@briancavalier/fx/Fail"
+import { tryPromise, type Async, type Fail, type Fx } from "@briancavalier/fx"
 
 const load: Fx<Async | Fail<unknown>, string> =
   tryPromise(() => fetch("/").then(r => r.text()))
 ```
+
+Use one import rule: core program construction, handling, failure, async
+boundaries, env, tasks, interrupts, console, and basic diagnostics come from
+`@briancavalier/fx`; optional feature areas and advanced trace tools come from
+their named subpaths.
+
+| Capability | Import from |
+| --- | --- |
+| Core programs, effects, handlers, failure, async, env, task, console, basic diagnostics | `@briancavalier/fx` |
+| Advanced trace capture, snapshots, and trace formatting options | `@briancavalier/fx/trace` |
+| Named scopes, abort, finalization, early return, scoped yielding | `@briancavalier/fx/scope` |
+| Structured concurrency | `@briancavalier/fx/concurrent` |
+| Streams and sinks | `@briancavalier/fx/stream` |
+| Time and clock handlers | `@briancavalier/fx/time` |
+| Random effects and handlers | `@briancavalier/fx/random` |
+| Structured logging | `@briancavalier/fx/log` |
+| Retry and timeout policies | `@briancavalier/fx/retry`, `@briancavalier/fx/timeout` |
+| HTTP client and transport-neutral HTTP server routes | `@briancavalier/fx/http-client`, `@briancavalier/fx/http-server` |
+| Node runtime, process, diagnostics, and HTTP transport | `@briancavalier/fx/platform-node` |
+| Mutable references | `@briancavalier/fx/ref` |
 
 ---
 

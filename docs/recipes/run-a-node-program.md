@@ -4,8 +4,8 @@ Use this for Node entrypoints that should run async `Fx` programs and shut down
 cleanly on process signals.
 
 ```ts
-import { runNodeMain } from "@briancavalier/fx/NodeRuntime"
-import { defaultConsole } from "@briancavalier/fx/Console"
+import { defaultConsole } from "@briancavalier/fx"
+import { runNodeMain } from "@briancavalier/fx/platform-node"
 
 const main = program.pipe(
   defaultConsole

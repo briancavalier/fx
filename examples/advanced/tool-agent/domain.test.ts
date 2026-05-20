@@ -1,15 +1,12 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { bounded, defaultAll } from '../../../src/Concurrent.js'
-import { returnAll } from '../../../src/Fail.js'
-import { runPromise, type Fx } from '../../../src/Fx.js'
-import type { HandlerCapture } from '../../../src/HandlerCapture.js'
-import { collect } from '../../../src/Log.js'
-import { scope } from '../../../src/Scope.js'
-import { withClock, VirtualClock } from '../../../src/Time.js'
-import { collectFrom } from '../../../src/YieldFrom.js'
-import type { Async } from '../../../src/Async.js'
-import type { Interrupt } from '../../../src/Interrupt.js'
+import { bounded, defaultAll } from '@briancavalier/fx/concurrent'
+import { type Async, type Fx, type Interrupt, returnAll, runPromise } from '@briancavalier/fx'
+
+import { collect } from '@briancavalier/fx/log'
+import { collectFrom, scope } from '@briancavalier/fx/scope'
+import { withClock, VirtualClock } from '@briancavalier/fx/time'
+
 import {
   AgentEvents,
   AgentSessionScope,
@@ -152,7 +149,7 @@ describe('tool agent example', () => {
       collectFrom(AgentEvents)
     )
 
-    const runnable: Fx<Async | HandlerCapture<string> | Interrupt, unknown> = handled
+    const runnable: Fx<Async | Interrupt, unknown> = handled
     void runnable
   })
 })

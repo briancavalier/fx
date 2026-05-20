@@ -2,17 +2,16 @@ import { readFileSync } from 'node:fs'
 import { networkInterfaces } from 'node:os'
 import { dirname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { unbounded } from '../../../src/Concurrent.js'
-import { provide } from '../../../src/Env.js'
-import { assert as assertNoFail, catchAll, returnAll, type Fail } from '../../../src/Fail.js'
-import { flatMap, fx, map, ok, trySync, type Fx } from '../../../src/Fx.js'
-import { bytes as readBytes } from '../../../src/HttpClient.js'
-import { mount, route, routes, serve, type RouteContext, type Routes, type ServerEvent, type ServerListening, type ServerRequest, type ServerResponse } from '../../../src/HttpServer.js'
-import { info, console as logConsole, type Log } from '../../../src/Log.js'
-import { nodeHttp, runNodeMain } from '../../../src/platform-node.js'
-import { defaultRandom } from '../../../src/Random.js'
-import { emit, forEach as forEachStream } from '../../../src/Stream.js'
-import { defaultTime, type Time } from '../../../src/Time.js'
+import { unbounded } from '@briancavalier/fx/concurrent'
+import { assert as assertNoFail, catchAll, type Fail, flatMap, fx, type Fx, map, ok, provide, returnAll, trySync } from '@briancavalier/fx'
+
+import { bytes as readBytes } from '@briancavalier/fx/http-client'
+import { mount, route, routes, serve, type RouteContext, type Routes, type ServerEvent, type ServerListening, type ServerRequest, type ServerResponse } from '@briancavalier/fx/http-server'
+import { info, withConsoleLog, type Log } from '@briancavalier/fx/log'
+import { nodeHttp, runNodeMain } from '@briancavalier/fx/platform-node'
+import { defaultRandom } from '@briancavalier/fx/random'
+import { emit, forEach as forEachStream, type Stream } from '@briancavalier/fx/stream'
+import { defaultTime, type Time } from '@briancavalier/fx/time'
 import {
   addBookmark,
   archiveBookmark,
@@ -286,11 +285,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 await server.pipe(
   nodeHttp(),
-  f => forEachStream(f, logHttpServerEvent),
+  f => forEachStream(f as Fx<Stream<ServerEvent>, void>, logHttpServerEvent),
   sqliteBookmarkStore(process.env.BOOKMARKS_DB ?? 'bookmarks.sqlite'),
   demoPageMetadata,
   randomBookmarkIds,
-  logConsole,
+  withConsoleLog,
   defaultTime,
   defaultRandom(),
   assertNoFail,

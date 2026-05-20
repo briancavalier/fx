@@ -3,7 +3,7 @@
 Use this when a program has an effect and the boundary needs to interpret it.
 
 ```ts
-import { handle, ok } from "@briancavalier/fx"
+import { handle, ok, run } from "@briancavalier/fx"
 
 const memoryUsers = (users: ReadonlyMap<string, User>) =>
   handle(FindUser, effect => ok(users.get(effect.arg)))

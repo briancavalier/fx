@@ -1,10 +1,10 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { returnAll } from '../../../src/Fail.js'
-import { runPromise, type Fx } from '../../../src/Fx.js'
-import { collect } from '../../../src/Log.js'
-import { withClock, type Time } from '../../../src/Time.js'
-import { VirtualClock } from '../../../src/internal/time.js'
+import { type Async, type Fx, returnAll, runPromise } from '@briancavalier/fx'
+
+import { collect } from '@briancavalier/fx/log'
+import { type Time, VirtualClock, withClock } from '@briancavalier/fx/time'
+
 import {
   addBookmark,
   archiveBookmark,
@@ -178,7 +178,7 @@ describe('bookmarks example domain', () => {
       returnAll
     )
 
-    const runnable: Fx<import('../../../src/Async.js').Async, readonly [Bookmark, readonly unknown[]] | BookmarkError> = handled
+    const runnable: Fx<Async, readonly [Bookmark, readonly unknown[]] | BookmarkError> = handled
     void runnable
   })
 })

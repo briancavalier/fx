@@ -3,135 +3,68 @@
   "version": "1.0.0",
   "description": "TypeScript algebraic effects system",
   "type": "module",
+  "main": "./dist/exports/index.js",
+  "module": "./dist/exports/index.js",
+  "types": "./dist/exports/index.d.ts",
+  "sideEffects": false,
   "packageManager": "pnpm@11.1.0+sha512.0c44e842e5686b2c061a81adda8b2258bd8818e9704b2cf2c63d56b931a7b2e910092e085027003b96ca3911ab56a07f6df5abaed2be9925034cdd686a535b14",
   "exports": {
+    "./package.json": "./package.json",
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/exports/index.d.ts",
+      "import": "./dist/exports/index.js"
+    },
+    "./concurrent": {
+      "types": "./dist/exports/concurrent.d.ts",
+      "import": "./dist/exports/concurrent.js"
+    },
+    "./http-client": {
+      "types": "./dist/exports/http-client.d.ts",
+      "import": "./dist/exports/http-client.js"
+    },
+    "./http-server": {
+      "types": "./dist/exports/http-server.d.ts",
+      "import": "./dist/exports/http-server.js"
+    },
+    "./log": {
+      "types": "./dist/exports/log.d.ts",
+      "import": "./dist/exports/log.js"
     },
     "./platform-node": {
-      "types": "./dist/platform-node.d.ts",
-      "import": "./dist/platform-node.js"
+      "types": "./dist/exports/platform-node.d.ts",
+      "import": "./dist/exports/platform-node.js"
     },
-    "./Abort": {
-      "types": "./dist/Abort.d.ts",
-      "import": "./dist/Abort.js"
+    "./random": {
+      "types": "./dist/exports/random.d.ts",
+      "import": "./dist/exports/random.js"
     },
-    "./Async": {
-      "types": "./dist/Async.d.ts",
-      "import": "./dist/Async.js"
+    "./ref": {
+      "types": "./dist/exports/ref.d.ts",
+      "import": "./dist/exports/ref.js"
     },
-    "./Breadcrumb": {
-      "types": "./dist/Breadcrumb.d.ts",
-      "import": "./dist/Breadcrumb.js"
+    "./retry": {
+      "types": "./dist/exports/retry.d.ts",
+      "import": "./dist/exports/retry.js"
     },
-    "./Console": {
-      "types": "./dist/Console.d.ts",
-      "import": "./dist/Console.js"
+    "./scope": {
+      "types": "./dist/exports/scope.d.ts",
+      "import": "./dist/exports/scope.js"
     },
-    "./Env": {
-      "types": "./dist/Env.d.ts",
-      "import": "./dist/Env.js"
+    "./stream": {
+      "types": "./dist/exports/stream.d.ts",
+      "import": "./dist/exports/stream.js"
     },
-    "./Fail": {
-      "types": "./dist/Fail.d.ts",
-      "import": "./dist/Fail.js"
+    "./time": {
+      "types": "./dist/exports/time.d.ts",
+      "import": "./dist/exports/time.js"
     },
-    "./Concurrent": {
-      "types": "./dist/Concurrent.d.ts",
-      "import": "./dist/Concurrent.js"
+    "./timeout": {
+      "types": "./dist/exports/timeout.d.ts",
+      "import": "./dist/exports/timeout.js"
     },
-    "./HttpClient": {
-      "types": "./dist/HttpClient.d.ts",
-      "import": "./dist/HttpClient.js"
-    },
-    "./HttpServer": {
-      "types": "./dist/HttpServer.d.ts",
-      "import": "./dist/HttpServer.js"
-    },
-    "./HttpServerNode": {
-      "types": "./dist/HttpServerNode.d.ts",
-      "import": "./dist/HttpServerNode.js"
-    },
-    "./Log": {
-      "types": "./dist/Log.d.ts",
-      "import": "./dist/Log.js"
-    },
-    "./NodeRuntime": {
-      "types": "./dist/NodeRuntime.d.ts",
-      "import": "./dist/NodeRuntime.js"
-    },
-    "./NodeProcess": {
-      "types": "./dist/NodeProcess.d.ts",
-      "import": "./dist/NodeProcess.js"
-    },
-    "./Process": {
-      "types": "./dist/Process.d.ts",
-      "import": "./dist/Process.js"
-    },
-    "./Random": {
-      "types": "./dist/Random.d.ts",
-      "import": "./dist/Random.js"
-    },
-    "./Retry": {
-      "types": "./dist/Retry.d.ts",
-      "import": "./dist/Retry.js"
-    },
-    "./Ref": {
-      "types": "./dist/Ref.d.ts",
-      "import": "./dist/Ref.js"
-    },
-    "./ReturnFrom": {
-      "types": "./dist/ReturnFrom.d.ts",
-      "import": "./dist/ReturnFrom.js"
-    },
-    "./Finalization": {
-      "types": "./dist/Finalization.d.ts",
-      "import": "./dist/Finalization.js"
-    },
-    "./HandlerCapture": {
-      "types": "./dist/HandlerCapture.d.ts",
-      "import": "./dist/HandlerCapture.js"
-    },
-    "./Interrupt": {
-      "types": "./dist/Interrupt.d.ts",
-      "import": "./dist/Interrupt.js"
-    },
-    "./Sink": {
-      "types": "./dist/Sink.d.ts",
-      "import": "./dist/Sink.js"
-    },
-    "./Scope": {
-      "types": "./dist/Scope.d.ts",
-      "import": "./dist/Scope.js"
-    },
-    "./Stream": {
-      "types": "./dist/Stream.d.ts",
-      "import": "./dist/Stream.js"
-    },
-    "./Task": {
-      "types": "./dist/Task.d.ts",
-      "import": "./dist/Task.js"
-    },
-    "./Trace": {
-      "types": "./dist/Trace.d.ts",
-      "import": "./dist/Trace.js"
-    },
-    "./YieldFrom": {
-      "types": "./dist/YieldFrom.d.ts",
-      "import": "./dist/YieldFrom.js"
-    },
-    "./TraceNode": {
-      "types": "./dist/TraceNode.d.ts",
-      "import": "./dist/TraceNode.js"
-    },
-    "./Time": {
-      "types": "./dist/Time.d.ts",
-      "import": "./dist/Time.js"
-    },
-    "./Timeout": {
-      "types": "./dist/Timeout.d.ts",
-      "import": "./dist/Timeout.js"
+    "./trace": {
+      "types": "./dist/exports/trace.d.ts",
+      "import": "./dist/exports/trace.js"
     }
   },
   "files": [

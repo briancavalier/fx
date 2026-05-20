@@ -1,8 +1,7 @@
-import { get } from '../../../src/Env.js'
-import { handle } from '../../../src/Handler.js'
-import { bytes as readBytes } from '../../../src/HttpClient.js'
-import { mount, provideRoutesFrom, route, routes, type RouteContext, type ServerRequest, type ServerResponse } from '../../../src/HttpServer.js'
-import { Effect, fx, map, ok, type Fx } from '../../../src/index.js'
+import { Effect, fx, type Fx, get, handle, map, ok } from '@briancavalier/fx'
+
+import { bytes as readBytes } from '@briancavalier/fx/http-client'
+import { mount, provideRoutesFrom, route, routes, type RouteContext, type ServerRequest, type ServerResponse } from '@briancavalier/fx/http-server'
 
 export type Note = {
   readonly id: string

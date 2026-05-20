@@ -1,10 +1,9 @@
-import { fx, runPromise } from '../../src/index.js'
-import { firstSettled, race, unbounded } from '../../src/Concurrent.js'
-import { defaultConsole, log } from '../../src/Console.js'
-import { assert as assertNoFail } from '../../src/Fail.js'
-import { usingExit } from '../../src/Finalization.js'
-import { scope } from '../../src/Scope.js'
-import { defaultTime, sleep } from '../../src/Time.js'
+import { assert as assertNoFail, consoleLog, defaultConsole, fx, runPromise } from '@briancavalier/fx'
+import { firstSettled, race, unbounded } from '@briancavalier/fx/concurrent'
+
+import { scope, usingExit } from '@briancavalier/fx/scope'
+
+import { defaultTime, sleep } from '@briancavalier/fx/time'
 
 /*
  * Interrupt-safe finalization with `race`.
@@ -20,14 +19,14 @@ import { defaultTime, sleep } from '../../src/Time.js'
 const RequestScope = 'examples/intermediate/interrupt-safe-finalization' as const
 
 const openConnection = fx(function* () {
-  yield* log('database: open connection')
+  yield* consoleLog('database: open connection')
   return 'connection'
 })
 
 const fetchFromCache = fx(function* () {
-  yield* log('cache: starting')
+  yield* consoleLog('cache: starting')
   yield* sleep(100)
-  yield* log('cache: hit')
+  yield* consoleLog('cache: hit')
   return 'cached result'
 })
 
@@ -36,15 +35,15 @@ const fetchFromDatabase = fx(function* () {
     RequestScope,
     openConnection,
     (_, exit) => fx(function* () {
-      yield* log(`database: close connection after ${exit.type}`)
+      yield* consoleLog(`database: close connection after ${exit.type}`)
       yield* sleep(250)
-      yield* log('database: connection closed')
+      yield* consoleLog('database: connection closed')
     })
   )
 
-  yield* log(`database: query with ${connection}`)
+  yield* consoleLog(`database: query with ${connection}`)
   yield* sleep(1000)
-  yield* log('database: query complete')
+  yield* consoleLog('database: query complete')
   return 'database result'
 })
 
@@ -54,7 +53,7 @@ const main = fx(function* () {
     fetchFromDatabase,
   ])
 
-  yield* log('result:', result)
+  yield* consoleLog('result:', result)
 })
 
 await main.pipe(

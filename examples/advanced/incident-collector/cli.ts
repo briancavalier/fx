@@ -1,10 +1,9 @@
-import { bounded, defaultAll, firstSuccess } from '../../../src/Concurrent.js'
-import { defaultConsole, error as consoleError, log } from '../../../src/Console.js'
-import { returnAll } from '../../../src/Fail.js'
-import { fx, runPromise } from '../../../src/Fx.js'
-import { console as logConsole } from '../../../src/Log.js'
-import { scope } from '../../../src/Scope.js'
-import { defaultTime } from '../../../src/Time.js'
+import { bounded, defaultAll, firstSuccess } from '@briancavalier/fx/concurrent'
+import { consoleError, consoleLog, defaultConsole, fx, returnAll, runPromise } from '@briancavalier/fx'
+
+import { withConsoleLog } from '@briancavalier/fx/log'
+import { scope } from '@briancavalier/fx/scope'
+import { defaultTime } from '@briancavalier/fx/time'
 import {
   BundleScope,
   CollectorScope,
@@ -24,7 +23,7 @@ const runSnapshot = (label: string, failDeploy: boolean) => fx(function* () {
   }).pipe(
     fixture.handle,
     scope(CollectorScope),
-    logConsole,
+    withConsoleLog,
     defaultTime,
     firstSuccess,
     defaultAll,
@@ -33,8 +32,8 @@ const runSnapshot = (label: string, failDeploy: boolean) => fx(function* () {
     returnAll,
   )
 
-  yield* log(`\n${label}`)
-  yield* log(JSON.stringify({ result: printableResult(result), state: fixture.state() }, null, 2))
+  yield* consoleLog(`\n${label}`)
+  yield* consoleLog(JSON.stringify({ result: printableResult(result), state: fixture.state() }, null, 2))
 })
 
 const printableResult = (result: unknown): unknown =>

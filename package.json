@@ -61,6 +61,10 @@
     "./timeout": {
       "types": "./dist/exports/timeout.d.ts",
       "import": "./dist/exports/timeout.js"
+    },
+    "./trace": {
+      "types": "./dist/exports/trace.d.ts",
+      "import": "./dist/exports/trace.js"
     }
   },
   "files": [

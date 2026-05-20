@@ -82,12 +82,14 @@ const load: Fx<Async | Fail<unknown>, string> =
 ```
 
 Use one import rule: core program construction, handling, failure, async
-boundaries, env, tasks, interrupts, and diagnostics come from
-`@briancavalier/fx`; optional feature areas come from their named subpaths.
+boundaries, env, tasks, interrupts, console, and basic diagnostics come from
+`@briancavalier/fx`; optional feature areas and advanced trace tools come from
+their named subpaths.
 
 | Capability | Import from |
 | --- | --- |
-| Core programs, effects, handlers, failure, async, env, task, console, trace | `@briancavalier/fx` |
+| Core programs, effects, handlers, failure, async, env, task, console, basic diagnostics | `@briancavalier/fx` |
+| Advanced trace capture, snapshots, and trace formatting options | `@briancavalier/fx/trace` |
 | Named scopes, abort, finalization, early return, scoped yielding | `@briancavalier/fx/scope` |
 | Structured concurrency | `@briancavalier/fx/concurrent` |
 | Streams and sinks | `@briancavalier/fx/stream` |

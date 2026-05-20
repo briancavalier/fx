@@ -14,6 +14,7 @@ import * as Scope from './exports/scope.js'
 import * as Stream from './exports/stream.js'
 import * as Time from './exports/time.js'
 import * as Timeout from './exports/timeout.js'
+import * as Trace from './exports/trace.js'
 
 test('root export surface contains small-program core', () => {
   assert.equal(typeof Core.fx, 'function')
@@ -42,6 +43,9 @@ test('root export surface excludes optional feature and platform modules', () =>
   assert.equal('all' in Core, false)
   assert.equal('signal' in Core, false)
   assert.equal('runNodeMain' in Core, false)
+  assert.equal('withTraceCapture' in Core, false)
+  assert.equal('setTraceCapturePolicy' in Core, false)
+  assert.equal('snapshotTrace' in Core, false)
 })
 
 test('feature export surfaces group related functionality', () => {
@@ -60,4 +64,7 @@ test('feature export surfaces group related functionality', () => {
   assert.equal(typeof Stream.emit, 'function')
   assert.equal(typeof Time.sleep, 'function')
   assert.equal(typeof Timeout.timeout, 'function')
+  assert.equal(typeof Trace.withTraceCapture, 'function')
+  assert.equal(typeof Trace.setTraceCapturePolicy, 'function')
+  assert.equal(typeof Trace.snapshotTrace, 'function')
 })

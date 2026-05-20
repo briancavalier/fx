@@ -33,14 +33,15 @@ a handler eliminates them.
 
 Use `@briancavalier/fx` for the write-and-run core: `fx`, `Fx`, `Effect`,
 `handle`, `control`, `ok`, `fail`, `tryPromise`, `get`, `run`, `runPromise`,
-`runTask`, simple console output, and diagnostics helpers. Use named subpaths
-for optional feature areas.
+`runTask`, simple console output, and basic diagnostics helpers. Use named
+subpaths for optional feature areas and advanced trace tools.
 
 | Need | Import from |
 | --- | --- |
 | Scopes, abort, finalization, early return, scoped yielding | `@briancavalier/fx/scope` |
 | Structured concurrency | `@briancavalier/fx/concurrent` |
 | Streams and sinks | `@briancavalier/fx/stream` |
+| Advanced trace capture, snapshots, and trace formatting options | `@briancavalier/fx/trace` |
 | Time and random | `@briancavalier/fx/time`, `@briancavalier/fx/random` |
 | Structured logging | `@briancavalier/fx/log` |
 | Retry and timeout | `@briancavalier/fx/retry`, `@briancavalier/fx/timeout` |

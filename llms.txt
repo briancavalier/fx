@@ -15,9 +15,9 @@ Use these files when helping someone write or modify code that uses `fx`.
 
 - Use `@briancavalier/fx` for core program construction, effects, handlers,
   failure, async boundaries, env, task, interrupt, simple console output, and
-  trace diagnostics.
+  basic diagnostics.
 - Use named feature subpaths for optional areas: `scope`, `concurrent`,
-  `stream`, `time`, `random`, `log`, `retry`, `timeout`, `http-client`,
+  `stream`, `trace`, `time`, `random`, `log`, `retry`, `timeout`, `http-client`,
   `http-server`, `platform-node`, and `ref`.
 - Do not use PascalCase implementation-file subpaths in application docs.
 

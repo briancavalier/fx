@@ -19,7 +19,7 @@ Rules for changes:
 - Prefer this module order: effect declaration, public constructors/combinators, public handlers, exported support types, internal handler functions, internal helper types/functions.
 - Effect constructor/combinator docs should describe the requested effect. Avoid promising semantics that are determined by handlers.
 - Handler docs should describe the interpretation that handler provides.
-- Prefer pipeable constructors for higher-order effects, e.g. `fx.pipe(retry(options))` or `fx.pipe(timeout(options))`.
+- Prefer pipeable constructors for higher-order effects, e.g. `fx.pipe(retry(options))` or `fx.pipe(timeout(RequestScope, options))`.
 - Prefer options objects once an effect constructor has more than one meaningful option or likely future extension point.
 - For higher-order scoped effects, preserve effect typing through the request and handler. If failures cross fork/race/task boundaries, convert them to data before racing unless runtime semantics explicitly preserve typed failures.
 - When default handlers create errors asynchronously or after handler interpretation, preserve request-site diagnostics with `Breadcrumb`/cause chaining rather than overwriting stacks.

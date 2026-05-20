@@ -19,15 +19,20 @@ export class Task<A, E> {
   }
 
   [Symbol.dispose]() {
+    this.disposeWithReason(undefined)
+  }
+
+  private disposeWithReason(reason: unknown) {
     if (this.disposed) return
     this.disposed = true
     this.promise.catch(() => { })
-    this.dispose[Symbol.dispose]()
+    if (isReasonedDisposable(this.dispose)) this.dispose._disposeWithReason(reason)
+    else this.dispose[Symbol.dispose]()
   }
 
   /** @internal Runtime-owned disposal helper. */
-  async _disposeAndWait() {
-    this[Symbol.dispose]()
+  async _disposeAndWait(reason?: unknown) {
+    this.disposeWithReason(reason)
     await this.disposedPromise
   }
 
@@ -46,6 +51,13 @@ export class Task<A, E> {
     this.handled = true
   }
 }
+
+interface ReasonedDisposable extends Disposable {
+  _disposeWithReason(reason: unknown): void
+}
+
+const isReasonedDisposable = (d: Disposable): d is ReasonedDisposable =>
+  '_disposeWithReason' in d
 
 export const dispose = <const A, const E>(t: Task<A, E>) =>
   t[Symbol.dispose]()

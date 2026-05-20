@@ -13,7 +13,7 @@ import { DisposableSet } from './disposable.js'
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './interrupt.js'
 import { withInterpretedReturn } from './iteratorClose.js'
 import type { RuntimeContext } from './runtimeContext.js'
-import { currentRuntimeContext, getRuntimeContext, traceCapturePolicy, withActiveRuntimeContext } from './runtimeContext.js'
+import { currentRuntimeContext, getRuntimeContext, traceCapturePolicy, withActiveRuntimeContext, withInterruptionReason } from './runtimeContext.js'
 
 export type RunForkOptions = TraceOptions & {
   readonly maxConcurrency?: number
@@ -85,9 +85,12 @@ const runForkLoop = async <const E, const A>(
 
   try {
     const i = iteratorWithRuntimeContext(f, runtimeContext)
-    const interrupt = async (cleanupMasks: readonly InterruptMaskBegin['arg'][] = disposables.maskSnapshot()): Promise<A> => {
+    const interrupt = async (
+      cleanupMasks: readonly InterruptMaskBegin['arg'][] = disposables.maskSnapshot(),
+      reason: unknown = disposables.interruptionReason
+    ): Promise<A> => {
       if (interrupting === undefined) {
-        interrupting = closeInterruptedIterator(i, context, semaphore, origin, trace, unhandled, rejectUnhandled, runtimeContext, disposed, cleanupMasks)
+        interrupting = closeInterruptedIterator(i, context, semaphore, origin, trace, unhandled, rejectUnhandled, runtimeContext, disposed, cleanupMasks, reason)
         interrupting.catch(() => { })
       }
       await interrupting
@@ -117,12 +120,14 @@ const closeInterruptedIterator = async <const E, const A>(
   rejectUnhandled: (e: unknown) => void,
   runtimeContext: RuntimeContext | undefined,
   disposed: PromiseWithResolvers<void>,
-  cleanupMasks: readonly InterruptMaskBegin['arg'][]
+  cleanupMasks: readonly InterruptMaskBegin['arg'][],
+  reason: unknown
 ): Promise<void> => {
   const cleanup = new InterruptState(cleanupMasks)
+  const cleanupContext = withInterruptionReason(runtimeContext, reason)
   try {
-    const ir = returnWithRuntimeContext(i, runtimeContext)
-    await runIterator(ir, i, context, semaphore, cleanup, origin, trace, unhandled, rejectUnhandled, runtimeContext)
+    const ir = returnWithRuntimeContext(i, cleanupContext)
+    await runIterator(ir, i, context, semaphore, cleanup, origin, trace, unhandled, rejectUnhandled, cleanupContext)
     disposed.resolve()
   } catch (e) {
     disposed.reject(e)
@@ -143,7 +148,7 @@ const runIterator = async <const E, const A>(
   unhandled: Promise<never>,
   rejectUnhandled: (e: unknown) => void,
   runtimeContext: RuntimeContext | undefined,
-  interrupt?: (masks?: readonly InterruptMaskBegin['arg'][]) => Promise<A>
+  interrupt?: (masks?: readonly InterruptMaskBegin['arg'][], reason?: unknown) => Promise<A>
 ): Promise<A> => {
   while (!ir.done) {
     if (Async.is(ir.value)) {
@@ -208,9 +213,10 @@ const runIterator = async <const E, const A>(
 class InterruptState implements Disposable {
   private readonly disposables = new DisposableSet()
   private readonly masks: InterruptMaskState
-  private interrupt?: (masks?: readonly InterruptMaskBegin['arg'][]) => Promise<unknown>
+  private interrupt?: (masks?: readonly InterruptMaskBegin['arg'][], reason?: unknown) => Promise<unknown>
   private interrupting?: Promise<unknown>
   private requested = false
+  private reason: unknown
 
   constructor(masks: readonly InterruptMaskBegin['arg'][] = []) {
     this.masks = new InterruptMaskState(masks)
@@ -220,11 +226,15 @@ class InterruptState implements Disposable {
     return this.requested
   }
 
+  get interruptionReason() {
+    return this.reason
+  }
+
   get canInterrupt() {
     return this.requested && this.masks.canInterrupt
   }
 
-  setInterrupt(interrupt: (masks?: readonly InterruptMaskBegin['arg'][]) => Promise<unknown>) {
+  setInterrupt(interrupt: (masks?: readonly InterruptMaskBegin['arg'][], reason?: unknown) => Promise<unknown>) {
     this.interrupt = interrupt
     if (this.requested && this.masks.canInterrupt) void this.interruptNow(interrupt).catch(() => { })
   }
@@ -250,7 +260,12 @@ class InterruptState implements Disposable {
   }
 
   [Symbol.dispose]() {
+    this._disposeWithReason(undefined)
+  }
+
+  _disposeWithReason(reason: unknown) {
     this.requested = true
+    this.reason = reason
     if (!this.masks.canInterrupt) return
     this.disposeActive()
     if (this.interrupt !== undefined) void this.interruptNow(this.interrupt).catch(() => { })
@@ -260,9 +275,12 @@ class InterruptState implements Disposable {
     this.disposables[Symbol.dispose]()
   }
 
-  async interruptNow<A>(interrupt: (masks?: readonly InterruptMaskBegin['arg'][]) => Promise<A>, masks: readonly InterruptMaskBegin['arg'][] = this.maskSnapshot()): Promise<A> {
+  async interruptNow<A>(
+    interrupt: (masks?: readonly InterruptMaskBegin['arg'][], reason?: unknown) => Promise<A>,
+    masks: readonly InterruptMaskBegin['arg'][] = this.maskSnapshot()
+  ): Promise<A> {
     this.disposeActive()
-    this.interrupting ??= interrupt(masks)
+    this.interrupting ??= interrupt(masks, this.reason)
     return await this.interrupting as A
   }
 }

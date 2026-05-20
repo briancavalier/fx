@@ -1,27 +1,34 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { Effect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { unbounded } from './Concurrent.js'
 import { fx, ok, run, runPromise } from './Fx.js'
-import { handle } from './Handler.js'
-import { TimeoutError, defaultTimeout, timeout } from './Timeout.js'
+import { andFinallyExit } from './Finalization.js'
+import { control } from './Handler.js'
+import { InterruptFrom } from './InterruptFrom.js'
+import { scope, type Exit } from './Scope.js'
+import { TimeoutInterrupt, timeout } from './Timeout.js'
 import { sleep, withClock } from './Time.js'
-import { getTrace, snapshotError } from './Trace.js'
+import { getTrace } from './Trace.js'
 import { VirtualClock } from './internal/time.js'
 
 describe('Timeout', () => {
+  const TestScope = 'test/Timeout' as const
+
   it('returns the result when the Fx completes before the timeout', async () => {
     const c = new VirtualClock(0)
+    let reasons = 0
 
-    const f = fx(function* () {
+    const p = fx(function* () {
       yield* sleep(50)
       return 'ok'
-    })
-
-    const p = f.pipe(
-      timeout({ ms: 100 }),
-      defaultTimeout(),
+    }).pipe(
+      timeout(TestScope, {
+        ms: 100,
+        reason: () => void (reasons += 1)
+      }),
+      scope(TestScope),
+      control(InterruptFrom, () => ok('interrupted')),
       returnFail,
       unbounded,
       withClock(c),
@@ -33,43 +40,25 @@ describe('Timeout', () => {
 
     assert.ok(!Fail.is(r))
     assert.equal(r, 'ok')
+    assert.equal(reasons, 0)
   })
 
-  it('does not call onTimeout when the Fx completes before the timeout', async () => {
+  it('interrupts the scope with the timeout reason when the timeout wins', async () => {
     const c = new VirtualClock(0)
-    let timeouts = 0
-
-    const p = sleep(50).pipe(
-      timeout({ ms: 100, onTimeout: () => void (timeouts += 1) }),
-      defaultTimeout(),
-      returnFail,
-      unbounded,
-      withClock(c),
-      runPromise
-    )
-
-    assert.equal(timeouts, 0)
-
-    await c.step(50)
-    const r = await p
-
-    assert.ok(!Fail.is(r))
-    assert.equal(timeouts, 0)
-  })
-
-  it('fails with TimeoutError when the timeout wins', async () => {
-    const c = new VirtualClock(0)
+    const reason = { type: 'timeout' }
+    const exits = [] as Exit[]
     let completed = false
 
-    const f = fx(function* () {
+    const p = fx(function* () {
+      yield* andFinallyExit(TestScope, exit => fx(function* () {
+        exits.push(exit)
+      }))
       yield* sleep(100)
       completed = true
-      return 'late'
-    })
-
-    const p = f.pipe(
-      timeout({ ms: 50 }),
-      defaultTimeout(),
+    }).pipe(
+      timeout(TestScope, { ms: 50, reason: () => reason }),
+      scope(TestScope),
+      control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       returnFail,
       unbounded,
       withClock(c),
@@ -79,20 +68,24 @@ describe('Timeout', () => {
     await c.step(50)
     const r = await p
 
-    assert.ok(Fail.is(r))
-    assert.ok(r.arg instanceof TimeoutError)
-    assert.equal(r.arg.ms, 50)
-
-    await c.step(50)
+    assert.equal(r, reason)
     assert.equal(completed, false)
+    assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope, reason }])
   })
 
-  it('preserves the timeout call site as the default TimeoutError cause', async () => {
+  it('uses a trace-bearing TimeoutInterrupt as the default reason', async () => {
     const c = new VirtualClock(0)
+    let exit!: Exit
 
-    const p = sleep(100).pipe(
-      timeout({ ms: 50 }),
-      defaultTimeout(),
+    const p = fx(function* () {
+      yield* andFinallyExit(TestScope, e => fx(function* () {
+        exit = e
+      }))
+      yield* sleep(100)
+    }).pipe(
+      timeout(TestScope, { ms: 50 }),
+      scope(TestScope),
+      control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       returnFail,
       unbounded,
       withClock(c),
@@ -100,29 +93,29 @@ describe('Timeout', () => {
     )
 
     await c.step(50)
-    const r = await p
+    const reason = await p
 
-    assert.ok(Fail.is(r))
-    assert.ok(r.arg instanceof TimeoutError)
-    assert.equal(r.arg.code, 'FX_TIMEOUT')
-    assert.ok(r.arg.cause instanceof Error)
-    assert.match(r.arg.cause.stack ?? '', /Timeout\.test\.ts/)
-    assert.deepEqual(traceMessages(r.arg).slice(0, 1), ['Timeout requested after 50ms'])
-    assert.equal(snapshotError(r.arg).trace?.frames[0].kind, 'timeout')
+    assert.ok(reason instanceof TimeoutInterrupt)
+    assert.equal(reason.ms, 50)
+    assert.equal(reason.code, 'FX_TIMEOUT_INTERRUPT')
+    assert.ok(reason.cause instanceof Error)
+    assert.match(reason.cause.stack ?? '', /Timeout\.test\.ts/)
+    assert.deepEqual(traceMessages(reason).slice(0, 1), [`Timeout interrupted ${TestScope} after 50ms`])
+    assert.equal(exit.type, 'interrupted')
+    assert.equal(exit.reason, reason)
   })
 
   it('preserves original failures when the Fx fails before the timeout', async () => {
     const c = new VirtualClock(0)
 
-    const f = fx(function* () {
+    const p = fx(function* () {
       yield* sleep(50)
       yield* fail('failed')
       return 'unreachable'
-    })
-
-    const p = f.pipe(
-      timeout({ ms: 100 }),
-      defaultTimeout(),
+    }).pipe(
+      timeout(TestScope, { ms: 100 }),
+      scope(TestScope),
+      control(InterruptFrom, () => ok('interrupted')),
       returnFail,
       unbounded,
       withClock(c),
@@ -136,66 +129,47 @@ describe('Timeout', () => {
     assert.equal(r.arg, 'failed')
   })
 
-  it('uses a custom timeout failure value', async () => {
+  it('waits for interrupted cleanup before settling', async () => {
     const c = new VirtualClock(0)
+    const events = [] as string[]
+    let settled = false
 
-    class CustomTimeout extends Error {
-      readonly name = 'CustomTimeout'
-      readonly code = 'TimedOut'
-
-      constructor(readonly ms: number, options?: ErrorOptions) {
-        super(`Custom timeout after ${ms}ms`, options)
-      }
-    }
-
-    const p = sleep(100).pipe(
-      timeout({ ms: 50, onTimeout: ({ ms, origin }) => new CustomTimeout(ms, { cause: origin }) }),
-      defaultTimeout(),
+    const p = fx(function* () {
+      yield* andFinallyExit(TestScope, () => fx(function* () {
+        events.push('cleanup:start')
+        yield* sleep(25)
+        events.push('cleanup:end')
+      }))
+      yield* sleep(100)
+    }).pipe(
+      timeout(TestScope, { ms: 50 }),
+      scope(TestScope),
+      control(InterruptFrom, () => ok('interrupted')),
       returnFail,
       unbounded,
       withClock(c),
       runPromise
-    )
+    ).then(r => {
+      settled = true
+      return r
+    })
 
     await c.step(50)
-    const r = await p
+    await Promise.resolve()
 
-    assert.ok(Fail.is(r))
-    assert.ok(r.arg instanceof CustomTimeout)
-    assert.equal(r.arg.ms, 50)
-    assert.ok(r.arg.cause instanceof Error)
-    assert.match(r.arg.cause.stack ?? '', /Timeout\.test\.ts/)
+    assert.equal(settled, false)
+    assert.deepEqual(events, ['cleanup:start'])
+
+    await c.step(25)
+    assert.equal(await p, 'interrupted')
+    assert.equal(settled, true)
+    assert.deepEqual(events, ['cleanup:start', 'cleanup:end'])
   })
 
-  it('runs timed Fx with the captured handler context', async () => {
-    class CurrentValue extends Effect('test/Timeout/CurrentValue')<void, string> { }
-
-    const c = new VirtualClock(0)
-
-    const f = fx(function* () {
-      yield* sleep(50)
-      return yield* new CurrentValue()
-    }).pipe(
-      timeout({ ms: 100 }),
-      handle(CurrentValue, () => ok('handled')),
-      defaultTimeout(),
-      returnFail,
-      unbounded,
-      withClock(c)
-    )
-
-    const p = f.pipe(runPromise)
-    await c.step(50)
-    const r = await p
-
-    assert.ok(!Fail.is(r))
-    assert.equal(r, 'handled')
-  })
-
-  it('does not handle timeout failures until defaultTimeout is applied', () => {
+  it('leaves timeout interruption visible until explicitly handled', () => {
     assert.throws(() => {
-      // @ts-expect-error Timeout is not handled
-      run(ok('ok').pipe(timeout({ ms: 1 })))
+      // @ts-expect-error Timeout interruption is not handled
+      run(ok('ok').pipe(timeout(TestScope, { ms: 1 }), scope(TestScope)))
     }, /Unhandled effect in run/)
   })
 })

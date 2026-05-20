@@ -4,10 +4,11 @@ import { Fail, fail, returnFail } from './Fail.js'
 import { Finalizer, Finally } from './Finalization.js'
 import { Fx, fx } from './Fx.js'
 import { CapturedHandler, HandlerCapture } from './HandlerCapture.js'
+import { InterruptFrom } from './InterruptFrom.js'
 import { ReturnFrom } from './ReturnFrom.js'
 import { drainIteratorReturn, isInterpretingReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
-import { withActiveScope } from './internal/runtimeContext.js'
+import { interruptionReason, withActiveScope } from './internal/runtimeContext.js'
 
 export const brand = <Brand>() =>
   <const Name extends string>(name: Name): Name & Brand =>
@@ -49,6 +50,7 @@ export interface Aborted<Scope extends string> {
 export interface Interrupted<Scope extends string> {
   readonly type: 'interrupted'
   readonly scope: Scope
+  readonly reason?: unknown
 }
 
 export function scope<const Scope extends string>(
@@ -127,6 +129,11 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
             const failures = yield* release(exit)
             if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup(failures))) as A
             return (yield effect) as A
+          } else if (sameScope && InterruptFrom.is(effect)) {
+            const exit = interruptedExit(scopeName, effect.arg)
+            const failures = yield* release(exit)
+            if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup(failures))) as A
+            return (yield effect) as A
           } else if (Fail.is(effect)) {
             const exit = { type: 'failure', failure: effect } satisfies Exit
             const failures = yield* release(exit)
@@ -169,7 +176,7 @@ const collectInterruptedCleanupFailures = function* <A, Scope extends string>(
   step: (ir: IteratorResult<unknown, A>) => Generator<unknown, A, unknown>
 ): Generator<unknown, readonly unknown[], unknown> {
   const failures = [] as unknown[]
-  const exit = { type: 'interrupted', scope: scopeName } satisfies Exit<Scope>
+  const exit = interruptedExit(scopeName, interruptionReason())
 
   yield* collectCleanupFailures(failures, function* () {
     failures.push(...yield* release(exit))
@@ -186,6 +193,11 @@ const collectInterruptedCleanupFailures = function* <A, Scope extends string>(
 
   return failures
 }
+
+const interruptedExit = <Scope extends string>(scope: Scope, reason: unknown): Exit<Scope> =>
+  reason === undefined
+    ? { type: 'interrupted', scope }
+    : { type: 'interrupted', scope, reason }
 
 const collectCleanupFailures = function* (
   failures: unknown[],

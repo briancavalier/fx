@@ -61,6 +61,7 @@ test('feature export surfaces group related functionality', () => {
   assert.equal(typeof Ref.of, 'function')
   assert.equal(typeof Retry.retry, 'function')
   assert.equal(typeof Scope.scope, 'function')
+  assert.equal(typeof Scope.interruptFrom, 'function')
   assert.equal(typeof Scope.yieldFrom, 'function')
   assert.equal(typeof Sink.next, 'function')
   assert.equal(typeof Time.sleep, 'function')

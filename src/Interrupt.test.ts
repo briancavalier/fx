@@ -2,13 +2,77 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
-import { fail, returnFail } from './Fail.js'
+import { fail, Fail, returnFail } from './Fail.js'
 import { firstSettled, race, unbounded } from './Concurrent.js'
-import { managed, using, usingManaged } from './Finalization.js'
+import { andFinally, andFinallyExit, managed, using, usingManaged } from './Finalization.js'
 import { bracket, fx, ok, run, runPromise, runTask, type Fx } from './Fx.js'
 import { control, handle } from './Handler.js'
+import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
 import { uninterruptible, uninterruptibleMask, type Interrupt, type RestoreInterrupt } from './Interrupt.js'
 import { scope, type Exit } from './Scope.js'
+
+describe('Typed interruption', () => {
+  const TestScope = 'test/InterruptFrom' as const
+
+  it('provides the reason to exit-aware finalizers', () => {
+    const reason = { type: 'test-interrupt' }
+    const exits = [] as Exit[]
+
+    const result = fx(function* () {
+      yield* andFinallyExit(TestScope, exit => fx(function* () {
+        exits.push(exit)
+      }))
+      yield* interruptFrom(TestScope, reason)
+    }).pipe(
+      scope(TestScope),
+      control(InterruptFrom, () => ok('interrupted')),
+      returnFail,
+      run
+    )
+
+    assert.equal(result, 'interrupted')
+    assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope, reason }])
+  })
+
+  it('leaves the interrupt visible after scope cleanup', () => {
+    const f = interruptFrom(TestScope).pipe(scope(TestScope))
+    const next = f[Symbol.iterator]().next()
+
+    assert.equal(InterruptFrom.is(next.value), true)
+    assert.equal((next.value as InterruptFrom<typeof TestScope>).scope, TestScope)
+  })
+
+  it('does not handle interrupts from a different scope', () => {
+    const OtherScope = 'test/InterruptFrom/other' as const
+    const f = fx(function* () {
+      yield* interruptFrom(OtherScope)
+      return 'done'
+    }).pipe(scope(TestScope))
+
+    const next = f[Symbol.iterator]().next()
+
+    assert.equal(InterruptFrom.is(next.value), true)
+    assert.equal((next.value as InterruptFrom<typeof OtherScope>).scope, OtherScope)
+  })
+
+  it('surfaces cleanup failures before re-yielding the interrupt', () => {
+    const cleanupFailure = new Error('cleanup failed')
+
+    const result = fx(function* () {
+      yield* andFinally(TestScope, fail(cleanupFailure))
+      yield* interruptFrom(TestScope)
+    }).pipe(
+      scope(TestScope),
+      control(InterruptFrom, () => ok('interrupted')),
+      returnFail,
+      run
+    )
+
+    assert.ok(result instanceof Fail)
+    assert.ok(result.arg instanceof AggregateError)
+    assert.deepEqual(result.arg.errors, [cleanupFailure])
+  })
+})
 
 describe('Interrupt masking', () => {
   it('is transparent for pure computations', () => {

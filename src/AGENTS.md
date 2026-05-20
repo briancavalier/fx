@@ -25,6 +25,6 @@ Rules for changes:
 - When default handlers create errors asynchronously or after handler interpretation, preserve request-site diagnostics with `Breadcrumb`/cause chaining rather than overwriting stacks.
 - Keep cleanup paths explicit: call iterator `return`, dispose tasks/resources, and preserve cooperative cancellation.
 - When adding or moving public API, update `src/exports/*`, `package.json#exports`,
-  `src/exports.test.ts`, and `scripts/check-exports.mjs` together. Keep package
-  subpaths tied to feature ownership rather than source filenames.
+  and `src/exports.test.ts` together. Keep package subpaths tied to feature
+  ownership rather than source filenames.
 - Favor small composable functions over new abstractions.

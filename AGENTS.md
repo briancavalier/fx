@@ -12,7 +12,6 @@ Primary commands:
 - `pnpm test`
 - `pnpm typecheck`
 - `pnpm build`
-- `pnpm check:exports`
 - `pnpm lint`
 
 Design preference:
@@ -51,8 +50,7 @@ Development guidance:
 - Do not edit `dist/` directly; build output is generated.
 - Keep examples practical and small.
 - When changing public exports, update the relevant `src/exports/*` entrypoint,
-  `package.json#exports`, `src/exports.test.ts`, and
-  `scripts/check-exports.mjs`. Run `pnpm build` before `pnpm check:exports`.
+  `package.json#exports`, and `src/exports.test.ts`.
 - New package subpaths should represent stable feature areas, not implementation
   file names. Public docs should use `@briancavalier/fx` and curated subpaths;
   in-repo examples may use local `src` imports for direct source execution.

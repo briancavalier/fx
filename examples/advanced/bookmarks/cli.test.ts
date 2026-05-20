@@ -1,10 +1,9 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { assert as assertNoFail, returnAll } from '../../../src/Fail.js'
-import { ok } from '../../../src/Fx.js'
-import { handle } from '../../../src/Handler.js'
-import { HttpRequest, type Request, type ResponseBody } from '../../../src/HttpClient.js'
-import { runPromise } from '../../../src/index.js'
+import { assert as assertNoFail, handle, ok, returnAll, runPromise } from '@briancavalier/fx'
+
+import { HttpRequest, type Request, type ResponseBody } from '@briancavalier/fx/http-client'
+
 import {
   archiveBookmark,
   createBookmark,

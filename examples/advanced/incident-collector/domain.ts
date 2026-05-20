@@ -1,13 +1,10 @@
-import { all, race, type All, type Race } from '../../../src/Concurrent.js'
-import { Effect } from '../../../src/Effect.js'
-import { fail, type Fail } from '../../../src/Fail.js'
-import { fx, ok, type Fx } from '../../../src/Fx.js'
-import { usingExit, usingManaged, managed, type Finally, type Managed } from '../../../src/Finalization.js'
-import { handle } from '../../../src/Handler.js'
-import { info, type Log } from '../../../src/Log.js'
-import { sleep, type Time } from '../../../src/Time.js'
-import type { HandlerCapture } from '../../../src/HandlerCapture.js'
-import type { Interrupt } from '../../../src/Interrupt.js'
+import { all, race, type All, type Race } from '@briancavalier/fx/concurrent'
+import { Effect, fail, type Fail, fx, type Fx, handle, type Interrupt, ok } from '@briancavalier/fx'
+
+import { usingExit, usingManaged, managed, type Finally, type Managed } from '@briancavalier/fx/scope'
+
+import { info, type Log } from '@briancavalier/fx/log'
+import { sleep, type Time } from '@briancavalier/fx/time'
 
 export const BundleScope = 'examples/advanced/incident-collector/Bundle' as const
 export const CollectorScope = 'examples/advanced/incident-collector/Collector' as const
@@ -124,7 +121,7 @@ export const fetchRuntimeStatus = (source: string) => new FetchRuntimeStatus(sou
 
 export const collectIncidentSnapshot = (
   request: SnapshotRequest
-): Fx<IncidentCollectorEffects | All<any> | Race<any> | HandlerCapture<'fx/Concurrent/All'> | HandlerCapture<'fx/Concurrent/Race'> | Interrupt, SnapshotSummary> => fx(function* () {
+): Fx<IncidentCollectorEffects | All<any> | Race<any> | Interrupt, SnapshotSummary> => fx(function* () {
   const bundle = yield* usingManaged(BundleScope, openBundle(request.incidentId))
   yield* info('snapshot started', { incidentId: request.incidentId, bundle: bundle.id })
 

@@ -5,10 +5,9 @@
 
 import { createInterface } from 'node:readline/promises'
 
-import { Fx, assertSync, bracket, fx, handle, ok, runPromise } from '../../../src/index.js'
-import { assertPromise } from '../../../src/Async.js'
-import { provide } from '../../../src/Env.js'
-import { int, defaultRandom } from '../../../src/Random.js'
+import { assertPromise, assertSync, bracket, fx, Fx, handle, ok, provide, runPromise } from '@briancavalier/fx'
+
+import { int, defaultRandom } from '@briancavalier/fx/random'
 
 import { GenerateSecret, Print, Read, main } from './main.js'
 

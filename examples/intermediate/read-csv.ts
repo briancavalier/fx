@@ -1,11 +1,6 @@
-import { fx, run, type Fx } from '../../src/index.js'
-import { defaultConsole, log } from '../../src/Console.js'
-import { assert as assertNoFail } from '../../src/Fail.js'
-import { managed, usingManaged } from '../../src/Finalization.js'
-import { handleScoped } from '../../src/Handler.js'
-import { returnFrom } from '../../src/ReturnFrom.js'
-import { brand, scope } from '../../src/Scope.js'
-import { yieldFrom, YieldFrom, type Yielding } from '../../src/YieldFrom.js'
+import { assert as assertNoFail, type Console, consoleLog, defaultConsole, fx, type Fx, handleScoped, run } from '@briancavalier/fx'
+
+import { brand, managed, returnFrom, scope, usingManaged, yieldFrom, YieldFrom, type Yielding } from '@briancavalier/fx/scope'
 
 const ImportCsv = 'examples/intermediate/ImportCsv' as const
 
@@ -32,11 +27,11 @@ const stopImport = (reason: string) =>
   returnFrom(ImportCsv, { type: 'skipped', reason } satisfies ImportResult)
 
 const openCsv = (path: string, text: string) => fx(function* () {
-  yield* log(`opening ${path}`)
+  yield* consoleLog(`opening ${path}`)
 
   return managed(
     { path, text } satisfies CsvFile,
-    exit => log(`closing ${path} after ${exit.type}`)
+    exit => consoleLog(`closing ${path} after ${exit.type}`)
   )
 })
 
@@ -47,7 +42,7 @@ const parseCsvRows = (text: string): CsvRow[] =>
     .map(line => line.split(',').map(cell => cell.trim()))
 
 const readCsvRows = (file: CsvFile) => fx(function* () {
-  yield* log(`reading ${file.path}`)
+  yield* consoleLog(`reading ${file.path}`)
 
   for (const row of parseCsvRows(file.text)) {
     yield* yieldFrom(CsvRows, row)
@@ -89,7 +84,7 @@ const importRows = (file: CsvFile) => fx(function* () {
         return yield* stopImport(`Encountered empty row after ${count} imports`)
       }
 
-      yield* log(`importing ${row.join(' | ')}`)
+      yield* consoleLog(`importing ${row.join(' | ')}`)
       count += 1
     }))
   )
@@ -97,12 +92,12 @@ const importRows = (file: CsvFile) => fx(function* () {
   return count
 })
 
-const importCsv = (path: string, text: string) => fx(function* () {
+const importCsv = (path: string, text: string): Fx<Console, ImportResult> => fx(function* () {
   const file = yield* usingManaged(ImportCsv, openCsv(path, text))
   const count = yield* importRows(file)
 
   return { type: 'imported', count } satisfies ImportResult
-}).pipe(scope(ImportCsv))
+}).pipe(scope(ImportCsv)) as Fx<Console, ImportResult>
 
 const goodCsv = `
 name,email
@@ -121,7 +116,7 @@ const main = fx(function* () {
     ['missing-email.csv', missingEmailCsv]
   ] as const) {
     const result = yield* importCsv(path, text)
-    yield* log(`${path}: ${result.type}`, result)
+    yield* consoleLog(`${path}: ${result.type}`, result)
   }
 })
 

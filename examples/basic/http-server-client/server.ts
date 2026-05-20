@@ -1,13 +1,11 @@
-import { fx, runPromise } from '../../../src/index.js'
-import { unbounded } from '../../../src/Concurrent.js'
-import { provide } from '../../../src/Env.js'
-import { assert as assertNoFail } from '../../../src/Fail.js'
-import { serve, type ServerEvent, type ServerListening } from '../../../src/HttpServer.js'
-import { nodeHttp } from '../../../src/HttpServerNode.js'
-import { console as logConsole, info } from '../../../src/Log.js'
-import { brand } from '../../../src/Scope.js'
-import { defaultTime } from '../../../src/Time.js'
-import { forEachFrom, yieldFrom, type Yielding } from '../../../src/YieldFrom.js'
+import { assert as assertNoFail, fx, provide, runPromise } from '@briancavalier/fx'
+import { unbounded } from '@briancavalier/fx/concurrent'
+
+import { serve, type ServerEvent, type ServerListening } from '@briancavalier/fx/http-server'
+import { nodeHttp } from '@briancavalier/fx/platform-node'
+import { info, withConsoleLog } from '@briancavalier/fx/log'
+import { brand, forEachFrom, yieldFrom, type Yielding } from '@briancavalier/fx/scope'
+import { defaultTime } from '@briancavalier/fx/time'
 import { appRoutes, memoryNotes } from './api.js'
 
 type ServerConfig = {
@@ -28,7 +26,7 @@ await server.pipe(
   nodeHttp(),
   f => forEachFrom(HttpServerEvents, f, logHttpServerEvent),
   memoryNotes(),
-  logConsole,
+  withConsoleLog,
   defaultTime,
   assertNoFail,
   provide({ port: Number(process.env.PORT ?? 3000) }),

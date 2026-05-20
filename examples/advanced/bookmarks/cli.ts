@@ -1,6 +1,6 @@
-import { catchAll } from '../../../src/Fail.js'
-import { fx, map, ok, runPromise, type Fx } from '../../../src/Fx.js'
-import { w3cFetch } from '../../../src/HttpClient.js'
+import { catchAll, fx, type Fx, map, ok, runPromise } from '@briancavalier/fx'
+
+import { w3cFetch } from '@briancavalier/fx/http-client'
 import {
   archiveBookmark,
   createBookmark,

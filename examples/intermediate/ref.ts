@@ -1,8 +1,8 @@
-import { flatMap, Fx, fx, runPromise } from '../../src/index.js'
-import { all, defaultAll, unbounded } from '../../src/Concurrent.js'
-import { Int, int, defaultRandom } from '../../src/Random.js'
-import { Sleep, sleep, defaultTime } from '../../src/Time.js'
-import { compareAndSet, of, type Of } from '../../src/Ref.js'
+import { flatMap, Fx, fx, runPromise } from '@briancavalier/fx'
+import { all, defaultAll, unbounded } from '@briancavalier/fx/concurrent'
+import { Int, int, defaultRandom } from '@briancavalier/fx/random'
+import { Sleep, sleep, defaultTime } from '@briancavalier/fx/time'
+import { compareAndSet, of, type Of } from '@briancavalier/fx/ref'
 
 // Simple Ref example
 // A Ref is a mutable reference to a value that can be read and updated atomically

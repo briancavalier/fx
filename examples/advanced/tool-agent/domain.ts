@@ -1,14 +1,10 @@
-import { type All, all } from '../../../src/Concurrent.js'
-import { Effect } from '../../../src/Effect.js'
-import { fail, type Fail } from '../../../src/Fail.js'
-import { fx, type Fx } from '../../../src/Fx.js'
-import { usingManaged, type Finally, type Managed } from '../../../src/Finalization.js'
-import { info, type Log } from '../../../src/Log.js'
-import { brand } from '../../../src/Scope.js'
-import { type Yielding, type YieldFrom } from '../../../src/YieldFrom.js'
-import type { HandlerCapture } from '../../../src/HandlerCapture.js'
-import type { Interrupt } from '../../../src/Interrupt.js'
-import type { Time } from '../../../src/Time.js'
+import { type All, all } from '@briancavalier/fx/concurrent'
+import { Effect, fail, type Fail, fx, type Fx, type Interrupt } from '@briancavalier/fx'
+
+import { brand, type Finally, type Managed, usingManaged, type YieldFrom, type Yielding } from '@briancavalier/fx/scope'
+import { info, type Log } from '@briancavalier/fx/log'
+
+import { type Time } from '@briancavalier/fx/time'
 
 export const AgentSessionScope = 'examples/advanced/tool-agent/AgentSession' as const
 export const AgentEvents = brand<Yielding<AgentEvent>>()('examples/advanced/tool-agent/AgentEvents')
@@ -101,7 +97,7 @@ export const startAgentSession = (task: string) => new StartAgentSession(task)
 
 export const runAgent = (
   task: string
-): Fx<ToolAgentEffects | All<any> | HandlerCapture<'fx/Concurrent/All'>, AgentAnswer> => fx(function* () {
+): Fx<ToolAgentEffects | All<any>, AgentAnswer> => fx(function* () {
   const session = yield* usingManaged(AgentSessionScope, startAgentSession(task))
   yield* info('agent session started', { session: session.id, task })
 

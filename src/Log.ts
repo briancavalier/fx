@@ -27,7 +27,7 @@ export interface LogMessage {
   readonly data?: { readonly [key: string]: unknown }
 }
 
-export const console = handle(Log, ({ arg: { level, component, ...m } }) => fx(function* () {
+export const withConsoleLog = handle(Log, ({ arg: { level, component, ...m } }) => fx(function* () {
   const console = globalThis.console
   const l = Level[level].padEnd(5, ' ')
   const t = new Date(yield* now).toISOString()

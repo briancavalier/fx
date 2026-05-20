@@ -106,7 +106,7 @@ export const andReturn = <const B>(b: B) => map(() => b)
  * Perform side effects and return the original value.
  * @example
  *  // Logs "Hello" and returns "Hello"
- *  ok("Hello").pipe(tap(Console.log))
+ *  ok("Hello").pipe(tap(consoleLog))
  */
 export const tap = <const A, const E2>(f: (a: A) => Fx<E2, void>) =>
   <const E1>(fa: Fx<E1, A>): Fx<E1 | E2, A> => fa.pipe(

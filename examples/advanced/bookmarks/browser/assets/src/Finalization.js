@@ -19,14 +19,6 @@ export const andFinallyExit = (scope, f) => new Finally(scope, { finalizer: exit
  */
 export const using = (scope, initially, finally_) => uninterruptible(fx(function* () {
     const r = yield* initially;
-    yield* andFinally(scope, finally_(r));
-    return r;
-}));
-/**
- * Run an initial operation, register exit-aware cleanup for its result, and return it.
- */
-export const usingExit = (scope, initially, finally_) => uninterruptible(fx(function* () {
-    const r = yield* initially;
     yield* andFinallyExit(scope, exit => finally_(r, exit));
     return r;
 }));

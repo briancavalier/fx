@@ -1,7 +1,7 @@
 import { all, race, type All, type Race } from '@briancavalier/fx/concurrent'
 import { Effect, fail, type Fail, fx, type Fx, handle, type Interrupt, ok } from '@briancavalier/fx'
 
-import { usingExit, usingManaged, managed, type Finally, type Managed } from '@briancavalier/fx/scope'
+import { using, usingManaged, managed, type Finally, type Managed } from '@briancavalier/fx/scope'
 
 import { info, type Log } from '@briancavalier/fx/log'
 import { sleep, type Time } from '@briancavalier/fx/time'
@@ -302,7 +302,7 @@ const collectRuntime = (bundle: Bundle) => withCollector('runtime', fx(function*
 
 const withCollector = <E, A>(collector: CollectorName, program: Fx<E, A>): Fx<E | StartCollector | Log | Finally<typeof CollectorScope, Log> | Interrupt, A> => fx(function* () {
   const name = yield* usingManaged(CollectorScope, startCollector(collector))
-  yield* usingExit(
+  yield* using(
     CollectorScope,
     ok(name),
     (name, exit) => info('collector finalized', { name, exit: exit.type })

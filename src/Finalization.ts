@@ -62,19 +62,6 @@ export const andFinallyExit = <const Scope extends string, E>(
 export const using = <const Scope extends string, const IE, const FE, const R>(
   scope: Scope,
   initially: Fx<IE, R>,
-  finally_: (r: R) => Fx<FE, void>
-): Fx<IE | Finally<Scope, FE> | Interrupt, R> => uninterruptible(fx(function* () {
-  const r = yield* initially
-  yield* andFinally(scope, finally_(r))
-  return r
-}))
-
-/**
- * Run an initial operation, register exit-aware cleanup for its result, and return it.
- */
-export const usingExit = <const Scope extends string, const IE, const FE, const R>(
-  scope: Scope,
-  initially: Fx<IE, R>,
   finally_: (r: R, exit: Exit) => Fx<FE, void>
 ): Fx<IE | Finally<Scope, FE> | Interrupt, R> => uninterruptible(fx(function* () {
   const r = yield* initially

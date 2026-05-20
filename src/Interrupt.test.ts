@@ -4,7 +4,7 @@ import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
 import { fail, returnFail } from './Fail.js'
 import { firstSettled, race, unbounded } from './Concurrent.js'
-import { managed, usingExit, usingManaged } from './Finalization.js'
+import { managed, using, usingManaged } from './Finalization.js'
 import { bracket, fx, ok, run, runPromise, runTask, type Fx } from './Fx.js'
 import { control, handle } from './Handler.js'
 import { uninterruptible, uninterruptibleMask, type Interrupt, type RestoreInterrupt } from './Interrupt.js'
@@ -91,12 +91,12 @@ describe('Interrupt masking', () => {
   })
 
   it('runs registered finalizers when interrupted after masked acquire/register', async () => {
-    const TestScope = 'test/Interrupt/usingExit' as const
+    const TestScope = 'test/Interrupt/using' as const
     const exits = [] as Exit[]
     let resolve!: (value: string) => void
 
     const task = fx(function* () {
-      yield* usingExit(
+      yield* using(
         TestScope,
         assertPromise<string>(() => new Promise(r => {
           resolve = r
@@ -301,7 +301,7 @@ describe('Interrupt masking', () => {
     let settled = false
 
     const loser = fx(function* () {
-      yield* usingExit(
+      yield* using(
         TestScope,
         assertPromise<string>(() => new Promise(r => {
           resolveAcquire = r

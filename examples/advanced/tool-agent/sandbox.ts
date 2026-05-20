@@ -1,6 +1,6 @@
-import { fail, type Fail } from '../../../src/Fail.js'
-import { type Fx } from '../../../src/Fx.js'
-import { handle } from '../../../src/Handler.js'
+import { fail, type Fail } from '@briancavalier/fx'
+import { type Fx } from '@briancavalier/fx'
+import { handle } from '@briancavalier/fx'
 import {
   runTool,
   RunTool,

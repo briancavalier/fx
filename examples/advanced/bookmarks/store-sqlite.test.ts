@@ -4,11 +4,11 @@ import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
-import { returnAll } from '../../../src/Fail.js'
-import { runPromise, type Fx } from '../../../src/Fx.js'
-import { collect } from '../../../src/Log.js'
-import { withClock, type Time } from '../../../src/Time.js'
-import { VirtualClock } from '../../../src/internal/time.js'
+import { returnAll } from '@briancavalier/fx'
+import { runPromise, type Fx } from '@briancavalier/fx'
+import { collect } from '@briancavalier/fx/log'
+import { withClock, type Time } from '@briancavalier/fx/time'
+import { VirtualClock } from '@briancavalier/fx/time'
 import {
   addBookmark,
   archiveBookmark,

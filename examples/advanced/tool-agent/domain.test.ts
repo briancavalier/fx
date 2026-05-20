@@ -1,15 +1,14 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { bounded, defaultAll } from '../../../src/Concurrent.js'
-import { returnAll } from '../../../src/Fail.js'
-import { runPromise, type Fx } from '../../../src/Fx.js'
-import type { HandlerCapture } from '../../../src/HandlerCapture.js'
-import { collect } from '../../../src/Log.js'
-import { scope } from '../../../src/Scope.js'
-import { withClock, VirtualClock } from '../../../src/Time.js'
-import { collectFrom } from '../../../src/YieldFrom.js'
-import type { Async } from '../../../src/Async.js'
-import type { Interrupt } from '../../../src/Interrupt.js'
+import { bounded, defaultAll } from '@briancavalier/fx/concurrent'
+import { returnAll } from '@briancavalier/fx'
+import { runPromise, type Fx } from '@briancavalier/fx'
+import { collect } from '@briancavalier/fx/log'
+import { scope } from '@briancavalier/fx/scope'
+import { withClock, VirtualClock } from '@briancavalier/fx/time'
+import { collectFrom } from '@briancavalier/fx/scope'
+import type { Async } from '@briancavalier/fx'
+import type { Interrupt } from '@briancavalier/fx'
 import {
   AgentEvents,
   AgentSessionScope,
@@ -152,7 +151,7 @@ describe('tool agent example', () => {
       collectFrom(AgentEvents)
     )
 
-    const runnable: Fx<Async | HandlerCapture<string> | Interrupt, unknown> = handled
+    const runnable: Fx<Async | Interrupt, unknown> = handled
     void runnable
   })
 })

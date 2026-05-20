@@ -1,12 +1,12 @@
-import { fx, runPromise } from '../../../src/index.js'
-import { unbounded } from '../../../src/Concurrent.js'
-import { provide } from '../../../src/Env.js'
-import { assert as assertNoFail } from '../../../src/Fail.js'
-import { serve, type ServerEvent, type ServerListening } from '../../../src/HttpServer.js'
-import { nodeHttp } from '../../../src/HttpServerNode.js'
-import { info, withConsoleLog } from '../../../src/Log.js'
-import { emit, forEach as forEachStream } from '../../../src/Stream.js'
-import { defaultTime } from '../../../src/Time.js'
+import { fx, runPromise, type Fx } from '@briancavalier/fx'
+import { unbounded } from '@briancavalier/fx/concurrent'
+import { provide } from '@briancavalier/fx'
+import { assert as assertNoFail } from '@briancavalier/fx'
+import { serve, type ServerEvent, type ServerListening } from '@briancavalier/fx/http-server'
+import { nodeHttp } from '@briancavalier/fx/platform-node'
+import { info, withConsoleLog } from '@briancavalier/fx/log'
+import { emit, forEach as forEachStream, type Stream } from '@briancavalier/fx/stream'
+import { defaultTime } from '@briancavalier/fx/time'
 import { appRoutes, memoryNotes } from './api.js'
 
 type ServerConfig = {
@@ -23,7 +23,7 @@ const server = fx(function* ({ port }: ServerConfig) {
 
 await server.pipe(
   nodeHttp(),
-  f => forEachStream(f, logHttpServerEvent),
+  f => forEachStream(f as Fx<Stream<ServerEvent>, void>, logHttpServerEvent),
   memoryNotes(),
   withConsoleLog,
   defaultTime,

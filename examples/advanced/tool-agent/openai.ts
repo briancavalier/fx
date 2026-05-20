@@ -1,12 +1,12 @@
-import { catchAll, failFrom, type Fail } from '../../../src/Fail.js'
-import { flatMap, fx, ok, type Fx } from '../../../src/Fx.js'
-import { handle } from '../../../src/Handler.js'
+import { catchAll, failFrom, type Fail } from '@briancavalier/fx'
+import { flatMap, fx, ok, type Fx } from '@briancavalier/fx'
+import { handle } from '@briancavalier/fx'
 import {
   expectSuccess,
   json,
   request,
   type JSONValue
-} from '../../../src/HttpClient.js'
+} from '@briancavalier/fx/http-client'
 import {
   AskModel,
   type AgentError,

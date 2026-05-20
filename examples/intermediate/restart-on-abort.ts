@@ -1,8 +1,8 @@
-import { abort, orReturn, restartOnAbort } from '../../src/Abort.js'
-import { defaultConsole, log } from '../../src/Console.js'
-import { assert as assertNoFail } from '../../src/Fail.js'
-import { managed, usingManaged } from '../../src/Finalization.js'
-import { fx, run } from '../../src/Fx.js'
+import { abort, orReturn, restartOnAbort } from '@briancavalier/fx/scope'
+import { consoleLog, defaultConsole } from '@briancavalier/fx'
+import { assert as assertNoFail } from '@briancavalier/fx'
+import { managed, usingManaged } from '@briancavalier/fx/scope'
+import { fx, run } from '@briancavalier/fx'
 
 const SubmitOrder = 'examples/intermediate/restart-on-abort/SubmitOrder' as const
 
@@ -27,21 +27,21 @@ const openOrderSession = () => fx(function* () {
   const session = { id: nextSessionId } satisfies OrderSession
   nextSessionId += 1
 
-  yield* log(`open order session ${session.id}`)
+  yield* consoleLog(`open order session ${session.id}`)
 
   return managed(
     session,
-    exit => log(`close order session ${session.id} after ${exit.type}`)
+    exit => consoleLog(`close order session ${session.id} after ${exit.type}`)
   )
 })
 
 const refreshToken = () => fx(function* () {
-  yield* log('refresh auth token')
+  yield* consoleLog('refresh auth token')
   token = { value: 'fresh-token', expired: false }
 })
 
 const submitToGateway = (session: OrderSession) => fx(function* () {
-  yield* log(`submit order in session ${session.id} with ${token.value}`)
+  yield* consoleLog(`submit order in session ${session.id} with ${token.value}`)
 
   if (token.expired) {
     yield* refreshToken()
@@ -64,7 +64,7 @@ const submitOrder = fx(function* () {
 
 const main = fx(function* () {
   const result = yield* submitOrder
-  yield* log('order result', result)
+  yield* consoleLog('order result', result)
 })
 
 run(main.pipe(defaultConsole, assertNoFail))

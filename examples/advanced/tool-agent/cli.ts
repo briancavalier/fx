@@ -1,14 +1,14 @@
-import { bounded, defaultAll } from '../../../src/Concurrent.js'
-import { defaultConsole, log } from '../../../src/Console.js'
-import { provide } from '../../../src/Env.js'
-import { returnAll } from '../../../src/Fail.js'
-import { fx, runPromise } from '../../../src/Fx.js'
-import { handleScoped } from '../../../src/Handler.js'
-import { w3cFetch } from '../../../src/HttpClient.js'
-import { withConsoleLog } from '../../../src/Log.js'
-import { scope } from '../../../src/Scope.js'
-import { defaultTime } from '../../../src/Time.js'
-import { YieldFrom } from '../../../src/YieldFrom.js'
+import { bounded, defaultAll } from '@briancavalier/fx/concurrent'
+import { consoleLog, defaultConsole } from '@briancavalier/fx'
+import { provide } from '@briancavalier/fx'
+import { returnAll } from '@briancavalier/fx'
+import { fx, runPromise } from '@briancavalier/fx'
+import { handleScoped } from '@briancavalier/fx'
+import { w3cFetch } from '@briancavalier/fx/http-client'
+import { withConsoleLog } from '@briancavalier/fx/log'
+import { scope } from '@briancavalier/fx/scope'
+import { defaultTime } from '@briancavalier/fx/time'
+import { YieldFrom } from '@briancavalier/fx/scope'
 import {
   AgentEvents,
   AgentSessionScope,
@@ -21,7 +21,7 @@ import { defaultToolSandboxPolicy, withToolSandbox } from './sandbox.js'
 const task = process.argv.slice(2).join(' ') || 'Review the package health and recommend next steps'
 const fixture = createToolAgentFixture()
 const logAgentEvents = handleScoped(YieldFrom<typeof AgentEvents>, AgentEvents, effect =>
-  log(`agent event: ${effect.arg}`)
+  consoleLog(`agent event: ${effect.arg}`)
 )
 
 const main = fx(function* ({ openAIApiKey }: OpenAIModelContext) {
@@ -52,7 +52,7 @@ const main = fx(function* ({ openAIApiKey }: OpenAIModelContext) {
       returnAll
     )
 
-  yield* log(JSON.stringify(result, null, 2))
+  yield* consoleLog(JSON.stringify(result, null, 2))
 })
 
 await main.pipe(

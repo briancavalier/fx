@@ -1,6 +1,6 @@
-import { defaultConsole, log } from '../../src/Console.js'
-import { fx, run } from '../../src/Fx.js'
+import { consoleLog, defaultConsole } from '@briancavalier/fx'
+import { run } from '@briancavalier/fx'
 
-const main = log('Hello, Fx!')
+const main = consoleLog('Hello, Fx!')
 
 main.pipe(defaultConsole, run)

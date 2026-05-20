@@ -1,7 +1,7 @@
-import { flatMap, fx, runPromise } from '../../../src/index.js'
-import { provide } from '../../../src/Env.js'
-import { assert as assertNoFail } from '../../../src/Fail.js'
-import { expectSuccess, request, text, w3cFetch } from '../../../src/HttpClient.js'
+import { flatMap, fx, runPromise } from '@briancavalier/fx'
+import { provide } from '@briancavalier/fx'
+import { assert as assertNoFail } from '@briancavalier/fx'
+import { expectSuccess, request, text, w3cFetch } from '@briancavalier/fx/http-client'
 
 type ClientConfig = {
   readonly port: number

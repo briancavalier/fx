@@ -1,10 +1,10 @@
-import { fail, type Fail } from '../../../src/Fail.js'
-import { fx, map, ok, type Fx } from '../../../src/Fx.js'
-import { handle } from '../../../src/Handler.js'
-import { info, type Log } from '../../../src/Log.js'
-import { int } from '../../../src/Random.js'
-import { now, type Time } from '../../../src/Time.js'
-import { Effect } from '../../../src/index.js'
+import { fail, type Fail } from '@briancavalier/fx'
+import { fx, map, ok, type Fx } from '@briancavalier/fx'
+import { handle } from '@briancavalier/fx'
+import { info, type Log } from '@briancavalier/fx/log'
+import { int } from '@briancavalier/fx/random'
+import { now, type Time } from '@briancavalier/fx/time'
+import { Effect } from '@briancavalier/fx'
 
 export type BookmarkId = string
 

@@ -38,6 +38,9 @@ Avoid:
 - adding a `main` generator solely to yield one already-constructed `Fx`,
 - depending on generated `dist/`.
 
-Examples may import from local `src` paths while developing locally so they can
-run against source without a package build. Public docs, README snippets, and
-agent-consumer guidance should use `@briancavalier/fx` and curated subpaths.
+Runnable TypeScript examples should import from `@briancavalier/fx` and the
+curated feature subpaths so they demonstrate the package-consumer API. Because
+package self-imports resolve through `package.json#exports` to `dist/exports/*`,
+run `pnpm build` before executing examples directly with `node --import tsx`.
+Generated browser asset JS may keep generated relative imports until its
+separate build flow regenerates it.

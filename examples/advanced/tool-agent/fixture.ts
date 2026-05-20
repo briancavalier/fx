@@ -1,9 +1,9 @@
-import { fail } from '../../../src/Fail.js'
-import { fx, type Fx } from '../../../src/Fx.js'
-import { managed } from '../../../src/Finalization.js'
-import { handle } from '../../../src/Handler.js'
-import { sleep } from '../../../src/Time.js'
-import { yieldFrom } from '../../../src/YieldFrom.js'
+import { fail } from '@briancavalier/fx'
+import { fx, type Fx } from '@briancavalier/fx'
+import { managed } from '@briancavalier/fx/scope'
+import { handle } from '@briancavalier/fx'
+import { sleep } from '@briancavalier/fx/time'
+import { yieldFrom } from '@briancavalier/fx/scope'
 import {
   AgentEvents,
   AskModel,

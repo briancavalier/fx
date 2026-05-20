@@ -3,7 +3,7 @@ import { ScopedEffect } from './Effect.js'
 import { Fail } from './Fail.js'
 import { Fx, assertSync, bracket, fx, map, ok } from './Fx.js'
 import { handleScoped } from './Handler.js'
-import { Sink, ExcludeSink } from './Sink.js'
+import { Sink, ExcludeSink, type Sinking } from './Sink.js'
 import type { Interrupt } from './Interrupt.js'
 import * as Queue from './internal/Queue.js'
 import { dispose } from './internal/disposable.js'
@@ -187,13 +187,21 @@ export const toAsyncIterable = <const Scope extends string & Yielding<unknown, v
   })
 
 /**
- * Pipe all one-way yields from a scope into a sink for the same scope.
+ * Pipe all one-way yields from one scope into a sink from another scope.
  */
-export const to = <const Scope extends string & Yielding<unknown, void>, E1, E2, R1, R2>(
-  scope: Scope,
+export const to = <
+  const SourceScope extends string & Yielding<unknown, void>,
+  const SinkScope extends string & Sinking<YieldOutput<SourceScope>>,
+  E1,
+  E2,
+  R1,
+  R2
+>(
+  sourceScope: SourceScope,
+  sinkScope: SinkScope,
   source: Fx<E1, R1>,
   sink: Fx<E2, R2>
-): Fx<ExcludeYieldFrom<E1, Scope> | ExcludeSink<E2, Scope>, PipeResult<R1, R2>> => fx(function* () {
+): Fx<ExcludeYieldFrom<E1, SourceScope> | ExcludeSink<E2, SinkScope>, PipeResult<R1, R2>> => fx(function* () {
   const sourceIterator = source[Symbol.iterator]()
   const sinkIterator = sink[Symbol.iterator]()
   let sourceOpen = true
@@ -201,18 +209,18 @@ export const to = <const Scope extends string & Yielding<unknown, void>, E1, E2,
 
   const drainSource = function* (
     result: IteratorResult<E1, R1>
-  ): Generator<ExcludeYieldFrom<E1, Scope> | ExcludeSink<E2, Scope>, R1, unknown> {
+  ): Generator<ExcludeYieldFrom<E1, SourceScope> | ExcludeSink<E2, SinkScope>, R1, unknown> {
     while (!result.done) {
-      result = sourceIterator.next(yield result.value as ExcludeYieldFrom<E1, Scope>)
+      result = sourceIterator.next(yield result.value as ExcludeYieldFrom<E1, SourceScope>)
     }
     return result.value
   }
 
   const drainSink = function* (
     result: IteratorResult<E2, R2>
-  ): Generator<ExcludeYieldFrom<E1, Scope> | ExcludeSink<E2, Scope>, R2, unknown> {
+  ): Generator<ExcludeYieldFrom<E1, SourceScope> | ExcludeSink<E2, SinkScope>, R2, unknown> {
     while (!result.done) {
-      result = sinkIterator.next(yield result.value as ExcludeSink<E2, Scope>)
+      result = sinkIterator.next(yield result.value as ExcludeSink<E2, SinkScope>)
     }
     return result.value
   }
@@ -234,12 +242,12 @@ export const to = <const Scope extends string & Yielding<unknown, void>, E1, E2,
     let sinkResult = sinkIterator.next()
 
     while (true) {
-      while (!sourceResult.done && !(YieldFrom.is(sourceResult.value) && sourceResult.value.scope === scope)) {
-        sourceResult = sourceIterator.next(yield sourceResult.value as ExcludeYieldFrom<E1, Scope>)
+      while (!sourceResult.done && !(YieldFrom.is(sourceResult.value) && sourceResult.value.scope === sourceScope)) {
+        sourceResult = sourceIterator.next(yield sourceResult.value as ExcludeYieldFrom<E1, SourceScope>)
       }
 
-      while (!sinkResult.done && !(Sink.is(sinkResult.value) && sinkResult.value.scope === scope)) {
-        sinkResult = sinkIterator.next(yield sinkResult.value as ExcludeSink<E2, Scope>)
+      while (!sinkResult.done && !(Sink.is(sinkResult.value) && sinkResult.value.scope === sinkScope)) {
+        sinkResult = sinkIterator.next(yield sinkResult.value as ExcludeSink<E2, SinkScope>)
       }
 
       if (sinkResult.done) {
@@ -254,11 +262,11 @@ export const to = <const Scope extends string & Yielding<unknown, void>, E1, E2,
         return { type: 'sourceEnded', value: sourceResult.value }
       }
 
-      sinkResult = sinkIterator.next((sourceResult.value as YieldFrom<Scope>).arg)
+      sinkResult = sinkIterator.next((sourceResult.value as YieldFrom<SourceScope>).arg)
       sourceResult = sourceIterator.next()
     }
   } finally {
     yield* closeSource()
     yield* closeSink()
   }
-}) as Fx<ExcludeYieldFrom<E1, Scope> | ExcludeSink<E2, Scope>, PipeResult<R1, R2>>
+}) as Fx<ExcludeYieldFrom<E1, SourceScope> | ExcludeSink<E2, SinkScope>, PipeResult<R1, R2>>

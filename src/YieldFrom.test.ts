@@ -7,6 +7,7 @@ import { handleScoped } from './Handler.js'
 import { returnFrom } from './ReturnFrom.js'
 import { brand, scope } from './Scope.js'
 import { next as nextSink, Sink } from './Sink.js'
+import type { Sinking } from './Sink.js'
 import {
   collectFrom,
   forEachFrom,
@@ -26,8 +27,24 @@ import type { Yielding } from './YieldFrom.js'
 
 describe('YieldFrom', () => {
   const NumberScope = brand<Yielding<number>>()('test/YieldFrom/numbers')
+  const NumberSinkScope = brand<Sinking<number>>()('test/YieldFrom/number-sink')
   const ItemScope = brand<Yielding<'item'>>()('test/YieldFrom/item')
   const DecisionScope = brand<Yielding<string, boolean>>()('test/YieldFrom/decision')
+
+  it('allows sink scopes independent of YieldFrom protocols', () => {
+    const SinkOnlyScope = brand<Sinking<number>>()('test/YieldFrom/sink-only')
+    const f = fx(function* () {
+      const value = yield* nextSink(SinkOnlyScope)
+      return value + 1
+    })
+
+    const _: typeof f extends Fx<Sink<typeof SinkOnlyScope>, number> ? true : false = true
+    const next = f[Symbol.iterator]().next()
+
+    assert.equal(Sink.is(next.value), true)
+    assert.equal((next.value as Sink<typeof SinkOnlyScope>).scope, SinkOnlyScope)
+    void _
+  })
 
   it('collects one-way yields from the matching scope', () => {
     const result = fx(function* () {
@@ -263,11 +280,11 @@ describe('YieldFrom', () => {
     it('returns sourceEnded when the source ends before the sink', () => {
       const actual: number[] = []
       const sink = fx(function* () {
-        while (true) actual.push(yield* nextSink(NumberScope))
+        while (true) actual.push(yield* nextSink(NumberSinkScope))
       })
 
       const result = fromIterable(NumberScope, [1, 2, 3][Symbol.iterator]()).pipe(
-        source => to(NumberScope, source, sink),
+        source => to(NumberScope, NumberSinkScope, source, sink),
         run
       )
 
@@ -282,11 +299,11 @@ describe('YieldFrom', () => {
         while (true) yield* yieldFrom(NumberScope, i++)
       })
       const sink = fx(function* () {
-        for (let i = 0; i < 3; ++i) actual.push(yield* nextSink(NumberScope))
+        for (let i = 0; i < 3; ++i) actual.push(yield* nextSink(NumberSinkScope))
         return 'sink'
       })
 
-      const result = to(NumberScope, source, sink).pipe(run)
+      const result = to(NumberScope, NumberSinkScope, source, sink).pipe(run)
 
       assert.deepEqual(result, { type: 'sinkEnded', value: 'sink' })
       assert.deepEqual(actual, [1, 2, 3])
@@ -295,11 +312,11 @@ describe('YieldFrom', () => {
     it('prefers sinkEnded when source and sink complete together', () => {
       const source = fromIterable(NumberScope, [1, 2, 3][Symbol.iterator]())
       const sink = fx(function* () {
-        for (let i = 0; i < 3; ++i) yield* nextSink(NumberScope)
+        for (let i = 0; i < 3; ++i) yield* nextSink(NumberSinkScope)
         return 'sink'
       })
 
-      const result = to(NumberScope, source, sink).pipe(run)
+      const result = to(NumberScope, NumberSinkScope, source, sink).pipe(run)
 
       assert.deepEqual(result, { type: 'sinkEnded', value: 'sink' })
     })
@@ -307,11 +324,11 @@ describe('YieldFrom', () => {
     it('distinguishes source and sink results with the same value type', () => {
       const source = fromIterable(NumberScope, [1][Symbol.iterator]())
       const sink = fx(function* () {
-        yield* nextSink(NumberScope)
+        yield* nextSink(NumberSinkScope)
         return undefined
       })
 
-      const result: PipeResult<undefined, undefined> = to(NumberScope, source, sink).pipe(run)
+      const result: PipeResult<undefined, undefined> = to(NumberScope, NumberSinkScope, source, sink).pipe(run)
 
       assert.equal(result.type, 'sinkEnded')
       assert.equal(result.value, undefined)
@@ -319,31 +336,48 @@ describe('YieldFrom', () => {
 
     it('leaves unrelated YieldFrom and Sink scopes visible', () => {
       const OtherScope = brand<Yielding<'other'>>()('test/YieldFrom/other-to')
+      const OtherSinkScope = brand<Sinking<'other'>>()('test/YieldFrom/other-sink-to')
       const source = fx(function* () {
         yield* yieldFrom(OtherScope, 'other')
         return 'source'
       })
       const sink = fx(function* () {
-        yield* nextSink(OtherScope)
+        yield* nextSink(OtherSinkScope)
         return 'sink'
       })
 
-      const piped = to(NumberScope, source, sink)
-      const _: typeof piped extends Fx<YieldFrom<typeof OtherScope> | Sink<typeof OtherScope>, PipeResult<string, string>> ? true : false = true
+      const piped = to(NumberScope, NumberSinkScope, source, sink)
+      const _: typeof piped extends Fx<YieldFrom<typeof OtherScope> | Sink<typeof OtherSinkScope>, PipeResult<string, string>> ? true : false = true
 
       void _
     })
 
     it('rejects bidirectional YieldFrom scopes', () => {
+      const DecisionSinkScope = brand<Sinking<string>>()('test/YieldFrom/decision-sink')
       const source = fx(function* () {
         yield* yieldFrom(DecisionScope, 'item')
       })
       const sink = fx(function* () {
-        yield* nextSink(DecisionScope)
+        yield* nextSink(DecisionSinkScope)
       })
 
       // @ts-expect-error to only supports one-way YieldFrom scopes
-      const _ = to(DecisionScope, source, sink)
+      const _ = to(DecisionScope, DecisionSinkScope, source, sink)
+
+      assert.equal(typeof _, 'object')
+    })
+
+    it('rejects sinks that cannot receive the yielded values', () => {
+      const StringSinkScope = brand<Sinking<string>>()('test/YieldFrom/string-sink')
+      const source = fx(function* () {
+        yield* yieldFrom(NumberScope, 1)
+      })
+      const sink = fx(function* () {
+        yield* nextSink(StringSinkScope)
+      })
+
+      // @ts-expect-error sink input must accept source yield output
+      const _ = to(NumberScope, StringSinkScope, source, sink)
 
       assert.equal(typeof _, 'object')
     })

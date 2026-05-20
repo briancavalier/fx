@@ -76,7 +76,7 @@ export {
   type Interrupt,
   type RestoreInterrupt
 } from '../Interrupt.js'
-export { dispose, Task, wait } from '../Task.js'
+export { Task, wait } from '../Task.js'
 export { at, indexed, type Breadcrumb } from '../Breadcrumb.js'
 export {
   formatDiagnostic,

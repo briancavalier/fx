@@ -75,7 +75,7 @@ describe('NodeProcess', () => {
     assert.equal(process.count('SIGINT'), 1)
     assert.equal(process.count('SIGTERM'), 1)
 
-    task[Symbol.dispose]()
+    await task.interrupt()
     await tick()
 
     assert.equal(process.count('SIGINT'), 0)

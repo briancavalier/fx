@@ -134,7 +134,7 @@ describe('Interrupt masking', () => {
     assert.deepEqual(events, ['cleanup'])
   })
 
-  it('defers disposal during a masked async computation', async () => {
+  it('defers interruption during a masked async computation', async () => {
     let resolve!: () => void
     let aborted = false
 
@@ -146,11 +146,11 @@ describe('Interrupt masking', () => {
     }))))
 
     await eventually(() => resolve !== undefined)
-    const disposed = task._disposeAndWait()
+    const interrupted = task.interrupt()
 
     assert.equal(aborted, false)
     resolve()
-    await disposed
+    await interrupted
     assert.equal(aborted, false)
   })
 
@@ -176,9 +176,9 @@ describe('Interrupt masking', () => {
     )
 
     await eventually(() => resolve !== undefined)
-    const disposed = task._disposeAndWait()
+    const interrupted = task.interrupt()
     resolve('resource')
-    await disposed
+    await interrupted
 
     assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope }])
   })
@@ -202,11 +202,11 @@ describe('Interrupt masking', () => {
     )
 
     await eventually(() => resolve !== undefined)
-    const disposed = task._disposeAndWait()
+    const interrupted = task.interrupt()
     resolve(managed('resource', exit => fx(function* () {
       exits.push(exit)
     })))
-    await disposed
+    await interrupted
 
     assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope }])
   })
@@ -226,9 +226,9 @@ describe('Interrupt masking', () => {
     ).pipe(runTask)
 
     await eventually(() => resolve !== undefined)
-    const disposed = task._disposeAndWait()
+    const interrupted = task.interrupt()
     resolve('resource')
-    await disposed
+    await interrupted
 
     assert.deepEqual(released, ['resource'])
   })
@@ -247,7 +247,7 @@ describe('Interrupt masking', () => {
     })))
 
     await eventually(() => restoreStarted)
-    await task._disposeAndWait()
+    await task.interrupt()
 
     assert.equal(restoreAborted, true)
   })
@@ -301,7 +301,7 @@ describe('Interrupt masking', () => {
     })))
 
     await eventually(() => started)
-    await task._disposeAndWait()
+    await task.interrupt()
 
     assert.equal(aborted, true)
   })
@@ -320,9 +320,9 @@ describe('Interrupt masking', () => {
     })))
 
     await eventually(() => resolveInner !== undefined)
-    const disposed = task._disposeAndWait()
+    const interrupted = task.interrupt()
     resolveInner()
-    await disposed
+    await interrupted
 
     assert.deepEqual(events, ['outer start', 'inner start', 'outer end'])
   })
@@ -347,12 +347,12 @@ describe('Interrupt masking', () => {
     }))))
 
     await eventually(() => restoreStarted)
-    const disposed = task._disposeAndWait()
+    const interrupted = task.interrupt()
     await Promise.resolve()
 
     assert.equal(restoreAborted, false)
     resolveRestore()
-    await disposed
+    await interrupted
 
     assert.deepEqual(events, ['outer start', 'outer end'])
     assert.equal(restoreAborted, false)

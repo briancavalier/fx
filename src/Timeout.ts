@@ -44,7 +44,7 @@ export function timeout<const Scope extends string, const Reason>(
       if (result.type === 'success') return result.value
       if (result.type === 'failure') return yield* fail(result.failure)
 
-      yield* tryPromise(() => task._disposeAndWait(result.reason))
+      yield* tryPromise(() => task.interrupt(result.reason))
       return yield* interruptFrom(scope, result.reason)
     }) as Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<Scope, Reason | TimeoutInterrupt>, A>
 }

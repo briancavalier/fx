@@ -28,6 +28,7 @@ test('root export surface contains small-program core', () => {
   assert.equal(typeof Core.get, 'function')
   assert.equal(typeof Core.provideAll, 'function')
   assert.equal(typeof Core.Task, 'function')
+  assert.equal('dispose' in Core, false)
   assert.equal(typeof Core.consoleLog, 'function')
   assert.equal(typeof Core.defaultConsole, 'function')
   assert.equal(typeof Core.formatDiagnostic, 'function')

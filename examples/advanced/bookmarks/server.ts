@@ -11,8 +11,9 @@ import { mount, route, routes, serve, type RouteContext, type Routes, type Serve
 import { info, console as logConsole, type Log } from '../../../src/Log.js'
 import { nodeHttp, runNodeMain } from '../../../src/platform-node.js'
 import { defaultRandom } from '../../../src/Random.js'
-import { emit, forEach as forEachStream } from '../../../src/Stream.js'
+import { brand } from '../../../src/Scope.js'
 import { defaultTime, type Time } from '../../../src/Time.js'
+import { forEachFrom, yieldFrom, type Yielding } from '../../../src/YieldFrom.js'
 import {
   addBookmark,
   archiveBookmark,
@@ -46,6 +47,8 @@ type BookmarkRouteEffects =
   | NextBookmarkId
   | Time
   | Log
+
+const HttpServerEvents = brand<Yielding<ServerEvent>>()('examples/advanced/bookmarks/HttpServerEvents')
 
 const createBookmark = (request: ServerRequest): Fx<BookmarkRouteEffects, ServerResponse<never>> => fx(function* () {
   const body = yield* readJson(request)
@@ -108,7 +111,7 @@ const server = fx(function* ({ host, port }: ServerConfig) {
   return yield* serve(appRoutes, {
     host,
     port,
-    observe: event => emit(event)
+    observe: event => yieldFrom(HttpServerEvents, event)
   })
 })
 
@@ -286,7 +289,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 await server.pipe(
   nodeHttp(),
-  f => forEachStream(f, logHttpServerEvent),
+  f => forEachFrom(HttpServerEvents, f, logHttpServerEvent),
   sqliteBookmarkStore(process.env.BOOKMARKS_DB ?? 'bookmarks.sqlite'),
   demoPageMetadata,
   randomBookmarkIds,

@@ -2,9 +2,8 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { orReturn } from './Abort.js'
 import { unbounded } from './Concurrent.js'
-import { fx, map as mapFx, ok, run, runPromise, unit, type Fx } from './Fx.js'
+import { fx, ok, run, runPromise, unit, type Fx } from './Fx.js'
 import { scope } from './Scope.js'
-import { next as nextSink } from './Sink.js'
 import {
   emit,
   filter,
@@ -17,7 +16,6 @@ import {
   switchMap,
   take,
   TakeScope,
-  to,
   toAsyncIterable,
   withEnqueue,
   type Event,
@@ -214,59 +212,6 @@ describe('Stream', () => {
       }
       assert.deepEqual(events, inputs.flatMap(i => [i, String(i)]))
       assert.deepEqual(result.value, 42)
-    })
-  })
-
-  describe('to', () => {
-    it('given stream < sink, has stream proportion and prefers sink return value', () => {
-      const expected = [1, 2, 3]
-      const stream = fromIterable(expected).pipe(mapFx(_ => 'stream'))
-
-      const actual: number[] = []
-      const sink = fx(function* () {
-        while (true) actual.push(yield* nextSink<number>())
-      })
-
-      const r = stream.pipe(_ => to(_, sink), run)
-
-      assert.equal(r, undefined)
-      assert.deepEqual(actual, expected)
-    })
-
-    it('given stream > sink, has sink proportion and prefers sink return value', () => {
-      const stream = fx(function* () {
-        let i = 1
-        while (true) yield* emit(i++)
-      })
-
-      const actual: number[] = []
-      const sink = fx(function* () {
-        let i = 3
-        while (--i >= 0) actual.push(yield* nextSink<number>())
-        return 'sink'
-      })
-
-      const r = stream.pipe(_ => to(_, sink), run)
-
-      assert.equal(r, 'sink')
-      assert.deepEqual(actual, [1, 2, 3])
-    })
-
-    it('given stream ~ sink, has expected proportion and prefers sink return value', () => {
-      const expected = [1, 2, 3]
-      const stream = fromIterable(expected).pipe(mapFx(_ => 'stream'))
-
-      const actual: number[] = []
-      const sink = fx(function* () {
-        let i = expected.length
-        while (--i >= 0) actual.push(yield* nextSink<number>())
-        return 'sink'
-      })
-
-      const r = stream.pipe(_ => to(_, sink), run)
-
-      assert.equal(r, 'sink')
-      assert.deepEqual(actual, expected)
     })
   })
 })

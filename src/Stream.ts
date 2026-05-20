@@ -6,7 +6,6 @@ import { Fail } from './Fail.js'
 import { Fx, assertSync, bracket, fx as gen, ok, unit } from './Fx.js'
 import { Handle, control, handle } from './Handler.js'
 import type { Interrupt } from './Interrupt.js'
-import { Sink } from './Sink.js'
 import { Task, wait as waitTask } from './Task.js'
 import * as Queue from './internal/Queue.js'
 import { dispose } from './internal/disposable.js'
@@ -201,35 +200,3 @@ class CurrentTask<E> {
     }
   }
 }
-
-type Sinks<E> = E extends Sink<infer A> ? A : never
-
-/**
- * Pipe all values from a stream into a sink.
- */
-export const to = <E1, E2, R1, R2>(stream: Fx<E1, R1>, sink: Fx<E2, R2>): Fx<Exclude<E1, Stream<Sinks<E2>>> | Exclude<E2, Sink<any>>, R2> => gen(function* () {
-  const sii = sink[Symbol.iterator]()
-  const sti = stream[Symbol.iterator]()
-
-  try {
-    let sir = sii.next()
-    let str = sti.next()
-
-    while (true) {
-      while (!sir.done && !str.done && !Sink.is(sir.value))
-        sir = sii.next(yield sir.value)
-
-      while (!sir.done && !str.done && !Stream.is(str.value))
-        str = sti.next(yield str.value)
-
-      if (sir.done) return sir.value
-      if (str.done) return sii.return?.().value
-
-      sir = sii.next((str.value as Stream<Sinks<E2>>).arg)
-      str = sti.next()
-    }
-  } finally {
-    sti.return?.()
-    sii.return?.()
-  }
-}) as Fx<Exclude<E1, Stream<Sinks<E2>>> | Exclude<E2, Sink<any>>, R2>

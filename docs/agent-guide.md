@@ -39,8 +39,8 @@ subpaths for optional feature areas and advanced trace tools.
 | Need | Import from |
 | --- | --- |
 | Scopes, abort, finalization, early return, scoped yielding | `@briancavalier/fx/scope` |
+| Sinks for receiving values | `@briancavalier/fx/sink` |
 | Structured concurrency | `@briancavalier/fx/concurrent` |
-| Streams and sinks | `@briancavalier/fx/stream` |
 | Advanced trace capture, snapshots, and trace formatting options | `@briancavalier/fx/trace` |
 | Time and random | `@briancavalier/fx/time`, `@briancavalier/fx/random` |
 | Structured logging | `@briancavalier/fx/log` |

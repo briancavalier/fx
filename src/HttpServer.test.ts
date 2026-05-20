@@ -27,8 +27,11 @@ import {
 import { NodeHttpError, nodeHttp, type NodeHttpServerFactory } from './HttpServerNode.js'
 import { HandlerCapture } from './HandlerCapture.js'
 import type { Interrupt } from './Interrupt.js'
-import { emit, Stream } from './Stream.js'
+import { brand } from './Scope.js'
 import { dispose } from './Task.js'
+import { YieldFrom, yieldFrom, type Yielding } from './YieldFrom.js'
+
+const HttpServerEvents = brand<Yielding<ServerEvent>>()('test/HttpServer/events')
 
 describe('HttpServer', () => {
   describe('route AST', () => {
@@ -505,18 +508,18 @@ describe('HttpServer', () => {
       })
     })
 
-    it('keeps observer stream effects visible until handled', () => {
+    it('keeps observer yield effects visible until handled', () => {
       const app = route('GET', '/health', ok(text('ok')))
 
       const observed = serve(app, {
         port: 3000,
-        observe: event => emit(event)
+        observe: event => yieldFrom(HttpServerEvents, event)
       }).pipe(
         nodeHttp(),
         assertNoFail
       )
 
-      const _: Fx<Async | Interrupt | HandlerCapture<string> | Stream<ServerEvent>, void> = observed
+      const _: Fx<Async | Interrupt | HandlerCapture<string> | YieldFrom<typeof HttpServerEvents>, void> = observed
       void _
     })
 

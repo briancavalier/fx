@@ -12,6 +12,7 @@ Primary commands:
 - `pnpm test`
 - `pnpm typecheck`
 - `pnpm build`
+- `pnpm check:exports`
 - `pnpm lint`
 
 Design preference:
@@ -38,6 +39,8 @@ Low-value wrappers:
 
 Development guidance:
 - Prefer existing patterns in `src/Fx.ts`, `src/Effect.ts`, and `src/Handler.ts`.
+- Implementation modules are not automatically public. Public package API is
+  curated through `src/exports/*` and `package.json#exports`.
 - Preserve strong effect typing. Changes should keep `E` unions meaningful and narrowed by handlers.
 - Use `Fail<E>` for recoverable errors. In fx code, JS `throw` is reserved for intentionally hard-crashing the program, enforcing internal invariants, or clearly named unsafe/assert APIs such as `Fail.assert`.
 - At runtime and platform boundaries, convert rejected promises, thrown platform errors, and recoverable exceptional states into `Fail` with `tryPromise`, `trySync`, or `fail`. Recover with `catchAll`, `catchOnly`, or `catchIf` rather than throwing from handlers.
@@ -47,4 +50,10 @@ Development guidance:
 - Add focused tests under `src/*.test.ts` for behavior and type-level expectations where relevant.
 - Do not edit `dist/` directly; build output is generated.
 - Keep examples practical and small.
+- When changing public exports, update the relevant `src/exports/*` entrypoint,
+  `package.json#exports`, `src/exports.test.ts`, and
+  `scripts/check-exports.mjs`. Run `pnpm build` before `pnpm check:exports`.
+- New package subpaths should represent stable feature areas, not implementation
+  file names. Public docs should use `@briancavalier/fx` and curated subpaths;
+  in-repo examples may use local `src` imports for direct source execution.
 - Never force push to a remote PR branch or PR worktree unless specifically told to do so. Always maintain full history on PR branches and PR worktrees.

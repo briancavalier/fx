@@ -6,6 +6,8 @@ Architecture:
 - `Fx.ts`: public computation type and combinators.
 - `Effect.ts`: effect construction and effect identity.
 - `Handler.ts`: public handler API.
+- `exports/`: curated package entrypoints. These are the public import surface;
+  implementation files are not public just because they exist.
 - `internal/Handler.ts`: generator-level handler machinery.
 - `internal/runFork.ts`: runtime for `Async`, `Fork`, `Fail`, and handler context.
 
@@ -22,4 +24,7 @@ Rules for changes:
 - For higher-order scoped effects, preserve effect typing through the request and handler. If failures cross fork/race/task boundaries, convert them to data before racing unless runtime semantics explicitly preserve typed failures.
 - When default handlers create errors asynchronously or after handler interpretation, preserve request-site diagnostics with `Breadcrumb`/cause chaining rather than overwriting stacks.
 - Keep cleanup paths explicit: call iterator `return`, dispose tasks/resources, and preserve cooperative cancellation.
+- When adding or moving public API, update `src/exports/*`, `package.json#exports`,
+  `src/exports.test.ts`, and `scripts/check-exports.mjs` together. Keep package
+  subpaths tied to feature ownership rather than source filenames.
 - Favor small composable functions over new abstractions.

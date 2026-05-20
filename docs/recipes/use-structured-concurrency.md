@@ -3,6 +3,7 @@
 Use this when related child computations should be owned by the parent.
 
 ```ts
+import { fx, runPromise } from "@briancavalier/fx"
 import { all, bounded, defaultAll } from "@briancavalier/fx/concurrent"
 
 const loadDashboard = fx(function* () {

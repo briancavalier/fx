@@ -4,7 +4,7 @@ Use this when an operation can fail recoverably and callers should decide how to
 recover.
 
 ```ts
-import { catchOnly, fail, ok } from "@briancavalier/fx"
+import { catchOnly, fail, ok, run } from "@briancavalier/fx"
 
 class NotFound extends Error {}
 

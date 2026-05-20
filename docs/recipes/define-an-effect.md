@@ -4,7 +4,7 @@ Use this when application logic needs to request an operation without choosing
 how it is performed.
 
 ```ts
-import { Effect } from "@briancavalier/fx"
+import { Effect, handle, ok, run } from "@briancavalier/fx"
 
 type User = {
   readonly id: string

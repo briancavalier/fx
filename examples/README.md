@@ -53,4 +53,5 @@ already matches the requested pattern.
 | `advanced/diagnostics.ts` | Trace capture policy, regional trace capture, source lookup, formatted diagnostics, and snapshots. | Readers debugging failures and tuning diagnostic detail. | `node --import tsx examples/advanced/diagnostics.ts` |
 
 Most examples import from local `src` paths so they can be run directly from
-the repository while developing Fx.
+the repository while developing Fx. Public docs and package-consumer snippets
+should use `@briancavalier/fx` with the curated feature subpaths instead.

@@ -29,6 +29,27 @@ The effect union should stay meaningful. If a program needs logging, storage, an
 recoverable validation, keep those effects visible in its `Fx<E, A>` type until
 a handler eliminates them.
 
+## Import surface
+
+Use `@briancavalier/fx` for the write-and-run core: `fx`, `Fx`, `Effect`,
+`handle`, `control`, `ok`, `fail`, `tryPromise`, `get`, `run`, `runPromise`,
+`runTask`, and diagnostics helpers. Use named subpaths for optional feature
+areas.
+
+| Need | Import from |
+| --- | --- |
+| Scopes, abort, finalization, early return, scoped yielding | `@briancavalier/fx/scope` |
+| Structured concurrency | `@briancavalier/fx/concurrent` |
+| Streams and sinks | `@briancavalier/fx/stream` |
+| Time, random, logging | `@briancavalier/fx/time`, `@briancavalier/fx/random`, `@briancavalier/fx/log` |
+| Retry and timeout | `@briancavalier/fx/retry`, `@briancavalier/fx/timeout` |
+| HTTP and Node platform boundaries | `@briancavalier/fx/http-client`, `@briancavalier/fx/http-server`, `@briancavalier/fx/platform-node` |
+| Mutable references | `@briancavalier/fx/ref` |
+
+For simple console output, use `consoleLog` with `defaultConsole` from
+`@briancavalier/fx/log`. Use `log`, `info`, `warn`, and `error` from the same
+subpath for structured log messages.
+
 ## Define effects directly
 
 Use `Effect(...)` classes for ordinary requests. Add a small constructor value or
@@ -49,10 +70,13 @@ Application logic should request operations and compose results. It should not
 perform platform side effects directly.
 
 ```ts
+import { fx, handle, runPromise } from "@briancavalier/fx"
+import { consoleLog, defaultConsole } from "@briancavalier/fx/log"
+
 const registerUser = (input: RegisterInput) => fx(function* () {
   const user = validateUser(input)
   const saved = yield* saveUser(user)
-  yield* log("user registered", { id: saved.id })
+  yield* consoleLog("user registered", { id: saved.id })
   return saved
 })
 ```
@@ -62,7 +86,7 @@ At platform boundaries, interpret effects with handlers and then run the program
 ```ts
 const result = registerUser(input).pipe(
   handle(SaveUser, effect => databaseSave(effect.arg)),
-  defaultLog,
+  defaultConsole,
   runPromise
 )
 ```
@@ -74,7 +98,7 @@ JavaScript exceptions. Use `fail`, `trySync`, and `tryPromise` to convert
 recoverable exceptional states into effects.
 
 ```ts
-import { catchOnly, fail } from "@briancavalier/fx"
+import { catchOnly, fail, ok } from "@briancavalier/fx"
 
 class InvalidEmail extends Error {}
 
@@ -113,9 +137,13 @@ Handlers are ordinary pipe transforms. Keep the final interpreter pipeline easy
 to scan.
 
 ```ts
+import { runPromise } from "@briancavalier/fx"
+import { defaultConsole } from "@briancavalier/fx/log"
+import { defaultTime } from "@briancavalier/fx/time"
+
 const main = program.pipe(
   memoryUserStore(),
-  defaultLog,
+  defaultConsole,
   defaultTime,
   runPromise
 )
@@ -143,6 +171,9 @@ Use named scopes and finalization helpers when resources need cleanup. Keep
 acquire/register critical sections small and explicit.
 
 ```ts
+import { fx, runPromise } from "@briancavalier/fx"
+import { all, bounded, defaultAll } from "@briancavalier/fx/concurrent"
+
 const program = fx(function* () {
   const [user, posts] = yield* all([fetchUser, fetchPosts])
   return { user, posts }

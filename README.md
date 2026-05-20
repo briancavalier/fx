@@ -28,7 +28,7 @@ Most solutions rely on dependency injection or implicit runtime behavior.
 Everything is an effect.
 
 ```ts
-yield* log("hello")
+yield* consoleLog("hello")
 yield* Db.query("select * from users")
 yield* fail(new Error("boom"))
 yield* fork(otherProgram)
@@ -81,6 +81,24 @@ import { tryPromise, type Async, type Fail, type Fx } from "@briancavalier/fx"
 const load: Fx<Async | Fail<unknown>, string> =
   tryPromise(() => fetch("/").then(r => r.text()))
 ```
+
+Use one import rule: core program construction, handling, failure, async
+boundaries, env, tasks, interrupts, and diagnostics come from
+`@briancavalier/fx`; optional feature areas come from their named subpaths.
+
+| Capability | Import from |
+| --- | --- |
+| Core programs, effects, handlers, failure, async, env, task, trace | `@briancavalier/fx` |
+| Named scopes, abort, finalization, early return, scoped yielding | `@briancavalier/fx/scope` |
+| Structured concurrency | `@briancavalier/fx/concurrent` |
+| Streams and sinks | `@briancavalier/fx/stream` |
+| Time and clock handlers | `@briancavalier/fx/time` |
+| Random effects and handlers | `@briancavalier/fx/random` |
+| Console and structured logging | `@briancavalier/fx/log` |
+| Retry and timeout policies | `@briancavalier/fx/retry`, `@briancavalier/fx/timeout` |
+| HTTP client and transport-neutral HTTP server routes | `@briancavalier/fx/http-client`, `@briancavalier/fx/http-server` |
+| Node runtime, process, diagnostics, and HTTP transport | `@briancavalier/fx/platform-node` |
+| Mutable references | `@briancavalier/fx/ref` |
 
 ---
 

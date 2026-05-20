@@ -4,7 +4,8 @@ Use this when exposing domain programs through a transport-neutral HTTP server.
 
 ```ts
 import { assert as assertNoFail, get, fx, ok } from "@briancavalier/fx"
-import { route, routes, type RouteContext } from "@briancavalier/fx/http-server"
+import { route, routes, serve, type RouteContext } from "@briancavalier/fx/http-server"
+import { nodeHttp, runNodeMain } from "@briancavalier/fx/platform-node"
 
 const appRoutes = routes(
   route("GET", "/health", ok({

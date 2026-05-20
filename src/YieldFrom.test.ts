@@ -9,14 +9,10 @@ import { brand, scope } from './Scope.js'
 import { next as nextSink, Sink } from './Sink.js'
 import {
   collectFrom,
-  filterFrom,
   forEachFrom,
   fromAsyncIterable,
   fromDequeue,
   fromIterable,
-  mapFrom,
-  takeFrom,
-  TakeScope,
   to,
   toAsyncIterable,
   withEnqueue,
@@ -170,37 +166,6 @@ describe('YieldFrom', () => {
 
     assert.equal(result, 'done')
     assert.deepEqual(seen, [1, 2])
-  })
-
-  it('maps and filters yields from a scope', () => {
-    const [result, values] = fx(function* () {
-      for (let i = 0; i < 5; ++i) yield* yieldFrom(NumberScope, i)
-      return 'done'
-    }).pipe(
-      f => filterFrom(NumberScope, f, n => n % 2 === 0),
-      f => mapFrom(NumberScope, f, n => n * 10),
-      collectFrom(NumberScope),
-      run
-    )
-
-    assert.equal(result, 'done')
-    assert.deepEqual(values, [0, 20, 40])
-  })
-
-  it('takes the first n yields from a scope', () => {
-    const [result, values] = fx(function* () {
-      for (let i = 0; i < 5; ++i) yield* yieldFrom(NumberScope, i)
-      return 'done'
-    }).pipe(
-      takeFrom(NumberScope, 3),
-      scope(TakeScope),
-      orReturn(TakeScope, 'aborted'),
-      collectFrom(NumberScope),
-      run
-    )
-
-    assert.equal(result, 'aborted')
-    assert.deepEqual(values, [0, 1, 2])
   })
 
   it('converts a dequeue to scoped yields', async () => {

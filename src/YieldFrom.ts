@@ -1,8 +1,7 @@
-import { Abort, abort } from './Abort.js'
 import { Async, assertPromise } from './Async.js'
 import { ScopedEffect } from './Effect.js'
 import { Fail } from './Fail.js'
-import { Fx, assertSync, bracket, fx, map, ok, unit } from './Fx.js'
+import { Fx, assertSync, bracket, fx, map, ok } from './Fx.js'
 import { handleScoped } from './Handler.js'
 import { Sink, ExcludeSink } from './Sink.js'
 import type { Interrupt } from './Interrupt.js'
@@ -48,8 +47,6 @@ export type YieldValue<E, Scope extends string & Yielding<unknown, unknown>> =
 export type ExcludeYieldFrom<E, Scope extends string & Yielding<unknown, unknown>, E2 = never> =
   E extends YieldFrom<Scope> ? E2 : E
 
-export const TakeScope = 'fx/YieldFrom/take' as const
-
 export interface IterableWithReturn<Y, R> {
   [Symbol.iterator](): Iterator<Y, R>
 }
@@ -89,48 +86,6 @@ export const forEachFrom = <const Scope extends string & Yielding<unknown, void>
   f.pipe(handleScoped(YieldFrom<Scope>, scope, effect =>
     each(effect.arg as YieldValue<E, Scope>) as Fx<E2, YieldInput<Scope>>
   )) as Fx<ExcludeYieldFrom<E, Scope, E2>, R>
-
-/**
- * Transform each yield from the named scope.
- */
-export const mapFrom = <const Scope extends string & Yielding<unknown, void>, E, R>(
-  scope: Scope,
-  f: Fx<E, R>,
-  map: (a: YieldValue<E, Scope>) => YieldOutput<Scope>
-): Fx<ExcludeYieldFrom<E, Scope, YieldFrom<Scope>>, R> =>
-  forEachFrom(scope, f, a => yieldFrom(scope, map(a)))
-
-/**
- * Drop yields from the named scope that don't satisfy the predicate.
- */
-export const filterFrom: {
-  <const Scope extends string & Yielding<unknown, void>, E, R, B extends YieldValue<E, Scope>>(
-    scope: Scope,
-    f: Fx<E, R>,
-    refinement: (a: YieldValue<E, Scope>) => a is B
-  ): Fx<ExcludeYieldFrom<E, Scope, YieldFrom<Scope>>, R>
-  <const Scope extends string & Yielding<unknown, void>, E, R>(
-    scope: Scope,
-    f: Fx<E, R>,
-    predicate: (a: YieldValue<E, Scope>) => boolean
-  ): Fx<E, R>
-} = <const Scope extends string & Yielding<unknown, void>, E, R>(
-  scope: Scope,
-  f: Fx<E, R>,
-  predicate: (a: YieldValue<E, Scope>) => boolean
-): Fx<ExcludeYieldFrom<E, Scope, YieldFrom<Scope>>, R> =>
-    forEachFrom(scope, f, a => predicate(a) ? yieldFrom(scope, a as YieldOutput<Scope>) : unit)
-
-/**
- * Take the first n yields from the named scope.
- */
-export const takeFrom = <const Scope extends string & Yielding<unknown, void>>(scope: Scope, n: number) =>
-  <const E, const R>(f: Fx<E, R>) => {
-    let i = n
-    return f.pipe(handleScoped(YieldFrom<Scope>, scope, effect =>
-      (i-- > 0 ? yieldFrom(scope, effect.arg as YieldOutput<Scope>) : abort(TakeScope)) as Fx<YieldFrom<Scope> | Abort<typeof TakeScope>, YieldInput<Scope>>
-    )) as Fx<ExcludeYieldFrom<E, Scope, YieldFrom<Scope> | Abort<typeof TakeScope>>, R>
-  }
 
 /**
  * Create a scoped yield source from a {@link Queue.Dequeue}.

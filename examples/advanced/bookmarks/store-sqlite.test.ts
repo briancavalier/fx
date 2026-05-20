@@ -4,11 +4,11 @@ import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
-import { returnAll } from '@briancavalier/fx'
-import { runPromise, type Fx } from '@briancavalier/fx'
+import { type Fx, returnAll, runPromise } from '@briancavalier/fx'
+
 import { collect } from '@briancavalier/fx/log'
-import { withClock, type Time } from '@briancavalier/fx/time'
-import { VirtualClock } from '@briancavalier/fx/time'
+import { type Time, VirtualClock, withClock } from '@briancavalier/fx/time'
+
 import {
   addBookmark,
   archiveBookmark,

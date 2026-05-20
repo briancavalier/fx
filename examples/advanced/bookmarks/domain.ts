@@ -1,10 +1,8 @@
-import { fail, type Fail } from '@briancavalier/fx'
-import { fx, map, ok, type Fx } from '@briancavalier/fx'
-import { handle } from '@briancavalier/fx'
+import { Effect, fail, type Fail, fx, type Fx, handle, map, ok } from '@briancavalier/fx'
+
 import { info, type Log } from '@briancavalier/fx/log'
 import { int } from '@briancavalier/fx/random'
 import { now, type Time } from '@briancavalier/fx/time'
-import { Effect } from '@briancavalier/fx'
 
 export type BookmarkId = string
 

@@ -1,7 +1,6 @@
-import { fx, runPromise, type Fx } from '@briancavalier/fx'
+import { assert as assertNoFail, fx, type Fx, provide, runPromise } from '@briancavalier/fx'
 import { unbounded } from '@briancavalier/fx/concurrent'
-import { provide } from '@briancavalier/fx'
-import { assert as assertNoFail } from '@briancavalier/fx'
+
 import { serve, type ServerEvent, type ServerListening } from '@briancavalier/fx/http-server'
 import { nodeHttp } from '@briancavalier/fx/platform-node'
 import { info, withConsoleLog } from '@briancavalier/fx/log'

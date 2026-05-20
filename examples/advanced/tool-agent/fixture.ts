@@ -1,9 +1,9 @@
-import { fail } from '@briancavalier/fx'
-import { fx, type Fx } from '@briancavalier/fx'
-import { managed } from '@briancavalier/fx/scope'
-import { handle } from '@briancavalier/fx'
+import { fail, fx, type Fx, handle } from '@briancavalier/fx'
+
+import { managed, yieldFrom } from '@briancavalier/fx/scope'
+
 import { sleep } from '@briancavalier/fx/time'
-import { yieldFrom } from '@briancavalier/fx/scope'
+
 import {
   AgentEvents,
   AskModel,

@@ -1,6 +1,5 @@
-import { flatMap, fx, runPromise } from '@briancavalier/fx'
-import { provide } from '@briancavalier/fx'
-import { assert as assertNoFail } from '@briancavalier/fx'
+import { assert as assertNoFail, flatMap, fx, provide, runPromise } from '@briancavalier/fx'
+
 import { expectSuccess, request, text, w3cFetch } from '@briancavalier/fx/http-client'
 
 type ClientConfig = {

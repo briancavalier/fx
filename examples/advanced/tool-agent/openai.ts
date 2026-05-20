@@ -1,6 +1,5 @@
-import { catchAll, failFrom, type Fail } from '@briancavalier/fx'
-import { flatMap, fx, ok, type Fx } from '@briancavalier/fx'
-import { handle } from '@briancavalier/fx'
+import { catchAll, type Fail, failFrom, flatMap, fx, type Fx, handle, ok } from '@briancavalier/fx'
+
 import {
   expectSuccess,
   json,

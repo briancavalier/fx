@@ -1,8 +1,5 @@
-import { abort, orReturn, restartOnAbort } from '@briancavalier/fx/scope'
-import { consoleLog, defaultConsole } from '@briancavalier/fx'
-import { assert as assertNoFail } from '@briancavalier/fx'
-import { managed, usingManaged } from '@briancavalier/fx/scope'
-import { fx, run } from '@briancavalier/fx'
+import { abort, managed, orReturn, restartOnAbort, usingManaged } from '@briancavalier/fx/scope'
+import { assert as assertNoFail, consoleLog, defaultConsole, fx, run } from '@briancavalier/fx'
 
 const SubmitOrder = 'examples/intermediate/restart-on-abort/SubmitOrder' as const
 

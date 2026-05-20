@@ -5,9 +5,8 @@
 
 import { createInterface } from 'node:readline/promises'
 
-import { Fx, assertSync, bracket, fx, handle, ok, runPromise } from '@briancavalier/fx'
-import { assertPromise } from '@briancavalier/fx'
-import { provide } from '@briancavalier/fx'
+import { assertPromise, assertSync, bracket, fx, Fx, handle, ok, provide, runPromise } from '@briancavalier/fx'
+
 import { int, defaultRandom } from '@briancavalier/fx/random'
 
 import { GenerateSecret, Print, Read, main } from './main.js'

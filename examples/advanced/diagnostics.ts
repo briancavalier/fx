@@ -1,7 +1,6 @@
 import { all, defaultAll, unbounded } from '@briancavalier/fx/concurrent'
-import { consoleError, consoleLog, defaultConsole } from '@briancavalier/fx'
-import { catchAll, fail } from '@briancavalier/fx'
-import { fx, runPromise } from '@briancavalier/fx'
+import { catchAll, consoleError, consoleLog, defaultConsole, fail, fx, runPromise } from '@briancavalier/fx'
+
 import { formatDiagnostic, formatError, snapshotError, withTraceCapture } from '@briancavalier/fx/trace'
 import { nodeSourceLookup } from '@briancavalier/fx/platform-node'
 

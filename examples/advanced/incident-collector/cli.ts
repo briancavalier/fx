@@ -1,7 +1,6 @@
 import { bounded, defaultAll, firstSuccess } from '@briancavalier/fx/concurrent'
-import { consoleError, consoleLog, defaultConsole } from '@briancavalier/fx'
-import { returnAll } from '@briancavalier/fx'
-import { fx, runPromise } from '@briancavalier/fx'
+import { consoleError, consoleLog, defaultConsole, fx, returnAll, runPromise } from '@briancavalier/fx'
+
 import { withConsoleLog } from '@briancavalier/fx/log'
 import { scope } from '@briancavalier/fx/scope'
 import { defaultTime } from '@briancavalier/fx/time'

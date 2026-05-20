@@ -1,6 +1,5 @@
 import { Effect, fx, ok } from '@briancavalier/fx'
-import { abort, orReturn } from '@briancavalier/fx/scope'
-import { scope } from '@briancavalier/fx/scope'
+import { abort, orReturn, scope } from '@briancavalier/fx/scope'
 
 // -------------------------------------------------------------------
 // The number guessing game example from

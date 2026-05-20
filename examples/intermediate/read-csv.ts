@@ -1,11 +1,6 @@
-import { fx, run, type Console, type Fx } from '@briancavalier/fx'
-import { consoleLog, defaultConsole } from '@briancavalier/fx'
-import { assert as assertNoFail } from '@briancavalier/fx'
-import { managed, usingManaged } from '@briancavalier/fx/scope'
-import { handleScoped } from '@briancavalier/fx'
-import { returnFrom } from '@briancavalier/fx/scope'
-import { brand, scope } from '@briancavalier/fx/scope'
-import { yieldFrom, YieldFrom, type Yielding } from '@briancavalier/fx/scope'
+import { assert as assertNoFail, type Console, consoleLog, defaultConsole, fx, type Fx, handleScoped, run } from '@briancavalier/fx'
+
+import { brand, managed, returnFrom, scope, usingManaged, yieldFrom, YieldFrom, type Yielding } from '@briancavalier/fx/scope'
 
 const ImportCsv = 'examples/intermediate/ImportCsv' as const
 

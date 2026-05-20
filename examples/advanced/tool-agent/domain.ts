@@ -1,13 +1,10 @@
 import { type All, all } from '@briancavalier/fx/concurrent'
-import { Effect } from '@briancavalier/fx'
-import { fail, type Fail } from '@briancavalier/fx'
-import { fx, type Fx } from '@briancavalier/fx'
-import { usingManaged, type Finally, type Managed } from '@briancavalier/fx/scope'
+import { Effect, fail, type Fail, fx, type Fx, type Interrupt } from '@briancavalier/fx'
+
+import { brand, type Finally, type Managed, usingManaged, type YieldFrom, type Yielding } from '@briancavalier/fx/scope'
 import { info, type Log } from '@briancavalier/fx/log'
-import { brand } from '@briancavalier/fx/scope'
-import { type Yielding, type YieldFrom } from '@briancavalier/fx/scope'
-import type { Interrupt } from '@briancavalier/fx'
-import type { Time } from '@briancavalier/fx/time'
+
+import { type Time } from '@briancavalier/fx/time'
 
 export const AgentSessionScope = 'examples/advanced/tool-agent/AgentSession' as const
 export const AgentEvents = brand<Yielding<AgentEvent>>()('examples/advanced/tool-agent/AgentEvents')

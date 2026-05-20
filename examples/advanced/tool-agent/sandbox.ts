@@ -1,6 +1,5 @@
-import { fail, type Fail } from '@briancavalier/fx'
-import { type Fx } from '@briancavalier/fx'
-import { handle } from '@briancavalier/fx'
+import { fail, type Fail, type Fx, handle } from '@briancavalier/fx'
+
 import {
   runTool,
   RunTool,

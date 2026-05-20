@@ -1,7 +1,7 @@
-import { fail, catchAll, type Fail } from '@briancavalier/fx'
-import { flatMap, ok, type Fx } from '@briancavalier/fx'
+import { type Async, catchAll, fail, type Fail, flatMap, type Fx, ok } from '@briancavalier/fx'
+
 import { expectSuccess, json, request, type HttpRequest, type JSONValue } from '@briancavalier/fx/http-client'
-import type { Async } from '@briancavalier/fx'
+
 import type { AddBookmarkInput, Bookmark, BookmarkQuery, BookmarkStatus, MetadataStatus } from './domain.js'
 
 export type BookmarkClientError =

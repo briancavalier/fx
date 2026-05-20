@@ -1,10 +1,10 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { returnAll } from '@briancavalier/fx'
-import { runPromise, type Async, type Fx } from '@briancavalier/fx'
+import { type Async, type Fx, returnAll, runPromise } from '@briancavalier/fx'
+
 import { collect } from '@briancavalier/fx/log'
-import { withClock, type Time } from '@briancavalier/fx/time'
-import { VirtualClock } from '@briancavalier/fx/time'
+import { type Time, VirtualClock, withClock } from '@briancavalier/fx/time'
+
 import {
   addBookmark,
   archiveBookmark,

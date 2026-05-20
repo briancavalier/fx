@@ -1,9 +1,8 @@
-import { fx, runPromise } from '@briancavalier/fx'
+import { assert as assertNoFail, consoleLog, defaultConsole, fx, runPromise } from '@briancavalier/fx'
 import { firstSettled, race, unbounded } from '@briancavalier/fx/concurrent'
-import { consoleLog, defaultConsole } from '@briancavalier/fx'
-import { assert as assertNoFail } from '@briancavalier/fx'
-import { usingExit } from '@briancavalier/fx/scope'
-import { scope } from '@briancavalier/fx/scope'
+
+import { scope, usingExit } from '@briancavalier/fx/scope'
+
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 
 /*

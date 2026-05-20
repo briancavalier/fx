@@ -1,12 +1,10 @@
 import { all, race, type All, type Race } from '@briancavalier/fx/concurrent'
-import { Effect } from '@briancavalier/fx'
-import { fail, type Fail } from '@briancavalier/fx'
-import { fx, ok, type Fx } from '@briancavalier/fx'
+import { Effect, fail, type Fail, fx, type Fx, handle, type Interrupt, ok } from '@briancavalier/fx'
+
 import { usingExit, usingManaged, managed, type Finally, type Managed } from '@briancavalier/fx/scope'
-import { handle } from '@briancavalier/fx'
+
 import { info, type Log } from '@briancavalier/fx/log'
 import { sleep, type Time } from '@briancavalier/fx/time'
-import type { Interrupt } from '@briancavalier/fx'
 
 export const BundleScope = 'examples/advanced/incident-collector/Bundle' as const
 export const CollectorScope = 'examples/advanced/incident-collector/Collector' as const

@@ -1,10 +1,9 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { assert as assertNoFail, returnAll } from '@briancavalier/fx'
-import { ok } from '@briancavalier/fx'
-import { handle } from '@briancavalier/fx'
+import { assert as assertNoFail, handle, ok, returnAll, runPromise } from '@briancavalier/fx'
+
 import { HttpRequest, type Request, type ResponseBody } from '@briancavalier/fx/http-client'
-import { runPromise } from '@briancavalier/fx'
+
 import {
   archiveBookmark,
   createBookmark,

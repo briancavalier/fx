@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
-import { assertSync, bracket, ok, type Fx } from '@briancavalier/fx'
-import { handle } from '@briancavalier/fx'
+import { assertSync, bracket, type Fx, handle, ok } from '@briancavalier/fx'
+
 import {
   FindBookmarkById,
   FindBookmarkByUrl,

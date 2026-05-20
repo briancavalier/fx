@@ -1,14 +1,12 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { bounded, defaultAll } from '@briancavalier/fx/concurrent'
-import { returnAll } from '@briancavalier/fx'
-import { runPromise, type Fx } from '@briancavalier/fx'
+import { type Async, type Fx, type Interrupt, returnAll, runPromise } from '@briancavalier/fx'
+
 import { collect } from '@briancavalier/fx/log'
-import { scope } from '@briancavalier/fx/scope'
+import { collectFrom, scope } from '@briancavalier/fx/scope'
 import { withClock, VirtualClock } from '@briancavalier/fx/time'
-import { collectFrom } from '@briancavalier/fx/scope'
-import type { Async } from '@briancavalier/fx'
-import type { Interrupt } from '@briancavalier/fx'
+
 import {
   AgentEvents,
   AgentSessionScope,

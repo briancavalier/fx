@@ -1,8 +1,7 @@
-import { get } from '@briancavalier/fx'
-import { handle } from '@briancavalier/fx'
+import { Effect, fx, type Fx, get, handle, map, ok } from '@briancavalier/fx'
+
 import { bytes as readBytes } from '@briancavalier/fx/http-client'
 import { mount, provideRoutesFrom, route, routes, type RouteContext, type ServerRequest, type ServerResponse } from '@briancavalier/fx/http-server'
-import { Effect, fx, map, ok, type Fx } from '@briancavalier/fx'
 
 export type Note = {
   readonly id: string

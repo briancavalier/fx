@@ -1,10 +1,8 @@
-import { fx, runPromise } from '@briancavalier/fx'
+import { assert as assertNoFail, consoleLog, defaultConsole, fx, runPromise, uninterruptibleMask } from '@briancavalier/fx'
 import { firstSettled, race, unbounded } from '@briancavalier/fx/concurrent'
-import { consoleLog, defaultConsole } from '@briancavalier/fx'
-import { assert as assertNoFail } from '@briancavalier/fx'
-import { andFinallyExit } from '@briancavalier/fx/scope'
-import { uninterruptibleMask } from '@briancavalier/fx'
-import { scope } from '@briancavalier/fx/scope'
+
+import { andFinallyExit, scope } from '@briancavalier/fx/scope'
+
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 
 /*

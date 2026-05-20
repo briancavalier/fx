@@ -1,6 +1,6 @@
-import { fx, runPromise } from '@briancavalier/fx'
+import { fail, Fail, fx, returnFail, runPromise } from '@briancavalier/fx'
 import { RaceAllFailed, firstSettled, firstSuccess, race, unbounded } from '@briancavalier/fx/concurrent'
-import { Fail, fail, returnFail } from '@briancavalier/fx'
+
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 import { formatDiagnostic, formatError, snapshotError } from '@briancavalier/fx/trace'
 import { nodeSourceLookup } from '@briancavalier/fx/platform-node'

@@ -1,14 +1,11 @@
 import { bounded, defaultAll } from '@briancavalier/fx/concurrent'
-import { consoleLog, defaultConsole } from '@briancavalier/fx'
-import { provide } from '@briancavalier/fx'
-import { returnAll } from '@briancavalier/fx'
-import { fx, runPromise } from '@briancavalier/fx'
-import { handleScoped } from '@briancavalier/fx'
+import { consoleLog, defaultConsole, fx, handleScoped, provide, returnAll, runPromise } from '@briancavalier/fx'
+
 import { w3cFetch } from '@briancavalier/fx/http-client'
 import { withConsoleLog } from '@briancavalier/fx/log'
-import { scope } from '@briancavalier/fx/scope'
+import { scope, YieldFrom } from '@briancavalier/fx/scope'
 import { defaultTime } from '@briancavalier/fx/time'
-import { YieldFrom } from '@briancavalier/fx/scope'
+
 import {
   AgentEvents,
   AgentSessionScope,

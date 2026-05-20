@@ -2,8 +2,9 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { abort, orReturn } from './Abort.js'
 import { unbounded } from './Concurrent.js'
+import { Effect } from './Effect.js'
 import { fx, ok, run, runPromise, type Fx } from './Fx.js'
-import { handleScoped } from './Handler.js'
+import { handle, handleScoped } from './Handler.js'
 import { returnFrom } from './ReturnFrom.js'
 import { brand, scope } from './Scope.js'
 import { next as nextSink, Sink } from './Sink.js'
@@ -350,6 +351,90 @@ describe('YieldFrom', () => {
       const _: typeof piped extends Fx<YieldFrom<typeof OtherScope> | Sink<typeof OtherSinkScope>, PipeResult<string, string>> ? true : false = true
 
       void _
+    })
+
+    it('does not advance source past unrelated effects after sink ends', () => {
+      class Other extends Effect('test/YieldFrom/to/source-unrelated')<void, void> { }
+      const source = fx(function* () {
+        yield* new Other()
+        return 'source'
+      })
+      const sink = ok('sink')
+      let advanced = false
+
+      const result = to(NumberScope, NumberSinkScope, source, sink).pipe(
+        handle(Other, () => {
+          advanced = true
+          return ok(undefined)
+        }),
+        run
+      )
+
+      assert.deepEqual(result, { type: 'sinkEnded', value: 'sink' })
+      assert.equal(advanced, false)
+    })
+
+    it('does not advance sink past unrelated effects after source ends', () => {
+      class Other extends Effect('test/YieldFrom/to/sink-unrelated')<void, void> { }
+      const source = ok('source')
+      const sink = fx(function* () {
+        yield* new Other()
+        return 'sink'
+      })
+      let advanced = false
+
+      const result = to(NumberScope, NumberSinkScope, source, sink).pipe(
+        handle(Other, () => {
+          advanced = true
+          return ok(undefined)
+        }),
+        run
+      )
+
+      assert.deepEqual(result, { type: 'sourceEnded', value: 'source' })
+      assert.equal(advanced, false)
+    })
+
+    it('consumes matching source yields during source cleanup', () => {
+      const cleanup: string[] = []
+      const source = fx(function* () {
+        try {
+          let i = 1
+          while (true) yield* yieldFrom(NumberScope, i++)
+        } finally {
+          cleanup.push('before')
+          yield* yieldFrom(NumberScope, 999)
+          cleanup.push('after')
+        }
+      })
+      const sink = fx(function* () {
+        yield* nextSink(NumberSinkScope)
+        return 'sink'
+      })
+
+      const result = to(NumberScope, NumberSinkScope, source, sink).pipe(run)
+
+      assert.deepEqual(result, { type: 'sinkEnded', value: 'sink' })
+      assert.deepEqual(cleanup, ['before', 'after'])
+    })
+
+    it('consumes matching sink requests during sink cleanup', () => {
+      const cleanup: unknown[] = []
+      const source = fromIterable(NumberScope, [1][Symbol.iterator]())
+      const sink = fx(function* () {
+        try {
+          while (true) yield* nextSink(NumberSinkScope)
+        } finally {
+          cleanup.push('before')
+          cleanup.push(yield* nextSink(NumberSinkScope))
+          cleanup.push('after')
+        }
+      })
+
+      const result = to(NumberScope, NumberSinkScope, source, sink).pipe(run)
+
+      assert.deepEqual(result, { type: 'sourceEnded', value: undefined })
+      assert.deepEqual(cleanup, ['before', undefined, 'after'])
     })
 
     it('rejects bidirectional YieldFrom scopes', () => {

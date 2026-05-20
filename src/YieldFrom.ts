@@ -3,7 +3,7 @@ import { ScopedEffect } from './Effect.js'
 import { Fail } from './Fail.js'
 import { Fx, assertSync, bracket, fx, map, ok } from './Fx.js'
 import { handleScoped } from './Handler.js'
-import { Sink, ExcludeSink, type Receiving } from './Sink.js'
+import { Sink, ExcludeSink, type Receiving, type SinkInput } from './Sink.js'
 import type { Interrupt } from './Interrupt.js'
 import * as Queue from './internal/Queue.js'
 import { dispose } from './internal/disposable.js'
@@ -211,7 +211,10 @@ export const to = <
     result: IteratorResult<E1, R1>
   ): Generator<ExcludeYieldFrom<E1, SourceScope> | ExcludeSink<E2, SinkScope>, R1, unknown> {
     while (!result.done) {
-      result = sourceIterator.next(yield result.value as ExcludeYieldFrom<E1, SourceScope>)
+      const effect = result.value
+      result = YieldFrom.is(effect) && effect.scope === sourceScope
+        ? sourceIterator.next(undefined as YieldInput<SourceScope>)
+        : sourceIterator.next(yield effect as ExcludeYieldFrom<E1, SourceScope>)
     }
     return result.value
   }
@@ -220,7 +223,10 @@ export const to = <
     result: IteratorResult<E2, R2>
   ): Generator<ExcludeYieldFrom<E1, SourceScope> | ExcludeSink<E2, SinkScope>, R2, unknown> {
     while (!result.done) {
-      result = sinkIterator.next(yield result.value as ExcludeSink<E2, SinkScope>)
+      const effect = result.value
+      result = Sink.is(effect) && effect.scope === sinkScope
+        ? sinkIterator.next(undefined as SinkInput<SinkScope>)
+        : sinkIterator.next(yield effect as ExcludeSink<E2, SinkScope>)
     }
     return result.value
   }
@@ -242,16 +248,17 @@ export const to = <
     let sinkResult = sinkIterator.next()
 
     while (true) {
-      while (!sourceResult.done && !(YieldFrom.is(sourceResult.value) && sourceResult.value.scope === sourceScope)) {
+      while (!sinkResult.done && !sourceResult.done && !(YieldFrom.is(sourceResult.value) && sourceResult.value.scope === sourceScope)) {
         sourceResult = sourceIterator.next(yield sourceResult.value as ExcludeYieldFrom<E1, SourceScope>)
       }
 
-      while (!sinkResult.done && !(Sink.is(sinkResult.value) && sinkResult.value.scope === sinkScope)) {
+      while (!sourceResult.done && !sinkResult.done && !(Sink.is(sinkResult.value) && sinkResult.value.scope === sinkScope)) {
         sinkResult = sinkIterator.next(yield sinkResult.value as ExcludeSink<E2, SinkScope>)
       }
 
       if (sinkResult.done) {
         sinkOpen = false
+        if (sourceResult.done) sourceOpen = false
         yield* closeSource()
         return { type: 'sinkEnded', value: sinkResult.value }
       }
@@ -263,7 +270,7 @@ export const to = <
       }
 
       sinkResult = sinkIterator.next((sourceResult.value as YieldFrom<SourceScope>).arg)
-      sourceResult = sourceIterator.next()
+      if (!sinkResult.done) sourceResult = sourceIterator.next()
     }
   } finally {
     yield* closeSource()

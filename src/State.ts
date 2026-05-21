@@ -48,17 +48,17 @@ export const withState = <const Scope extends string & Stateful<unknown>>(
   initial: StateOf<Scope>
 ) => <const E, const A>(
   f: Fx<E, A>
-): Fx<ScopeEffects<ExcludeState<E, Scope>, Scope>, A | ReturnValue<ExcludeState<E, Scope>, Scope>> =>
+): Fx<ExcludeState<ScopeEffects<E, Scope>, Scope>, A | ReturnValue<E, Scope>> =>
     fx(function* () {
       let state = initial
 
       return yield* f.pipe(
+        scoped(scope),
         handleScoped(GetState<Scope>, scope, () => ok(state)),
         handleScoped(ModifyState<Scope>, scope, effect => {
           const [next, result] = effect.arg(state)
           state = next
           return ok(result)
-        }),
-        scoped(scope)
+        })
       )
-    }) as Fx<ScopeEffects<ExcludeState<E, Scope>, Scope>, A | ReturnValue<ExcludeState<E, Scope>, Scope>>
+    }) as Fx<ExcludeState<ScopeEffects<E, Scope>, Scope>, A | ReturnValue<E, Scope>>

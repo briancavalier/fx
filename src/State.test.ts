@@ -1,6 +1,8 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
+import { returnFail } from './Fail.js'
+import { andFinally } from './Finalization.js'
 import { fx, run } from './Fx.js'
 import { brand } from './Scope.js'
 import { GetState, getState, modifyState, type Stateful, withState } from './State.js'
@@ -65,5 +67,20 @@ describe('State', () => {
 
     assert.equal(run(program), 1)
     assert.equal(run(program), 1)
+  })
+
+  it('handles state effects requested during scope cleanup', () => {
+    let finalizerState = 0
+    const program = fx(function* () {
+      yield* modifyState(CounterState, count => [count + 1, undefined])
+      yield* andFinally(CounterState, fx(function* () {
+        finalizerState = yield* modifyState(CounterState, count => [count + 1, count])
+      }))
+
+      return yield* getState(CounterState)
+    }).pipe(withState(CounterState, 1), returnFail, run)
+
+    assert.equal(program, 2)
+    assert.equal(finalizerState, 2)
   })
 })

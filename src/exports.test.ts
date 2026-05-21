@@ -8,10 +8,10 @@ import * as HttpServer from './exports/http-server.js'
 import * as Log from './exports/log.js'
 import * as PlatformNode from './exports/platform-node.js'
 import * as Random from './exports/random.js'
-import * as Ref from './exports/ref.js'
 import * as Retry from './exports/retry.js'
 import * as Scope from './exports/scope.js'
 import * as Sink from './exports/sink.js'
+import * as State from './exports/state.js'
 import * as Time from './exports/time.js'
 import * as Timeout from './exports/timeout.js'
 import * as Trace from './exports/trace.js'
@@ -59,16 +59,14 @@ test('feature export surfaces group related functionality', () => {
   assert.equal('defaultConsole' in Log, false)
   assert.equal(typeof PlatformNode.runNodeMain, 'function')
   assert.equal(typeof Random.defaultRandom, 'function')
-  assert.equal(typeof Ref.Ref, 'function')
-  assert.equal('of' in Ref, false)
-  assert.equal('compareAndSet' in Ref, false)
-  assert.equal('unsafeSet' in Ref, false)
-  assert.equal('Of' in Ref, false)
   assert.equal(typeof Retry.retry, 'function')
   assert.equal(typeof Scope.scope, 'function')
   assert.equal(typeof Scope.interruptFrom, 'function')
   assert.equal(typeof Scope.yieldFrom, 'function')
   assert.equal(typeof Sink.next, 'function')
+  assert.equal(typeof State.getState, 'function')
+  assert.equal(typeof State.modifyState, 'function')
+  assert.equal(typeof State.withState, 'function')
   assert.equal(typeof Time.sleep, 'function')
   assert.equal(typeof Timeout.timeout, 'function')
   assert.equal(typeof Trace.withTraceCapture, 'function')

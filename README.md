@@ -92,6 +92,7 @@ their named subpaths.
 | Advanced trace capture, snapshots, and trace formatting options | `@briancavalier/fx/trace` |
 | Named scopes, abort, finalization, early return, scoped yielding | `@briancavalier/fx/scope` |
 | Sinks for receiving values | `@briancavalier/fx/sink` |
+| Scoped mutable state operations | `@briancavalier/fx/state` |
 | Structured concurrency | `@briancavalier/fx/concurrent` |
 | Time and clock handlers | `@briancavalier/fx/time` |
 | Random effects and handlers | `@briancavalier/fx/random` |
@@ -99,7 +100,6 @@ their named subpaths.
 | Retry and timeout policies | `@briancavalier/fx/retry`, `@briancavalier/fx/timeout` |
 | HTTP client and transport-neutral HTTP server routes | `@briancavalier/fx/http-client`, `@briancavalier/fx/http-server` |
 | Node runtime, process, diagnostics, and HTTP transport | `@briancavalier/fx/platform-node` |
-| Mutable reference primitive | `@briancavalier/fx/ref` |
 
 ---
 

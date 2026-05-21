@@ -38,10 +38,6 @@
       "types": "./dist/exports/random.d.ts",
       "import": "./dist/exports/random.js"
     },
-    "./ref": {
-      "types": "./dist/exports/ref.d.ts",
-      "import": "./dist/exports/ref.js"
-    },
     "./retry": {
       "types": "./dist/exports/retry.d.ts",
       "import": "./dist/exports/retry.js"
@@ -53,6 +49,10 @@
     "./sink": {
       "types": "./dist/exports/sink.d.ts",
       "import": "./dist/exports/sink.js"
+    },
+    "./state": {
+      "types": "./dist/exports/state.d.ts",
+      "import": "./dist/exports/state.js"
     },
     "./time": {
       "types": "./dist/exports/time.d.ts",

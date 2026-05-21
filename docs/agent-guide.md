@@ -40,13 +40,13 @@ subpaths for optional feature areas and advanced trace tools.
 | --- | --- |
 | Scopes, abort, finalization, early return, scoped yielding | `@briancavalier/fx/scope` |
 | Sinks for receiving values | `@briancavalier/fx/sink` |
+| Scoped mutable state operations | `@briancavalier/fx/state` |
 | Structured concurrency | `@briancavalier/fx/concurrent` |
 | Advanced trace capture, snapshots, and trace formatting options | `@briancavalier/fx/trace` |
 | Time and random | `@briancavalier/fx/time`, `@briancavalier/fx/random` |
 | Structured logging | `@briancavalier/fx/log` |
 | Retry and timeout | `@briancavalier/fx/retry`, `@briancavalier/fx/timeout` |
 | HTTP and Node platform boundaries | `@briancavalier/fx/http-client`, `@briancavalier/fx/http-server`, `@briancavalier/fx/platform-node` |
-| Mutable reference primitive | `@briancavalier/fx/ref` |
 
 For simple console output, use `consoleLog` with `defaultConsole` from the root
 import. Use `log`, `info`, `warn`, `error`, and `withConsoleLog` from

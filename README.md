@@ -1,8 +1,9 @@
 # fx
 
-A small, strongly-typed **algebraic effects and handlers** system for TypeScript.
+A small, strongly typed, **scope-centered algebraic runtime** for TypeScript.
 
-`fx` lets you write programs in terms of *what they do* (effects), and interpret them later with *how they do it* (handlers).
+`fx` lets programs describe operations, delimit their meaning with named scopes,
+and interpret those operations later with handlers.
 
 ---
 
@@ -19,13 +20,23 @@ Most solutions rely on dependency injection or implicit runtime behavior.
 
 `fx` takes a different approach:
 
-> **Programs describe operations. Handlers define semantics.**
+> **Programs describe operations. Named scopes define dynamic regions of meaning. Handlers define semantics.**
 
 ---
 
 ## Core idea
 
-Everything is an effect.
+Programs are generator computations:
+
+```ts
+Fx<E, A>
+```
+
+- `A` = result
+- `E` = effects the program may perform
+
+Effects keep required operations visible in the type until handlers eliminate
+them:
 
 ```ts
 yield* consoleLog("hello")
@@ -34,20 +45,35 @@ yield* fail(new Error("boom"))
 yield* fork(otherProgram)
 ```
 
-A program is:
-
-```ts
-Fx<E, A>
-```
-
-- `A` = result  
-- `E` = effects it may perform  
+Named scopes add an ownership boundary around effects whose meaning depends on a
+dynamic region. A scope can own cleanup, interruption, early return, yielding,
+and recovery boundaries.
 
 Handlers progressively eliminate effects until the program can run.
 
 ---
 
+## Why named scopes?
+
+Many application concerns are not just dependencies. They are regions of
+execution:
+
+- a request lifetime that may be interrupted
+- a resource lifetime that must be finalized
+- a timeout boundary where callers choose the recovery policy
+- a progress or event channel that receives yielded values
+- a concurrent group that must clean up cancelled work
+- a parser or workflow step that may return early
+
+In `fx`, these regions are named scopes. Scope names make ownership explicit
+without introducing service containers, global runtimes, or framework wiring.
+
+---
+
 ## Example
+
+Application logic performs operations. Handlers decide what those operations
+mean:
 
 ```ts
 import { consoleLog, defaultConsole, fx, handle, runPromise } from "@briancavalier/fx"
@@ -69,6 +95,54 @@ const program =
     defaultConsole,
     runPromise
   )
+```
+
+Scopes let lifecycle semantics stay explicit too. A timeout interrupts the named
+scope, scoped finalizers observe how the scope exited, and the caller chooses
+how to recover:
+
+```ts
+import {
+  assert as assertNoFail,
+  consoleLog,
+  control,
+  defaultConsole,
+  fx,
+  runPromise
+} from "@briancavalier/fx"
+import { unbounded } from "@briancavalier/fx/concurrent"
+import { andFinallyExit, InterruptFrom, scope } from "@briancavalier/fx/scope"
+import { defaultTime, sleep } from "@briancavalier/fx/time"
+import { timeout } from "@briancavalier/fx/timeout"
+
+const RequestScope = "request" as const
+
+const loadUser = fx(function* () {
+  yield* andFinallyExit(RequestScope, exit =>
+    consoleLog(`request cleanup after ${exit.type}`)
+  )
+
+  yield* sleep(1000)
+  return { id: 1, name: "Ada" }
+})
+
+const program = fx(function* () {
+  const user = yield* loadUser.pipe(
+    timeout(RequestScope, { ms: 500 })
+  )
+
+  yield* consoleLog("loaded user", user)
+})
+
+await program.pipe(
+  scope(RequestScope),
+  control(InterruptFrom, () => consoleLog("request timed out")),
+  defaultTime,
+  unbounded,
+  defaultConsole,
+  assertNoFail,
+  runPromise
+)
 ```
 
 Core primitives are exported from `@briancavalier/fx`. Optional features are
@@ -105,11 +179,12 @@ their named subpaths.
 
 ## Design philosophy
 
-### Everything is an effect
+### Operations over dependencies
 
 There are no privileged concepts like services or environments.
 
-Logging, DB access, concurrency, failure, and resource management are all effects.
+Logging, DB access, concurrency, failure, resource management, and lifecycle
+control are all operations that programs can request and handlers can interpret.
 
 ---
 
@@ -119,6 +194,8 @@ Application code performs operations:
 
 ```ts
 yield* Db.query(...)
+yield* consoleLog(...)
+yield* yieldFrom(ProgressEvents, event)
 ```
 
 It does not request services.
@@ -149,20 +226,27 @@ No container, no wiring graph—just a pipeline.
 
 ## Key features
 
-- **Algebraic effects with static typing**  
-  Effects are explicit in `Fx<E, A>`
+- **Typed algebraic effects**
+  Programs expose the operations they may perform as `Fx<E, A>`
+
+- **Named scopes**
+  Scopes delimit lifecycle, cleanup, interruption, early return, and yielding
 
 - **Composable handlers**  
   Handlers remove effects and can introduce new ones
 
 - **Structured concurrency**  
-  `Fork` and `Task` provide owned, composable concurrency
+  `Fork`, `Task`, `all`, and `race` provide owned, composable concurrency
 
-- **Resource safety**  
-  `bracket` and `Scope` ensure cleanup
+- **Guaranteed finalization**
+  Finalizers run when a scope succeeds, fails, returns, aborts, or is interrupted
 
-- **Async stack traces**  
-  Logical stacks across async and fork boundaries
+- **Scoped yielding**
+  Programs emit values to named channels with `yieldFrom`
+
+- **Explicit runtime boundaries**
+  Async, platform, HTTP, time, random, trace, and Node behavior are interpreted
+  by handlers near the place a program runs
 
 ---
 
@@ -181,6 +265,7 @@ There is no built-in concept of:
 
 Instead:
 - programs express **operations**  
+- scopes define **ownership boundaries**
 - handlers provide **interpretations**
 
 **Tradeoff:**
@@ -204,11 +289,12 @@ The runtime is small and focused:
 
 ### Cooperative interruption
 
-- cancellation is cooperative (disposal/abort)
+- interruption is cooperative and scope-aware
 - `uninterruptible` and `uninterruptibleMask` defer interruption across short
   critical sections
 - masking appears as the lightweight `Interrupt` effect until a runtime
   boundary eliminates it
+- scoped interruption gives finalizers the reason the scope exited
 
 **Tradeoff:**
 - simple runtime-owned interruption model
@@ -247,7 +333,7 @@ Because the core is minimal:
 
 `fx` explores a simple idea:
 
-> **Model everything as effects, and compose meaning with handlers.**
+> **Model operations as effects, delimit their meaning with named scopes, and compose interpretation with handlers.**
 
 This leads to:
 

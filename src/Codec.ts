@@ -15,6 +15,13 @@ export type CodecKey<A, Encoded> =
 
 export type AnyCodecKey = CodecKey<any, any>
 
+/**
+ * Brand a string or symbol as a codec key while preserving its identity.
+ */
+export const codecKey = <A, Encoded>() =>
+  <const Key extends string | symbol>(key: Key): Key & CodecKey<A, Encoded> =>
+    key as Key & CodecKey<A, Encoded>
+
 export type CodecValue<K> =
   K extends CodecKey<infer A, any> ? A : never
 

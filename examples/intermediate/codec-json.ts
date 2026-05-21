@@ -1,5 +1,5 @@
 import { Fail, fail, flatMap, ok, returnFail, run, trySync } from '@briancavalier/fx'
-import { CodecEncoded, CodecKey, decode, encode, withCodec } from '@briancavalier/fx/codec'
+import { codecKey, CodecEncoded, CodecKey, decode, encode, withCodec } from '@briancavalier/fx/codec'
 
 type User = {
   readonly id: string
@@ -7,7 +7,8 @@ type User = {
   readonly createdAt: Date
 }
 
-const UserJson = Symbol('UserJson') as CodecKey<User, string>
+const UserJsonSymbol = Symbol('UserJson')
+const UserJson = codecKey<User, string>()(UserJsonSymbol)
 
 class InvalidUserJson extends Error { }
 

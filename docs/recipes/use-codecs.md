@@ -5,14 +5,15 @@ depending directly on a schema library.
 
 ```ts
 import { fail, fx, ok, run, trySync } from "@briancavalier/fx"
-import { CodecKey, decode, encode, withCodec } from "@briancavalier/fx/codec"
+import { codecKey, decode, encode, withCodec } from "@briancavalier/fx/codec"
 
 type User = {
   readonly id: string
   readonly name: string
 }
 
-const UserJson = Symbol("UserJson") as CodecKey<User, string>
+const UserJsonSymbol = Symbol("UserJson")
+const UserJson = codecKey<User, string>()(UserJsonSymbol)
 
 const program = (input: string) => fx(function* () {
   const user = yield* decode(UserJson, input)
@@ -20,9 +21,10 @@ const program = (input: string) => fx(function* () {
 })
 ```
 
-A codec key is both a runtime identity and a phantom type. The handler matches
-the runtime key with `Object.is`, while TypeScript tracks the decoded and
-encoded types.
+A codec key is both a runtime identity and a phantom type. Use `codecKey` with
+a string literal or a `const` symbol so TypeScript preserves the specific key
+identity. The handler matches the runtime key with `Object.is`, while
+TypeScript tracks the decoded and encoded types.
 
 Handler pipeline:
 

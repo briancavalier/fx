@@ -5,8 +5,8 @@ import { Fail, fail, returnFail } from './Fail.js'
 import { Fx, fx, ok, run } from './Fx.js'
 
 import {
+  codecKey,
   CodecEncoded,
-  CodecKey,
   CodecValue,
   Decode,
   decode,
@@ -22,10 +22,16 @@ type User = {
   readonly name: string
 }
 
-const UserJson = Symbol('UserJson') as CodecKey<User, string>
-const CountText = 'CountText' as CodecKey<number, string>
+const UserJsonSymbol = Symbol('UserJson')
+const OtherUserJsonSymbol = Symbol('OtherUserJson')
+const UserJson = codecKey<User, string>()(UserJsonSymbol)
+const OtherUserJson = codecKey<User, string>()(OtherUserJsonSymbol)
+const CountText = codecKey<number, string>()('CountText')
 
 class InvalidCodec extends Error { }
+
+type EffectsOf<T> =
+  T extends Fx<infer E, any> ? E : never
 
 describe('Codec', () => {
   it('encode yields the encoded type for a codec key', () => {
@@ -72,6 +78,19 @@ describe('Codec', () => {
     )
 
     const residual: Fx<Decode<typeof CountText>, string> = program
+    assert.throws(() => run(residual as any), /Unhandled effect in run/)
+  })
+
+  it('preserves distinct codec key identities with the same value and encoded types', () => {
+    const program = decode(OtherUserJson, '{"id":"u2","name":"Grace"}').pipe(
+      withDecoder(UserJson, json => ok(JSON.parse(json) as User))
+    )
+
+    const residual: Fx<Decode<typeof OtherUserJson>, User> = program
+    const residualEffect: EffectsOf<typeof program> =
+      new Decode({ codec: OtherUserJson, encoded: '{"id":"u2","name":"Grace"}' })
+
+    assert.equal(residualEffect.arg.codec, OtherUserJson)
     assert.throws(() => run(residual as any), /Unhandled effect in run/)
   })
 

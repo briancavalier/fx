@@ -28,7 +28,6 @@ import { NodeHttpError, nodeHttp, type NodeHttpServerFactory } from './HttpServe
 import { HandlerCapture } from './HandlerCapture.js'
 import type { Interrupt } from './Interrupt.js'
 import { brand } from './Scope.js'
-import { dispose } from './Task.js'
 import { YieldFrom, yieldFrom, type Yielding } from './YieldFrom.js'
 
 const HttpServerEvents = brand<Yielding<ServerEvent>>()('test/HttpServer/events')
@@ -556,7 +555,7 @@ describe('HttpServer', () => {
         await assert.rejects(task.promise, error => error instanceof Error && error.cause === failure)
         assert.equal(closeCalled, true)
       } finally {
-        dispose(task)
+        await task.interrupt()
       }
     })
   })
@@ -629,7 +628,7 @@ const withServer = async (
   try {
     await test(port)
   } finally {
-    dispose(task)
+    await task.interrupt()
     await new Promise(resolve => setTimeout(resolve, 1))
   }
 }

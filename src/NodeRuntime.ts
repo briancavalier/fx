@@ -49,7 +49,7 @@ export const runNodePromise = <const E extends NodeRuntimeEffects>(
     if (shuttingDown) return
     shuttingDown = true
     cleanup()
-    void task._disposeAndWait().then(stopped.resolve, stopped.reject)
+    void task.interrupt().then(stopped.resolve, stopped.reject)
   }
 
   if (signals !== false) {

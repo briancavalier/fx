@@ -6,11 +6,13 @@ import { all, defaultAll, firstSettled, fork, race, unbounded } from './Concurre
 import { Fail, fail, returnFail } from './Fail.js'
 import { andFinally } from './Finalization.js'
 import { fx, runPromise } from './Fx.js'
+import { control } from './Handler.js'
+import { InterruptFrom } from './InterruptFrom.js'
 import { defaultRetry, retry } from './Retry.js'
 import { scope } from './Scope.js'
 import { wait } from './Task.js'
 import { sleep, withClock } from './Time.js'
-import { TimeoutError, defaultTimeout, timeout } from './Timeout.js'
+import { TimeoutInterrupt, timeout } from './Timeout.js'
 import { MaxTraceDepth, appendTrace, attachTrace, captureTrace, formatDiagnostic, formatError, formatTrace, getTrace, getTraceCapturePolicy, prependTrace, setTraceCapturePolicy, snapshotError, snapshotTrace, withTraceCapture } from './Trace.js'
 import type { Trace, TraceOptions } from './Trace.js'
 import type { Breadcrumb } from './Breadcrumb.js'
@@ -403,18 +405,29 @@ describe('Trace', () => {
 
   it('propagates regional trace policy through timeout and retry handlers', async () => {
     const clock = new VirtualClock(0)
+    const TimeoutScope = 'test/Trace/timeout' as const
     const timeoutProgram = fx(function* () {
-      return yield* sleep(100).pipe(timeout({ ms: 50 }), defaultTimeout())
+      return yield* sleep(100).pipe(timeout(TimeoutScope, { ms: 50 }))
     })
 
-    const timeoutPromise = timeoutProgram.pipe(withTraceCapture('labels'), returnFail, unbounded, withClock(clock), runPromise)
+    const timeoutPromise = timeoutProgram.pipe(
+      scope(TimeoutScope),
+      control(InterruptFrom, (_, interrupt) => fx(function* () {
+        return interrupt.arg
+      })),
+      withTraceCapture('labels'),
+      returnFail,
+      unbounded,
+      withClock(clock),
+      runPromise
+    )
     await clock.step(50)
     const timeoutResult = await timeoutPromise
 
-    assert.ok(Fail.is(timeoutResult))
-    assert.ok(timeoutResult.arg instanceof TimeoutError)
-    assert.equal(snapshotError(timeoutResult.arg).trace?.frames[0]?.kind, 'timeout')
-    assert.equal(snapshotError(timeoutResult.arg).trace?.frames[0]?.location, undefined)
+    assert.ok(!Fail.is(timeoutResult))
+    assert.ok(timeoutResult instanceof TimeoutInterrupt)
+    assert.equal(snapshotError(timeoutResult).trace?.frames[0]?.kind, 'timeout')
+    assert.equal(snapshotError(timeoutResult).trace?.frames[0]?.location, undefined)
 
     const retryError = new Error('retry failed')
     const retryProgram = fx(function* () {

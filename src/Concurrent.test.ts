@@ -636,7 +636,7 @@ describe('Fork', () => {
 })
 
 describe('Task interruption finalization', () => {
-  it('explicit task disposal releases scoped finalizers', async () => {
+  it('explicit task interruption releases scoped finalizers', async () => {
     const TestScope = 'test/Fork/DisposeScope' as const
     const released = [] as string[]
 
@@ -654,12 +654,12 @@ describe('Task interruption finalization', () => {
       runPromise
     ))
 
-    await task._disposeAndWait()
+    await task.interrupt()
 
     assert.deepEqual(released, ['task'])
   })
 
-  it('runs interrupted scoped finalizers once when task disposal is repeated', async () => {
+  it('runs interrupted scoped finalizers once when task interruption is repeated', async () => {
     const TestScope = 'test/Fork/DisposeOnceScope' as const
     const released = [] as string[]
 
@@ -677,8 +677,8 @@ describe('Task interruption finalization', () => {
       runPromise
     ))
 
-    await task._disposeAndWait()
-    await task._disposeAndWait()
+    await task.interrupt()
+    await task.interrupt()
 
     assert.deepEqual(released, ['task'])
   })
@@ -701,12 +701,12 @@ describe('Task interruption finalization', () => {
       runPromise
     ))
 
-    await task._disposeAndWait()
+    await task.interrupt()
 
     assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope }])
   })
 
-  it('disposes queued bounded tasks before semaphore acquisition', async () => {
+  it('interrupts queued bounded tasks before semaphore acquisition', async () => {
     const events = [] as string[]
     const child = (label: string) => fx(function* () {
       events.push(`start ${label}`)
@@ -724,16 +724,16 @@ describe('Task interruption finalization', () => {
     )
 
     assert.deepEqual(events, ['start first'])
-    await withTimeout(tasks[1]._disposeAndWait(), 100)
+    await withTimeout(tasks[1].interrupt(), 100)
 
-    await tasks[0]._disposeAndWait()
+    await tasks[0].interrupt()
     await eventually(() => events.includes('start third'))
     assert.deepEqual(events, ['start first', 'start third'])
 
-    await tasks[2]._disposeAndWait()
+    await tasks[2].interrupt()
   })
 
-  it('runs async effects in interrupted finalizers before disposal completes', async () => {
+  it('runs async effects in interrupted finalizers before interruption completes', async () => {
     const TestScope = 'test/Fork/InterruptedAsyncFinalizer' as const
     const released = [] as string[]
 
@@ -752,7 +752,7 @@ describe('Task interruption finalization', () => {
       runPromise
     ))
 
-    await task._disposeAndWait()
+    await task.interrupt()
 
     assert.deepEqual(released, ['task'])
   })
@@ -779,7 +779,7 @@ describe('Task interruption finalization', () => {
       runPromise
     ))
 
-    await task._disposeAndWait()
+    await task.interrupt()
 
     assert.deepEqual(released, ['inner'])
   })
@@ -810,7 +810,7 @@ describe('Task interruption finalization', () => {
       runPromise
     ))
 
-    await task._disposeAndWait()
+    await task.interrupt()
 
     assert.deepEqual(released, ['scope', 'inner'])
   })
@@ -926,7 +926,7 @@ describe('Task interruption finalization', () => {
       runPromise
     ))
 
-    await task._disposeAndWait()
+    await task.interrupt()
 
     assert.deepEqual(released, ['task'])
   })
@@ -951,7 +951,7 @@ describe('Task interruption finalization', () => {
       runPromise
     ))
 
-    await task._disposeAndWait()
+    await task.interrupt()
 
     assert.deepEqual(released, ['task'])
   })

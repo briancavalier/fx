@@ -1,5 +1,6 @@
 export * from '../Abort.js'
 export * from '../Finalization.js'
+export * from '../InterruptFrom.js'
 export * from '../ReturnFrom.js'
 export * from '../Scope.js'
 export * from '../YieldFrom.js'

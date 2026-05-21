@@ -1,69 +1,62 @@
-import { Async } from './Async.js'
+import { Async, assertPromise, tryPromise } from './Async.js'
 import { at } from './Breadcrumb.js'
-import { Fork, firstSettled, race } from './Concurrent.js'
-import { Effect } from './Effect.js'
+import { Fork, firstSettled, fork, race } from './Concurrent.js'
 import { Fail, catchAll, fail } from './Fail.js'
-import { Fx, flatMap, flatten, fx, map, ok } from './Fx.js'
-import { Handle } from './Handler.js'
-import { HandlerCapture, handleCaptured, withCapturedHandlers } from './HandlerCapture.js'
+import { Fx, fx, map, ok } from './Fx.js'
+import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
 import { Sleep, sleep } from './Time.js'
 import { attachTrace, captureTrace } from './Trace.js'
 import type { TraceOrigin } from './Trace.js'
 
 /**
- * A timeout effect. Programs yield {@link Timeout} values to request that a
- * computation be run with a time limit.
- */
-export class Timeout<const E, const A, const TE> extends Effect('fx/Timeout')<TimeoutContext<E, A, TE>, Fx<unknown, A>> { }
-
-/**
- * Request that an Fx be run with a timeout.
+ * Run an Fx with a time limit, interrupting the named scope when the timeout wins.
  *
- * @example
- * const result = await fetchUser.pipe(
- *   timeout({ ms: 1000 }),
- *   defaultTimeout(),
- *   defaultTime,
- *   unbounded,
- *   runPromise
- * )
+ * The interrupted scope runs its finalizers with a {@link TimeoutInterrupt}
+ * reason, then re-yields the matching {@link InterruptFrom} so callers choose
+ * how to recover or report the timeout.
  */
-export function timeout(options: DefaultTimeoutOptions): <const E, const A>(f: Fx<E, A>) => Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TimeoutError> | HandlerCapture<'fx/Timeout'>, A>
-export function timeout<const TE>(options: TimeoutOptions<TE>): <const E, const A>(f: Fx<E, A>) => Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE> | HandlerCapture<'fx/Timeout'>, A>
-export function timeout<const TE>({ ms, onTimeout }: DefaultTimeoutOptions | TimeoutOptions<TE>) {
-  const origin = at(`Timeout requested after ${ms}ms`, timeout)
+export function timeout<const Scope extends string>(
+  scope: Scope,
+  options: DefaultTimeoutInterruptOptions
+): <const E, const A>(f: Fx<E, A>) => Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<Scope, TimeoutInterrupt>, A>
+export function timeout<const Scope extends string, const Reason>(
+  scope: Scope,
+  options: TimeoutInterruptOptions<Reason>
+): <const E, const A>(f: Fx<E, A>) => Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<Scope, Reason>, A>
+export function timeout<const Scope extends string, const Reason>(
+  scope: Scope,
+  { ms, reason }: DefaultTimeoutInterruptOptions | TimeoutInterruptOptions<Reason>
+) {
+  const origin = at(`Timeout interrupted ${scope} after ${ms}ms`, timeout)
   const trace = captureTrace(origin, undefined, { kind: 'timeout' })
-  return <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE | TimeoutError> | HandlerCapture<'fx/Timeout'>, A> =>
-    withCapturedHandlers('fx/Timeout', f).pipe(
-      flatMap(fx =>
-        new Timeout<ErrorsOf<E>, A, TE | TimeoutError>({
-          fx,
-          ms,
-          origin,
-          trace,
-          onTimeout: onTimeout ?? defaultTimeoutError
-        }) as Fx<Timeout<ErrorsOf<E>, A, TE | TimeoutError>, Fx<Exclude<E, Fail<any>> | Timeout<ErrorsOf<E>, A, TE | TimeoutError>, A>>
-      ),
-      flatten
-    )
+  return <const E, const A>(f: Fx<E, A>): Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<Scope, Reason | TimeoutInterrupt>, A> =>
+    fx(function* () {
+      const task = yield* fork(attempt(f as Fx<Fail<ErrorsOf<E>>, A>), { origin, trace })
+      task._markHandled()
+      const result = yield* race([
+        assertPromise(() => task.promise as Promise<AttemptResult<ErrorsOf<E>, A>>),
+        sleep(ms).pipe(map(() => ({
+          type: 'timeout',
+          reason: reason === undefined ? makeTimeoutInterrupt({ ms, origin, trace }) : reason({ ms, origin, trace })
+        }) as const))
+      ], { origin, trace }).pipe(firstSettled)
+
+      if (result.type === 'success') return result.value
+      if (result.type === 'failure') return yield* fail(result.failure)
+
+      yield* tryPromise(() => task.interrupt(result.reason))
+      return yield* interruptFrom(scope, result.reason)
+    }) as Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<Scope, Reason | TimeoutInterrupt>, A>
 }
 
-/**
- * Default handler for Timeout. Runs the computation and fails if it does not
- * complete within the requested time.
- */
-export const defaultTimeout = () =>
-  <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyTimeout, Fork | Sleep | Async | Fail<ErrorsOfTimeout<E> | TimeoutErrorOf<E>>>, HandlerCapture<'fx/Timeout'>>, A> =>
-    f.pipe(handleCaptured('fx/Timeout', Timeout, runTimeout)) as Fx<Handle<Handle<E, AnyTimeout, Fork | Sleep | Async | Fail<ErrorsOfTimeout<E> | TimeoutErrorOf<E>>>, HandlerCapture<'fx/Timeout'>>, A>
-
-export class TimeoutError extends Error {
-  readonly name = 'TimeoutError'
-  declare readonly code: 'FX_TIMEOUT'
+export class TimeoutInterrupt extends Error {
+  readonly name = 'TimeoutInterrupt'
+  declare readonly code: 'FX_TIMEOUT_INTERRUPT'
 
   constructor(readonly ms: number, options?: ErrorOptions) {
-    super(`Timed out after ${ms}ms`, options)
+    super(`Interrupted after ${ms}ms`, options)
     Object.defineProperty(this, 'code', {
-      value: 'FX_TIMEOUT',
+      value: 'FX_TIMEOUT_INTERRUPT',
       enumerable: false,
       writable: false,
       configurable: true
@@ -71,56 +64,37 @@ export class TimeoutError extends Error {
   }
 }
 
-export interface DefaultTimeoutOptions {
+export interface DefaultTimeoutInterruptOptions {
   readonly ms: number
-  readonly onTimeout?: undefined
+  readonly reason?: undefined
 }
 
-export interface TimeoutOptions<TE> {
+export interface TimeoutInterruptOptions<Reason> {
   readonly ms: number
-  readonly onTimeout: (e: TimeoutExpired) => TE
+  readonly reason: (e: TimeoutExpired) => Reason
 }
 
 export interface TimeoutExpired extends TraceOrigin {
   readonly ms: number
 }
 
-export interface TimeoutContext<_E, A, TE> extends TraceOrigin {
-  readonly fx: Fx<unknown, A>
-  readonly ms: number
-  readonly onTimeout: (e: TimeoutExpired) => TE
-}
-
 export type ErrorsOf<E> = UnwrapFail<Extract<E, Fail<any>>>
-export type ErrorsOfTimeout<E> = E extends Timeout<infer R, any, any> ? R : never
-export type TimeoutErrorOf<E> = E extends Timeout<any, any, infer TE> ? TE : never
 
-const runTimeout = <const E, const A, const TE>(timeout: Timeout<E, A, TE>): Fx<Fork | Sleep | Async, Fx<Fail<E | TE>, A>> => fx(function* () {
-  const t = timeout.arg
-  const result = yield* race([
-    attempt(t.fx as Fx<Fail<E>, A>),
-    sleep(t.ms).pipe(map(() => ({ type: 'timeout', failure: t.onTimeout(t) } as const)))
-  ], t).pipe(firstSettled)
-
-  return result.type === 'success' ? ok(result.value) : fail(result.failure)
-})
-
-const attempt = <const E, const A>(f: Fx<Fail<E>, A>): Fx<never, TimeoutResult<E, A, never>> =>
+const attempt = <const E, const A>(f: Fx<Fail<E>, A>): Fx<never, AttemptResult<E, A>> =>
   f.pipe(
     map(value => ({ type: 'success', value }) as const),
     catchAll(failure => ok({ type: 'failure', failure }) as Fx<never, Failure<E>>)
-  ) as Fx<never, TimeoutResult<E, A, never>>
+  ) as Fx<never, AttemptResult<E, A>>
 
-type AnyTimeout = Timeout<any, any, any> | Timeout<never, any, any>
 type UnwrapFail<F> = F extends Fail<infer E> ? E : never
 
-const defaultTimeoutError = ({ ms, origin, trace }: TimeoutExpired) => {
-  const error = new TimeoutError(ms, { cause: origin })
+const makeTimeoutInterrupt = ({ ms, origin, trace }: TimeoutExpired) => {
+  const error = new TimeoutInterrupt(ms, { cause: origin })
   if (trace !== undefined) attachTrace(error, trace)
   return error
 }
 
-type TimeoutResult<E, A, TE> = Success<A> | Failure<E> | TimedOut<TE>
+type AttemptResult<E, A> = Success<A> | Failure<E>
 
 interface Success<A> {
   readonly type: 'success'
@@ -130,9 +104,4 @@ interface Success<A> {
 interface Failure<E> {
   readonly type: 'failure'
   readonly failure: E
-}
-
-interface TimedOut<TE> {
-  readonly type: 'timeout'
-  readonly failure: TE
 }

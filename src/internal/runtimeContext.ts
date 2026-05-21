@@ -12,6 +12,7 @@ import { Pipeable, pipeThis } from './pipe.js'
 export interface RuntimeContext {
   readonly traceCapturePolicy?: TraceCapturePolicy
   readonly activeScopes?: readonly string[]
+  readonly interruptionReason?: unknown
 }
 
 export const RuntimeContextTypeId = Symbol('fx/RuntimeContext')
@@ -71,6 +72,15 @@ export const capturesStack = (context?: RuntimeContext): boolean =>
 
 export const activeScopes = (context: RuntimeContext | undefined = activeRuntimeContext): readonly string[] =>
   context?.activeScopes ?? []
+
+export const interruptionReason = (context: RuntimeContext | undefined = activeRuntimeContext): unknown =>
+  context?.interruptionReason
+
+export const withInterruptionReason = (
+  context: RuntimeContext | undefined,
+  reason: unknown
+): RuntimeContext | undefined =>
+  reason === undefined ? context : { ...context, interruptionReason: reason }
 
 export const withActiveScope = <E, A>(scope: string, fx: Fx<E, A>): Fx<E, A> => {
   const scopes = activeScopes()

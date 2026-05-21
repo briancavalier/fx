@@ -39,7 +39,7 @@ already matches the requested pattern.
 | --- | --- | --- | --- |
 | `intermediate/race-handlers.ts` | One `race` request interpreted with first-settled and first-success handlers. | Readers learning how handlers choose semantics. | `node --import tsx examples/intermediate/race-handlers.ts` |
 | `intermediate/interrupt-safe-finalization.ts` | Race cancellation, named scopes, and async finalization for interrupted work. | Readers working with resources under structured concurrency. | `node --import tsx examples/intermediate/interrupt-safe-finalization.ts` |
-| `intermediate/uninterruptible-mask.ts` | A protected acquire/register critical section with interruptible use. | Readers who need precise interruption boundaries. | `node --import tsx examples/intermediate/uninterruptible-mask.ts` |
+| `intermediate/uninterruptible-mask.ts` | Timeout-driven interruption after a protected acquire/register critical section. | Readers who need precise interruption boundaries. | `node --import tsx examples/intermediate/uninterruptible-mask.ts` |
 | `intermediate/ref.ts` | Atomic shared state updates across concurrent tasks. | Readers modeling safe mutable references. | `node --import tsx examples/intermediate/ref.ts` |
 | `intermediate/read-csv.ts` | Scoped `YieldFrom`, row transforms, managed resources, and early return. | Readers exploring scoped data-flow patterns. | `node --import tsx examples/intermediate/read-csv.ts` |
 | `intermediate/yield-sink-pipeline.ts` | Scoped `YieldFrom`, `Sink`, and discriminated pipe results. | Readers connecting push-style producers to pull-style receivers. | `node --import tsx examples/intermediate/yield-sink-pipeline.ts` |

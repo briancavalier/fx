@@ -2,13 +2,77 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
-import { fail, returnFail } from './Fail.js'
+import { fail, Fail, returnFail } from './Fail.js'
 import { firstSettled, race, unbounded } from './Concurrent.js'
-import { managed, using, usingManaged } from './Finalization.js'
+import { andFinally, andFinallyExit, managed, using, usingManaged } from './Finalization.js'
 import { bracket, fx, ok, run, runPromise, runTask, type Fx } from './Fx.js'
 import { control, handle } from './Handler.js'
+import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
 import { uninterruptible, uninterruptibleMask, type Interrupt, type RestoreInterrupt } from './Interrupt.js'
 import { scope, type Exit } from './Scope.js'
+
+describe('Typed interruption', () => {
+  const TestScope = 'test/InterruptFrom' as const
+
+  it('provides the reason to exit-aware finalizers', () => {
+    const reason = { type: 'test-interrupt' }
+    const exits = [] as Exit[]
+
+    const result = fx(function* () {
+      yield* andFinallyExit(TestScope, exit => fx(function* () {
+        exits.push(exit)
+      }))
+      yield* interruptFrom(TestScope, reason)
+    }).pipe(
+      scope(TestScope),
+      control(InterruptFrom, () => ok('interrupted')),
+      returnFail,
+      run
+    )
+
+    assert.equal(result, 'interrupted')
+    assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope, reason }])
+  })
+
+  it('leaves the interrupt visible after scope cleanup', () => {
+    const f = interruptFrom(TestScope).pipe(scope(TestScope))
+    const next = f[Symbol.iterator]().next()
+
+    assert.equal(InterruptFrom.is(next.value), true)
+    assert.equal((next.value as InterruptFrom<typeof TestScope>).scope, TestScope)
+  })
+
+  it('does not handle interrupts from a different scope', () => {
+    const OtherScope = 'test/InterruptFrom/other' as const
+    const f = fx(function* () {
+      yield* interruptFrom(OtherScope)
+      return 'done'
+    }).pipe(scope(TestScope))
+
+    const next = f[Symbol.iterator]().next()
+
+    assert.equal(InterruptFrom.is(next.value), true)
+    assert.equal((next.value as InterruptFrom<typeof OtherScope>).scope, OtherScope)
+  })
+
+  it('surfaces cleanup failures before re-yielding the interrupt', () => {
+    const cleanupFailure = new Error('cleanup failed')
+
+    const result = fx(function* () {
+      yield* andFinally(TestScope, fail(cleanupFailure))
+      yield* interruptFrom(TestScope)
+    }).pipe(
+      scope(TestScope),
+      control(InterruptFrom, () => ok('interrupted')),
+      returnFail,
+      run
+    )
+
+    assert.ok(result instanceof Fail)
+    assert.ok(result.arg instanceof AggregateError)
+    assert.deepEqual(result.arg.errors, [cleanupFailure])
+  })
+})
 
 describe('Interrupt masking', () => {
   it('is transparent for pure computations', () => {
@@ -70,7 +134,7 @@ describe('Interrupt masking', () => {
     assert.deepEqual(events, ['cleanup'])
   })
 
-  it('defers disposal during a masked async computation', async () => {
+  it('defers interruption during a masked async computation', async () => {
     let resolve!: () => void
     let aborted = false
 
@@ -82,11 +146,11 @@ describe('Interrupt masking', () => {
     }))))
 
     await eventually(() => resolve !== undefined)
-    const disposed = task._disposeAndWait()
+    const interrupted = task.interrupt()
 
     assert.equal(aborted, false)
     resolve()
-    await disposed
+    await interrupted
     assert.equal(aborted, false)
   })
 
@@ -112,9 +176,9 @@ describe('Interrupt masking', () => {
     )
 
     await eventually(() => resolve !== undefined)
-    const disposed = task._disposeAndWait()
+    const interrupted = task.interrupt()
     resolve('resource')
-    await disposed
+    await interrupted
 
     assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope }])
   })
@@ -138,11 +202,11 @@ describe('Interrupt masking', () => {
     )
 
     await eventually(() => resolve !== undefined)
-    const disposed = task._disposeAndWait()
+    const interrupted = task.interrupt()
     resolve(managed('resource', exit => fx(function* () {
       exits.push(exit)
     })))
-    await disposed
+    await interrupted
 
     assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope }])
   })
@@ -162,9 +226,9 @@ describe('Interrupt masking', () => {
     ).pipe(runTask)
 
     await eventually(() => resolve !== undefined)
-    const disposed = task._disposeAndWait()
+    const interrupted = task.interrupt()
     resolve('resource')
-    await disposed
+    await interrupted
 
     assert.deepEqual(released, ['resource'])
   })
@@ -183,7 +247,7 @@ describe('Interrupt masking', () => {
     })))
 
     await eventually(() => restoreStarted)
-    await task._disposeAndWait()
+    await task.interrupt()
 
     assert.equal(restoreAborted, true)
   })
@@ -237,7 +301,7 @@ describe('Interrupt masking', () => {
     })))
 
     await eventually(() => started)
-    await task._disposeAndWait()
+    await task.interrupt()
 
     assert.equal(aborted, true)
   })
@@ -256,9 +320,9 @@ describe('Interrupt masking', () => {
     })))
 
     await eventually(() => resolveInner !== undefined)
-    const disposed = task._disposeAndWait()
+    const interrupted = task.interrupt()
     resolveInner()
-    await disposed
+    await interrupted
 
     assert.deepEqual(events, ['outer start', 'inner start', 'outer end'])
   })
@@ -283,12 +347,12 @@ describe('Interrupt masking', () => {
     }))))
 
     await eventually(() => restoreStarted)
-    const disposed = task._disposeAndWait()
+    const interrupted = task.interrupt()
     await Promise.resolve()
 
     assert.equal(restoreAborted, false)
     resolveRestore()
-    await disposed
+    await interrupted
 
     assert.deepEqual(events, ['outer start', 'outer end'])
     assert.equal(restoreAborted, false)

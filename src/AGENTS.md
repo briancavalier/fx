@@ -24,7 +24,7 @@ Rules for changes:
 - For higher-order scoped effects, preserve effect typing through the request and handler. If failures cross fork/race/task boundaries, convert them to data before racing unless runtime semantics explicitly preserve typed failures.
 - When default handlers create errors asynchronously or after handler interpretation, preserve request-site diagnostics with `Breadcrumb`/cause chaining rather than overwriting stacks.
 - Keep cleanup paths explicit: call iterator `return`, dispose tasks/resources, and preserve cooperative cancellation.
-- When adding or moving public API, update `src/exports/*`, `package.json#exports`,
-  and `src/exports.test.ts` together. Keep package subpaths tied to feature
+- When adding or moving public API, update `src/exports/*` and
+  `package.json#exports` together. Keep package subpaths tied to feature
   ownership rather than source filenames.
 - Favor small composable functions over new abstractions.

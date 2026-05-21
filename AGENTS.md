@@ -49,8 +49,8 @@ Development guidance:
 - Add focused tests under `src/*.test.ts` for behavior and type-level expectations where relevant.
 - Do not edit `dist/` directly; build output is generated.
 - Keep examples practical and small.
-- When changing public exports, update the relevant `src/exports/*` entrypoint,
-  `package.json#exports`, and `src/exports.test.ts`.
+- When changing public exports, update the relevant `src/exports/*` entrypoint
+  and `package.json#exports`.
 - New package subpaths should represent stable feature areas, not implementation
   file names. Public docs should use `@briancavalier/fx` and curated subpaths;
   runnable TypeScript examples and example tests should also use those curated

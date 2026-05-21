@@ -60,3 +60,18 @@ export const withState = <const Scope extends string & Stateful<unknown>>(
         })
       )
     }) as Fx<ExcludeState<E, Scope>, A>
+
+/**
+ * Handle state operations for the named scope, obtaining the initial state by
+ * running an Fx once per execution.
+ */
+export const withStateInit = <const Scope extends string & Stateful<unknown>, const IE>(
+  scope: Scope,
+  initially: Fx<IE, StateOf<Scope>>
+) => <const E, const A>(
+  f: Fx<E, A>
+): Fx<IE | ExcludeState<E, Scope>, A> =>
+    fx(function* () {
+      const initial = yield* initially
+      return yield* f.pipe(withState(scope, initial))
+    }) as Fx<IE | ExcludeState<E, Scope>, A>

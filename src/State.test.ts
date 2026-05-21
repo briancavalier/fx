@@ -1,15 +1,16 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { returnFail, type Fail } from './Fail.js'
+import { Fail, fail, returnFail } from './Fail.js'
 import { andFinally } from './Finalization.js'
-import { fx, run, type Fx } from './Fx.js'
+import { fx, ok, run, type Fx } from './Fx.js'
 import { brand, scope } from './Scope.js'
-import { GetState, getState, modifyState, type ModifyState, type Stateful, withState } from './State.js'
+import { GetState, getState, modifyState, type ModifyState, type Stateful, withState, withStateInit } from './State.js'
 
 describe('State', () => {
   const CounterState = brand<Stateful<number>>()('test/State/Counter')
   const OtherState = brand<Stateful<string>>()('test/State/Other')
+  const ObjectState = brand<Stateful<{ readonly count: number }>>()('test/State/Object')
 
   it('gets the initial state', () => {
     const program = getState(CounterState).pipe(withState(CounterState, 1), run)
@@ -67,6 +68,41 @@ describe('State', () => {
 
     assert.equal(run(program), 1)
     assert.equal(run(program), 1)
+  })
+
+  it('runs state initialization once per execution', () => {
+    let initialized = 0
+    const initial = fx(function* () {
+      initialized += 1
+      return { count: initialized }
+    })
+    const program = getState(ObjectState).pipe(withStateInit(ObjectState, initial))
+
+    assert.deepEqual(run(program), { count: 1 })
+    assert.deepEqual(run(program), { count: 2 })
+  })
+
+  it('preserves initialization effects', () => {
+    const initFailure = new Error('init failed')
+    const program = getState(CounterState).pipe(
+      withStateInit(CounterState, fail(initFailure)),
+      returnFail,
+      run
+    )
+
+    if (!Fail.is(program)) assert.fail('expected initialization failure')
+    assert.equal(program.arg, initFailure)
+  })
+
+  it('requires withStateInit when initial state is an Fx', () => {
+    const initial = ok(1)
+
+    // @ts-expect-error withState expects a state value, not an Fx that produces one.
+    getState(CounterState).pipe(withState(CounterState, initial))
+
+    const program = getState(CounterState).pipe(withStateInit(CounterState, initial), run)
+
+    assert.equal(program, 1)
   })
 
   it('handles state effects requested during scope cleanup', () => {

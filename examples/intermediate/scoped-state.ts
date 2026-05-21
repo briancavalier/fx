@@ -1,6 +1,6 @@
 import { consoleLog, defaultConsole, fx, runPromise } from '@briancavalier/fx'
 import { brand, scope } from '@briancavalier/fx/scope'
-import { getState, modifyState, type Stateful, withState } from '@briancavalier/fx/state'
+import { getState, modifyState, type Stateful, withStateInit } from '@briancavalier/fx/state'
 
 type Session = {
   readonly requests: number
@@ -26,7 +26,9 @@ const program = fx(function* () {
 
 await program.pipe(
   scope(SessionState),
-  withState(SessionState, { requests: 0, lastRoute: 'none' }),
+  withStateInit(SessionState, fx(function* () {
+    return { requests: 0, lastRoute: 'none' }
+  })),
   defaultConsole,
   runPromise
 ).then(console.log)

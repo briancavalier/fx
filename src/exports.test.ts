@@ -67,6 +67,7 @@ test('feature export surfaces group related functionality', () => {
   assert.equal(typeof State.getState, 'function')
   assert.equal(typeof State.modifyState, 'function')
   assert.equal(typeof State.withState, 'function')
+  assert.equal(typeof State.withStateInit, 'function')
   assert.equal(typeof Time.sleep, 'function')
   assert.equal(typeof Timeout.timeout, 'function')
   assert.equal(typeof Trace.withTraceCapture, 'function')

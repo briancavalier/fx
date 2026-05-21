@@ -5,8 +5,9 @@ import { Fail, fail, returnFail } from './Fail.js'
 import { Fx, fx, ok, run } from './Fx.js'
 
 import {
-  CodecError,
+  CodecEncoded,
   CodecKey,
+  CodecValue,
   Decode,
   decode,
   Encode,
@@ -24,17 +25,19 @@ type User = {
 const UserJson = Symbol('UserJson') as CodecKey<User, string>
 const CountText = 'CountText' as CodecKey<number, string>
 
+class InvalidCodec extends Error { }
+
 describe('Codec', () => {
   it('encode yields the encoded type for a codec key', () => {
-    const encoded: Fx<Encode<typeof UserJson>, string> =
-      encode(UserJson, { id: 'u1', name: 'Ada' })
+    const encoded: Fx<Encode<typeof UserJson>, CodecEncoded<typeof UserJson>> =
+      encode(UserJson, { id: 'u1', name: 'Ada' } satisfies CodecValue<typeof UserJson>)
 
     assert.throws(() => run(encoded as any), /Unhandled effect in run/)
   })
 
   it('decode yields the value type for a codec key', () => {
-    const decoded: Fx<Decode<typeof UserJson>, User> =
-      decode(UserJson, '{"id":"u1","name":"Ada"}')
+    const decoded: Fx<Decode<typeof UserJson>, CodecValue<typeof UserJson>> =
+      decode(UserJson, '{"id":"u1","name":"Ada"}' satisfies CodecEncoded<typeof UserJson>)
 
     assert.throws(() => run(decoded as any), /Unhandled effect in run/)
   })
@@ -73,7 +76,7 @@ describe('Codec', () => {
   })
 
   it('propagates provider failures as Fail', () => {
-    const expected = new CodecError('invalid user')
+    const expected = new InvalidCodec('invalid user')
 
     const actual = decode(UserJson, '{}').pipe(
       withCodec(UserJson, {

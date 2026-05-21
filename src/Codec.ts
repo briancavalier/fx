@@ -32,22 +32,34 @@ export type Encoder<K extends AnyCodecKey, E = never> =
 export type Decoder<K extends AnyCodecKey, E = never> =
   (encoded: CodecEncoded<K>) => Fx<E, CodecValue<K>>
 
+/**
+ * Request encoding a value with a branded codec key.
+ */
 export class Encode<const K extends AnyCodecKey> extends Effect('fx/Codec/Encode')<{
   readonly codec: K
   readonly value: CodecValue<K>
 }, CodecEncoded<K>> { }
 
+/**
+ * Request decoding an encoded value with a branded codec key.
+ */
 export class Decode<const K extends AnyCodecKey> extends Effect('fx/Codec/Decode')<{
   readonly codec: K
   readonly encoded: CodecEncoded<K>
 }, CodecValue<K>> { }
 
+/**
+ * Encode a value using the handler associated with the codec key.
+ */
 export const encode = <const K extends AnyCodecKey>(
   codec: K,
   value: CodecValue<K>
 ): Fx<Encode<K>, CodecEncoded<K>> =>
   withOrigin(new Encode({ codec, value }), at('fx/Codec/encode', encode))
 
+/**
+ * Decode an encoded value using the handler associated with the codec key.
+ */
 export const decode = <const K extends AnyCodecKey>(
   codec: K,
   encoded: CodecEncoded<K>
@@ -65,6 +77,9 @@ export type WithEncoder<E, K extends AnyCodecKey, HandlerEffects = never> =
 export type WithDecoder<E, K extends AnyCodecKey, HandlerEffects = never> =
   E extends Decode<infer DK> ? HandleKeyedCodecEffect<E, DK, K, HandlerEffects> : E
 
+/**
+ * Handle encode requests for the matching codec key.
+ */
 export const withEncoder = <const K extends AnyCodecKey, EncodeEffects = never>(
   codec: K,
   encode: Encoder<K, EncodeEffects>
@@ -78,6 +93,9 @@ export const withEncoder = <const K extends AnyCodecKey, EncodeEffects = never>(
         ) as Fx<EncodeEffects | Encode<AnyCodecKey>, CodecEncoded<typeof effect.arg.codec>>)
     ) as Fx<WithEncoder<E, K, EncodeEffects>, A>
 
+/**
+ * Handle decode requests for the matching codec key.
+ */
 export const withDecoder = <const K extends AnyCodecKey, DecodeEffects = never>(
   codec: K,
   decode: Decoder<K, DecodeEffects>
@@ -91,6 +109,9 @@ export const withDecoder = <const K extends AnyCodecKey, DecodeEffects = never>(
         ) as Fx<DecodeEffects | Decode<AnyCodecKey>, CodecValue<typeof effect.arg.codec>>)
     ) as Fx<WithDecoder<E, K, DecodeEffects>, A>
 
+/**
+ * Handle encode and decode requests for the matching codec key.
+ */
 export const withCodec = <const K extends AnyCodecKey, EncodeEffects = never, DecodeEffects = never>(
   codec: K,
   { encode, decode }: CodecImplementation<K, EncodeEffects, DecodeEffects>
@@ -100,8 +121,6 @@ export const withCodec = <const K extends AnyCodecKey, EncodeEffects = never, De
       withEncoder(codec, encode),
       withDecoder(codec, decode)
     ) as Fx<WithCodec<E, K, EncodeEffects | DecodeEffects>, A>
-
-export class CodecError extends Error { }
 
 type HandleKeyedCodecEffect<E, EffectKey extends AnyCodecKey, HandledKey extends AnyCodecKey, HandlerEffects> =
   Extract<EffectKey, HandledKey> extends never

@@ -1,4 +1,7 @@
 {
+  "ignorePatterns": [
+    "examples/advanced/bookmarks/browser/assets/**"
+  ],
   "rules": {
     "no-async-promise-executor": "off",
     "require-yield": "off"

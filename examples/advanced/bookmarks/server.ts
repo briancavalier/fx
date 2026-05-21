@@ -10,7 +10,7 @@ import { mount, route, routes, serve, type RouteContext, type Routes, type Serve
 import { info, withConsoleLog, type Log } from '@briancavalier/fx/log'
 import { nodeHttp, runNodeMain } from '@briancavalier/fx/platform-node'
 import { defaultRandom } from '@briancavalier/fx/random'
-import { brand, forEachFrom, yieldFrom, type Yielding } from '@briancavalier/fx/scope'
+import { forEachFrom, scope, yieldFrom, type Yielding } from '@briancavalier/fx/scope'
 import { defaultTime, type Time } from '@briancavalier/fx/time'
 import {
   addBookmark,
@@ -46,7 +46,7 @@ type BookmarkRouteEffects =
   | Time
   | Log
 
-const HttpServerEvents = brand<Yielding<ServerEvent>>()('examples/advanced/bookmarks/HttpServerEvents')
+const HttpServerEvents = scope<Yielding<ServerEvent>>()('examples/advanced/bookmarks/HttpServerEvents')
 
 const createBookmark = (request: ServerRequest): Fx<BookmarkRouteEffects, ServerResponse<never>> => fx(function* () {
   const body = yield* readJson(request)

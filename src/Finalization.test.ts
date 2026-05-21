@@ -7,12 +7,12 @@ import { fx, ok, run, type Fx } from './Fx.js'
 import { andFinally, andFinallyExit, managed, using, usingManaged, type Finally, type Managed } from './Finalization.js'
 import type { Interrupt } from './Interrupt.js'
 import { returnFrom } from './ReturnFrom.js'
-import { brand, scope, type Exit } from './Scope.js'
+import { scope, withScope, type Exit } from './Scope.js'
 import { collectFrom, YieldFrom, yieldFrom, type Yielding } from './YieldFrom.js'
 
 describe('Finalization', () => {
-  const TestScope = 'test/Finalization' as const
-  const CleanupEvents = brand<Yielding<'cleanup'>>()('test/Finalization/cleanup')
+  const TestScope = scope('test/Finalization')
+  const CleanupEvents = scope<Yielding<'cleanup'>>()('test/Finalization/cleanup')
 
   it('preserves finalizer effects in constructor types', () => {
     const releaseFailure = new Error('release failed')
@@ -48,7 +48,7 @@ describe('Finalization', () => {
     const scoped = fx(function* () {
       yield* andFinally(TestScope, yieldFrom(CleanupEvents, 'cleanup'))
       return 'done'
-    }).pipe(scope(TestScope))
+    }).pipe(withScope(TestScope))
 
     const _: typeof scoped extends Fx<YieldFrom<typeof CleanupEvents> | Fail<AggregateError>, 'done'> ? true : false = true
 
@@ -66,7 +66,7 @@ describe('Finalization', () => {
     const scoped = fx(function* () {
       yield* andFinally(TestScope, fail(releaseFailure))
       return 'done'
-    }).pipe(scope(TestScope))
+    }).pipe(withScope(TestScope))
 
     const _: typeof scoped extends Fx<Fail<AggregateError>, 'done'> ? true : false = true
 
@@ -79,11 +79,11 @@ describe('Finalization', () => {
   })
 
   it('leaves finalizers from a different scope visible after scope', () => {
-    const OtherScope = 'test/Finalization/other' as const
+    const OtherScope = scope('test/Finalization/other')
     const scoped = fx(function* () {
       yield* andFinally(OtherScope, yieldFrom(CleanupEvents, 'cleanup'))
       return 'done'
-    }).pipe(scope(TestScope))
+    }).pipe(withScope(TestScope))
 
     const _: typeof scoped extends Fx<Finally<typeof OtherScope, YieldFrom<typeof CleanupEvents>>, 'done'> ? true : false = true
     const next = scoped[Symbol.iterator]().next()
@@ -101,7 +101,7 @@ describe('Finalization', () => {
       yield* andFinally(TestScope, record(released, 'B'))
       yield* andFinally(TestScope, record(released, 'C'))
       return 'done'
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.equal(result, 'done')
     assert.deepEqual(released, ['C', 'B', 'A'])
@@ -116,7 +116,7 @@ describe('Finalization', () => {
       yield* andFinally(TestScope, record(released, 'B'))
       yield* andFinally(TestScope, record(released, 'C'))
       yield* fail(programFailure)
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.ok(Fail.is(result))
     assert.equal(result.arg, programFailure)
@@ -133,7 +133,7 @@ describe('Finalization', () => {
       yield* andFinally(TestScope, record(released, 'B'))
       yield* andFinally(TestScope, record(released, 'C', cFailure))
       return 'done'
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.ok(Fail.is(result))
     assert.ok(result.arg instanceof AggregateError)
@@ -152,7 +152,7 @@ describe('Finalization', () => {
       yield* andFinally(TestScope, record(released, 'B'))
       yield* andFinally(TestScope, record(released, 'C', cFailure))
       yield* fail(programFailure)
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.ok(Fail.is(result))
     assert.ok(result.arg instanceof AggregateError)
@@ -168,7 +168,7 @@ describe('Finalization', () => {
         exits.push(exit)
       }))
       return 'done'
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.equal(result, 'done')
     assert.deepEqual(exits, [{ type: 'success', value: 'done' }])
@@ -183,7 +183,7 @@ describe('Finalization', () => {
         exits.push(exit)
       }))
       yield* fail(programFailure)
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.ok(Fail.is(result))
     assert.equal(result.arg, programFailure)
@@ -207,7 +207,7 @@ describe('Finalization', () => {
         exits.push(exit)
       }))
       return 'done'
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.equal(result, 'done')
     assert.deepEqual(released, ['B', 'A'])
@@ -223,7 +223,7 @@ describe('Finalization', () => {
       return yield* using(TestScope, ok('resource'),
         resource => record(released, resource)
       )
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.equal(result, 'resource')
     assert.deepEqual(released, ['resource'])
@@ -237,7 +237,7 @@ describe('Finalization', () => {
       return yield* using(TestScope, fail(initFailure),
         resource => record(released, String(resource))
       )
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.ok(Fail.is(result))
     assert.equal(result.arg, initFailure)
@@ -254,7 +254,7 @@ describe('Finalization', () => {
         resource => record(released, resource)
       )
       yield* fail(programFailure)
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.ok(Fail.is(result))
     assert.equal(result.arg, programFailure)
@@ -273,7 +273,7 @@ describe('Finalization', () => {
       )
       events.push(`use ${resource}`)
       return resource
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.equal(result, 'resource')
     assert.deepEqual(events, ['use resource', 'release resource', 'cleanup'])
@@ -290,7 +290,7 @@ describe('Finalization', () => {
           exits.push(exit)
         })
       )
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.equal(result, 'resource')
     assert.deepEqual(released, ['resource'])
@@ -311,7 +311,7 @@ describe('Finalization', () => {
         })
       )
       yield* fail(programFailure)
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.ok(Fail.is(result))
     assert.equal(result.arg, programFailure)
@@ -332,7 +332,7 @@ describe('Finalization', () => {
         () => fail(releaseFailure)
       )
       yield* fail(programFailure)
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.ok(Fail.is(result))
     assert.ok(result.arg instanceof AggregateError)
@@ -358,7 +358,7 @@ describe('Finalization', () => {
         'resource',
         () => record(released, 'resource')
       )))
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.equal(result, 'resource')
     assert.deepEqual(released, ['resource'])
@@ -370,7 +370,7 @@ describe('Finalization', () => {
 
     const result = run(fx(function* () {
       return yield* usingManaged(TestScope, fail(initFailure) as Fx<Fail<Error>, Managed<string>>)
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.ok(Fail.is(result))
     assert.equal(result.arg, initFailure)
@@ -389,7 +389,7 @@ describe('Finalization', () => {
         })
       )))
       yield* fail(programFailure)
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.ok(Fail.is(result))
     assert.equal(result.arg, programFailure)
@@ -406,7 +406,7 @@ describe('Finalization', () => {
       yield* andFinally(TestScope, record(released, 'A'))
       yield* andFinally(TestScope, record(released, 'B'))
       yield* returnFrom(TestScope, 'returned')
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.equal(result, 'returned')
     assert.deepEqual(released, ['B', 'A'])
@@ -420,7 +420,7 @@ describe('Finalization', () => {
         exits.push(exit)
       }))
       yield* returnFrom(TestScope, 'returned')
-    }).pipe(scope(TestScope), returnFail))
+    }).pipe(withScope(TestScope), returnFail))
 
     assert.equal(result, 'returned')
     assert.deepEqual(exits, [{
@@ -437,7 +437,7 @@ describe('Finalization', () => {
       yield* andFinally(TestScope, record(released, 'A'))
       yield* andFinally(TestScope, record(released, 'B'))
       yield* abort(TestScope)
-    }).pipe(scope(TestScope), orReturn(TestScope, 'aborted'), returnFail))
+    }).pipe(withScope(TestScope), orReturn(TestScope, 'aborted'), returnFail))
 
     assert.equal(result, 'aborted')
     assert.deepEqual(released, ['B', 'A'])
@@ -451,7 +451,7 @@ describe('Finalization', () => {
         exits.push(exit)
       }))
       yield* abort(TestScope)
-    }).pipe(scope(TestScope))
+    }).pipe(withScope(TestScope))
 
     const next = f[Symbol.iterator]().next()
 
@@ -460,13 +460,13 @@ describe('Finalization', () => {
   })
 
   it('does not run finalizers from a different scope', () => {
-    const OtherScope = 'test/Finalization/other' as const
+    const OtherScope = scope('test/Finalization/other')
     const released = [] as string[]
 
     const f = fx(function* () {
       yield* andFinally(OtherScope, record(released, 'other'))
       return 'done'
-    }).pipe(scope(TestScope))
+    }).pipe(withScope(TestScope))
 
     const next = f[Symbol.iterator]().next()
 

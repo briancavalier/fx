@@ -1,5 +1,6 @@
 import { EffectType } from './Effect.js'
 import { Fx } from './Fx.js'
+import type { AnyScope } from './Scope.js'
 import { Answer, Arg, Control, Handler } from './internal/Handler.js'
 export type { Arg }
 
@@ -13,11 +14,11 @@ export type Handle<E, A, B = never> = E extends A ? B : E
  */
 export type HandleReturn<E, A, R> = E extends A ? R : never
 
-type MatchedScopedEffect<A, Scope extends string> =
+type MatchedScopedEffect<A, Scope extends AnyScope> =
   A & { readonly scope: Scope }
 
-type ResidualScopedEffect<E, Scope extends string> =
-  E extends { readonly scope: infer EffectScope extends string }
+type ResidualScopedEffect<E, Scope extends AnyScope> =
+  E extends { readonly scope: infer EffectScope extends AnyScope }
   ? Exclude<EffectScope, Scope> extends never
     ? never
     : E & { readonly scope: Exclude<EffectScope, Scope> }
@@ -26,9 +27,9 @@ type ResidualScopedEffect<E, Scope extends string> =
 /**
  * Replace matching scoped effects in `E` with effects produced by a handler.
  */
-export type HandleScoped<E, A, Scope extends string, B = never> =
+export type HandleScoped<E, A, Scope extends AnyScope, B = never> =
   E extends A
-  ? E extends { readonly scope: infer EffectScope extends string }
+  ? E extends { readonly scope: infer EffectScope extends AnyScope }
     ? Extract<EffectScope, Scope> extends never
       ? E
       : B | ResidualScopedEffect<E, Scope>
@@ -36,7 +37,7 @@ export type HandleScoped<E, A, Scope extends string, B = never> =
   : E
 
 type ScopedEffectType =
-  EffectType & { new(...args: readonly any[]): { readonly scope: string } }
+  EffectType & { new(...args: readonly any[]): { readonly scope: AnyScope } }
 
 type EffectScope<T extends ScopedEffectType> =
   InstanceType<T>['scope']
@@ -77,15 +78,15 @@ export const handle = <T extends EffectType, HandlerEffects>(
  *
  * @example
  * ```ts
- * class Ask<const Scope extends string>
+ * class Ask<const S extends Scope>
  *   extends ScopedEffect('app/Ask')<Scope, void, string> { }
  *
  * const program = fx(function* () {
- *   return yield* new Ask('user', undefined)
+ *   return yield* new Ask(UserScope, undefined)
  * })
  *
  * const result = program.pipe(
- *   handleScoped(Ask, 'user', () => ok('Ada')),
+ *   handleScoped(Ask, UserScope, () => ok('Ada')),
  *   run
  * )
  * ```

@@ -3,7 +3,7 @@ import { consoleLog, defaultConsole, fx, handleScoped, provide, returnAll, runPr
 
 import { w3cFetch } from '@briancavalier/fx/http-client'
 import { withConsoleLog } from '@briancavalier/fx/log'
-import { scope, YieldFrom } from '@briancavalier/fx/scope'
+import { withScope, YieldFrom } from '@briancavalier/fx/scope'
 import { defaultTime } from '@briancavalier/fx/time'
 
 import {
@@ -31,7 +31,7 @@ const main = fx(function* ({ openAIApiKey }: OpenAIModelContext) {
       defaultTime,
       defaultAll,
       bounded(4),
-      scope(AgentSessionScope),
+      withScope(AgentSessionScope),
       logAgentEvents,
       returnAll
     )
@@ -43,7 +43,7 @@ const main = fx(function* ({ openAIApiKey }: OpenAIModelContext) {
       defaultTime,
       defaultAll,
       bounded(4),
-      scope(AgentSessionScope),
+      withScope(AgentSessionScope),
       logAgentEvents,
       w3cFetch(),
       returnAll

@@ -6,7 +6,7 @@ import { Effect } from './Effect.js'
 import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { handle, handleScoped } from './Handler.js'
 import { returnFrom } from './ReturnFrom.js'
-import { brand, scope } from './Scope.js'
+import { scope, withScope } from './Scope.js'
 import { next as nextSink, Sink } from './Sink.js'
 import type { Receiving } from './Sink.js'
 import {
@@ -27,13 +27,13 @@ import { dispose } from './internal/disposable.js'
 import type { Yielding } from './YieldFrom.js'
 
 describe('YieldFrom', () => {
-  const NumberScope = brand<Yielding<number>>()('test/YieldFrom/numbers')
-  const NumberSinkScope = brand<Receiving<number>>()('test/YieldFrom/number-sink')
-  const ItemScope = brand<Yielding<'item'>>()('test/YieldFrom/item')
-  const DecisionScope = brand<Yielding<string, boolean>>()('test/YieldFrom/decision')
+  const NumberScope = scope<Yielding<number>>()('test/YieldFrom/numbers')
+  const NumberSinkScope = scope<Receiving<number>>()('test/YieldFrom/number-sink')
+  const ItemScope = scope<Yielding<'item'>>()('test/YieldFrom/item')
+  const DecisionScope = scope<Yielding<string, boolean>>()('test/YieldFrom/decision')
 
   it('allows sink scopes independent of YieldFrom protocols', () => {
-    const SinkOnlyScope = brand<Receiving<number>>()('test/YieldFrom/sink-only')
+    const SinkOnlyScope = scope<Receiving<number>>()('test/YieldFrom/sink-only')
     const f = fx(function* () {
       const value = yield* nextSink(SinkOnlyScope)
       return value + 1
@@ -60,6 +60,20 @@ describe('YieldFrom', () => {
     assert.deepEqual(result, ['done', [1, 2]])
   })
 
+  it('does not collect yields from a same-name different scope token', () => {
+    const FirstScope = scope<Yielding<'first'>>()('test/YieldFrom/same-name')
+    const SecondScope = scope<Yielding<'second'>>()('test/YieldFrom/same-name')
+    const f = fx(function* () {
+      yield* yieldFrom(SecondScope, 'second')
+      return 'done'
+    }).pipe(collectFrom(FirstScope))
+
+    const next = f[Symbol.iterator]().next()
+
+    assert.equal(YieldFrom.is(next.value), true)
+    assert.equal((next.value as YieldFrom<typeof SecondScope>).scope, SecondScope)
+  })
+
   it('preserves yield order and final result when collecting', () => {
     const result = fx(function* () {
       for (let i = 0; i < 4; ++i) yield* yieldFrom(NumberScope, i)
@@ -73,7 +87,7 @@ describe('YieldFrom', () => {
   })
 
   it('propagates yields from a different scope', () => {
-    const OtherScope = brand<Yielding<'other'>>()('test/YieldFrom/other')
+    const OtherScope = scope<Yielding<'other'>>()('test/YieldFrom/other')
 
     const f = fx(function* () {
       yield* yieldFrom(OtherScope, 'other')
@@ -90,7 +104,7 @@ describe('YieldFrom', () => {
   })
 
   it('handles nested named yield scopes independently', () => {
-    const InnerScope = brand<Yielding<'inner'>>()('test/YieldFrom/inner')
+    const InnerScope = scope<Yielding<'inner'>>()('test/YieldFrom/inner')
     const outer = [] as number[]
     const inner = [] as string[]
 
@@ -140,14 +154,14 @@ describe('YieldFrom', () => {
   })
 
   it('allows ReturnFrom from a yield handler', () => {
-    const ReturnScope = 'test/YieldFrom/return' as const
+    const ReturnScope = scope('test/YieldFrom/return')
 
     const result = fx(function* () {
       yield* yieldFrom(ItemScope, 'item')
       return 'late'
     }).pipe(
       handleScoped(YieldFrom<typeof ItemScope>, ItemScope, () => returnFrom(ReturnScope, 'early')),
-      scope(ReturnScope),
+      withScope(ReturnScope),
       run
     )
 
@@ -155,14 +169,14 @@ describe('YieldFrom', () => {
   })
 
   it('allows Abort from a yield handler', () => {
-    const AbortScope = 'test/YieldFrom/abort' as const
+    const AbortScope = scope('test/YieldFrom/abort')
 
     const result = fx(function* () {
       yield* yieldFrom(ItemScope, 'item')
       return 'late'
     }).pipe(
       handleScoped(YieldFrom<typeof ItemScope>, ItemScope, () => abort(AbortScope)),
-      scope(AbortScope),
+      withScope(AbortScope),
       orReturn(AbortScope, 'aborted'),
       run
     )
@@ -336,8 +350,8 @@ describe('YieldFrom', () => {
     })
 
     it('leaves unrelated YieldFrom and Sink scopes visible', () => {
-      const OtherScope = brand<Yielding<'other'>>()('test/YieldFrom/other-to')
-      const OtherSinkScope = brand<Receiving<'other'>>()('test/YieldFrom/other-sink-to')
+      const OtherScope = scope<Yielding<'other'>>()('test/YieldFrom/other-to')
+      const OtherSinkScope = scope<Receiving<'other'>>()('test/YieldFrom/other-sink-to')
       const source = fx(function* () {
         yield* yieldFrom(OtherScope, 'other')
         return 'source'
@@ -438,7 +452,7 @@ describe('YieldFrom', () => {
     })
 
     it('rejects bidirectional YieldFrom scopes', () => {
-      const DecisionSinkScope = brand<Receiving<string>>()('test/YieldFrom/decision-sink')
+      const DecisionSinkScope = scope<Receiving<string>>()('test/YieldFrom/decision-sink')
       const source = fx(function* () {
         yield* yieldFrom(DecisionScope, 'item')
       })
@@ -453,7 +467,7 @@ describe('YieldFrom', () => {
     })
 
     it('rejects sinks that cannot receive the yielded values', () => {
-      const StringSinkScope = brand<Receiving<string>>()('test/YieldFrom/string-sink')
+      const StringSinkScope = scope<Receiving<string>>()('test/YieldFrom/string-sink')
       const source = fx(function* () {
         yield* yieldFrom(NumberScope, 1)
       })

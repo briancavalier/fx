@@ -1,7 +1,7 @@
-import { abort, managed, orReturn, restartOnAbort, usingManaged } from '@briancavalier/fx/scope'
+import { abort, managed, orReturn, restartOnAbort, scope, usingManaged } from '@briancavalier/fx/scope'
 import { assert as assertNoFail, consoleLog, defaultConsole, fx, run } from '@briancavalier/fx'
 
-const SubmitOrder = 'examples/intermediate/restart-on-abort/SubmitOrder' as const
+const SubmitOrder = scope('examples/intermediate/restart-on-abort/SubmitOrder')
 
 type AuthToken = {
   readonly value: string

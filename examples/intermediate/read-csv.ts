@@ -1,8 +1,8 @@
 import { assert as assertNoFail, type Console, consoleLog, defaultConsole, fx, type Fx, handleScoped, run } from '@briancavalier/fx'
 
-import { brand, managed, returnFrom, scope, usingManaged, yieldFrom, YieldFrom, type Yielding } from '@briancavalier/fx/scope'
+import { managed, returnFrom, scope, withScope, usingManaged, yieldFrom, YieldFrom, type Yielding } from '@briancavalier/fx/scope'
 
-const ImportCsv = 'examples/intermediate/ImportCsv' as const
+const ImportCsv = scope('examples/intermediate/ImportCsv')
 
 type ImportResult =
   | { readonly type: 'imported'; readonly count: number }
@@ -20,8 +20,8 @@ type IndexedCsvRow = {
   readonly value: CsvRow
 }
 
-const CsvRows = brand<Yielding<CsvRow>>()('examples/intermediate/CsvRows')
-const IndexedCsvRows = brand<Yielding<IndexedCsvRow>>()('examples/intermediate/IndexedCsvRows')
+const CsvRows = scope<Yielding<CsvRow>>()('examples/intermediate/CsvRows')
+const IndexedCsvRows = scope<Yielding<IndexedCsvRow>>()('examples/intermediate/IndexedCsvRows')
 
 const stopImport = (reason: string) =>
   returnFrom(ImportCsv, { type: 'skipped', reason } satisfies ImportResult)
@@ -97,7 +97,7 @@ const importCsv = (path: string, text: string): Fx<Console, ImportResult> => fx(
   const count = yield* importRows(file)
 
   return { type: 'imported', count } satisfies ImportResult
-}).pipe(scope(ImportCsv)) as Fx<Console, ImportResult>
+}).pipe(withScope(ImportCsv)) as Fx<Console, ImportResult>
 
 const goodCsv = `
 name,email

@@ -4,7 +4,7 @@ import { unbounded } from '@briancavalier/fx/concurrent'
 import { serve, type ServerEvent, type ServerListening } from '@briancavalier/fx/http-server'
 import { nodeHttp } from '@briancavalier/fx/platform-node'
 import { info, withConsoleLog } from '@briancavalier/fx/log'
-import { brand, forEachFrom, yieldFrom, type Yielding } from '@briancavalier/fx/scope'
+import { forEachFrom, scope, yieldFrom, type Yielding } from '@briancavalier/fx/scope'
 import { defaultTime } from '@briancavalier/fx/time'
 import { appRoutes, memoryNotes } from './api.js'
 
@@ -12,7 +12,7 @@ type ServerConfig = {
   readonly port: number
 }
 
-const HttpServerEvents = brand<Yielding<ServerEvent>>()('examples/basic/http-server-client/HttpServerEvents')
+const HttpServerEvents = scope<Yielding<ServerEvent>>()('examples/basic/http-server-client/HttpServerEvents')
 
 const server = fx(function* ({ port }: ServerConfig) {
   return yield* serve(appRoutes, {

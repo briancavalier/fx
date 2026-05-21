@@ -9,7 +9,7 @@ import { fx, runPromise } from './Fx.js'
 import { control } from './Handler.js'
 import { InterruptFrom } from './InterruptFrom.js'
 import { defaultRetry, retry } from './Retry.js'
-import { scope } from './Scope.js'
+import { ScopeTypeId, scope, withScope } from './Scope.js'
 import { wait } from './Task.js'
 import { sleep, withClock } from './Time.js'
 import { TimeoutInterrupt, timeout } from './Timeout.js'
@@ -141,17 +141,42 @@ describe('Trace', () => {
   })
 
   it('captures active scopes in trace snapshots ordered outer-to-inner', async () => {
+    const DbTransaction = scope('db/transaction')
+    const HttpRequest = scope('http/request')
     const f = fx(function* () {
       yield* fail(new Error('scoped failure'))
     }).pipe(
-      scope('db/transaction'),
-      scope('http/request')
+      withScope(DbTransaction),
+      withScope(HttpRequest)
     )
 
     await assert.rejects(
       runPromise(f as never),
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request', 'db/transaction'])
+        return true
+      }
+    )
+  })
+
+  it('keeps the scope brand non-enumerable', () => {
+    const TestScope = scope('test/Trace/non-enumerable', { label: 'non-enumerable' })
+
+    assert.equal(Object.getOwnPropertyDescriptor(TestScope, ScopeTypeId)?.enumerable, false)
+    assert.deepEqual(Object.keys(TestScope), ['name', 'label'])
+  })
+
+  it('uses scope labels in active-scope diagnostics', async () => {
+    const RequestScope = scope('test/Trace/request', { label: 'request' })
+    const f = fx(function* () {
+      yield* fail(new Error('labeled scope'))
+    }).pipe(withScope(RequestScope))
+
+    await assert.rejects(
+      runPromise(f as never),
+      e => {
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['request'])
+        assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: request/)
         return true
       }
     )
@@ -164,11 +189,13 @@ describe('Trace', () => {
   })
 
   it('formats active scopes compactly on one line', async () => {
+    const DbTransaction = scope('db/transaction')
+    const HttpRequest = scope('http/request')
     const f = fx(function* () {
       yield* fail(new Error('scoped formatting'))
     }).pipe(
-      scope('db/transaction'),
-      scope('http/request')
+      withScope(DbTransaction),
+      withScope(HttpRequest)
     )
 
     await assert.rejects(
@@ -182,8 +209,8 @@ describe('Trace', () => {
   })
 
   it('compacts deep active scope stacks', async () => {
-    const scoped = ['a', 'b', 'c', 'd', 'e'].reduceRight(
-      (f, name) => f.pipe(scope(name)),
+    const scoped = ['a', 'b', 'c', 'd', 'e'].map(name => scope(name)).reduceRight(
+      (f, name) => f.pipe(withScope(name)),
       fx(function* () {
         yield* fail(new Error('deep scopes'))
       })
@@ -266,12 +293,13 @@ describe('Trace', () => {
   })
 
   it('propagates active scopes to forked children', async () => {
+    const HttpRequest = scope('http/request')
     const f = fx(function* () {
       const task = yield* fork(fx(function* () {
         yield* fail(new Error('fork scoped'))
       }))
       yield* wait(task)
-    }).pipe(scope('http/request'))
+    }).pipe(withScope(HttpRequest))
 
     await assert.rejects(
       runPromise(f.pipe(unbounded) as never),
@@ -283,12 +311,13 @@ describe('Trace', () => {
   })
 
   it('propagates active scopes through structured concurrency handlers', async () => {
+    const HttpRequest = scope('http/request')
     const allProgram = fx(function* () {
       yield* all([fx(function* () { yield* fail(new Error('all scoped')) })]).pipe(defaultAll)
-    }).pipe(scope('http/request'))
+    }).pipe(withScope(HttpRequest))
     const raceProgram = fx(function* () {
       yield* race([fx(function* () { yield* fail(new Error('race scoped')) })]).pipe(firstSettled)
-    }).pipe(scope('http/request'))
+    }).pipe(withScope(HttpRequest))
 
     await assert.rejects(
       runPromise(allProgram.pipe(unbounded) as never),
@@ -307,9 +336,10 @@ describe('Trace', () => {
   })
 
   it('propagates active scopes to async failures', async () => {
+    const HttpRequest = scope('http/request')
     const f = fx(function* () {
       yield* tryPromise(() => Promise.reject(new Error('async scoped')))
-    }).pipe(scope('http/request'))
+    }).pipe(withScope(HttpRequest))
 
     await assert.rejects(
       runPromise(f as never),
@@ -321,9 +351,10 @@ describe('Trace', () => {
   })
 
   it('captures active scopes for cleanup failures', async () => {
+    const DbTransaction = scope('db/transaction')
     const f = fx(function* () {
-      yield* andFinally('db/transaction', fail(new Error('cleanup scoped')))
-    }).pipe(scope('db/transaction'))
+      yield* andFinally(DbTransaction, fail(new Error('cleanup scoped')))
+    }).pipe(withScope(DbTransaction))
 
     await assert.rejects(
       runPromise(f as never),
@@ -405,13 +436,13 @@ describe('Trace', () => {
 
   it('propagates regional trace policy through timeout and retry handlers', async () => {
     const clock = new VirtualClock(0)
-    const TimeoutScope = 'test/Trace/timeout' as const
+    const TimeoutScope = scope('test/Trace/timeout')
     const timeoutProgram = fx(function* () {
       return yield* sleep(100).pipe(timeout(TimeoutScope, { ms: 50 }))
     })
 
     const timeoutPromise = timeoutProgram.pipe(
-      scope(TimeoutScope),
+      withScope(TimeoutScope),
       control(InterruptFrom, (_, interrupt) => fx(function* () {
         return interrupt.arg
       })),

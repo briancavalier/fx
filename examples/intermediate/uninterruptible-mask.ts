@@ -1,7 +1,7 @@
 import { assert as assertNoFail, consoleLog, control, defaultConsole, fx, runPromise, uninterruptibleMask } from '@briancavalier/fx'
 import { unbounded } from '@briancavalier/fx/concurrent'
 
-import { andFinallyExit, InterruptFrom, scope } from '@briancavalier/fx/scope'
+import { andFinallyExit, InterruptFrom, scope, withScope } from '@briancavalier/fx/scope'
 
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 import { timeout } from '@briancavalier/fx/timeout'
@@ -15,7 +15,7 @@ import { timeout } from '@briancavalier/fx/timeout'
  * cleanup is registered before the slow operation is interrupted.
  */
 
-const ExampleScope = 'examples/intermediate/uninterruptible-mask' as const
+const ExampleScope = scope('examples/intermediate/uninterruptible-mask')
 
 const acquireResource = fx(function* () {
   yield* consoleLog('slow: acquiring resource')
@@ -53,7 +53,7 @@ const main = fx(function* () {
 })
 
 await main.pipe(
-  scope(ExampleScope),
+  withScope(ExampleScope),
   control(InterruptFrom, () => fx(function* () {
     yield* consoleLog('result: timed out')
   })),

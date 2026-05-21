@@ -10,12 +10,47 @@ import { drainIteratorReturn, isInterpretingReturn } from './internal/iteratorCl
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { interruptionReason, withActiveScope } from './internal/runtimeContext.js'
 
-export const brand = <Brand>() =>
-  <const Name extends string>(name: Name): Name & Brand =>
-    name as Name & Brand
+export const ScopeTypeId = Symbol('fx/Scope')
+
+export interface ScopeMetadata {
+  readonly label?: string
+  readonly description?: string
+}
+
+export interface Scope<Name extends string = string> {
+  readonly [ScopeTypeId]: Name
+  readonly name: Name
+  readonly label?: string
+  readonly description?: string
+}
+
+export type AnyScope = Scope<string>
+
+export function scope<Brand>(): <const Name extends string>(name: Name, metadata?: ScopeMetadata) => Scope<Name> & Brand
+export function scope<const Name extends string>(name: Name, metadata?: ScopeMetadata): Scope<Name>
+export function scope(name?: string, metadata: ScopeMetadata = {}) {
+  if (name === undefined) return scope
+
+  const token = {
+    name,
+    ...metadata
+  }
+
+  Object.defineProperty(token, ScopeTypeId, {
+    value: name,
+    enumerable: false,
+    writable: false,
+    configurable: false
+  })
+
+  return token
+}
+
+export const scopeLabel = (scope: AnyScope): string =>
+  scope.label ?? scope.name
 
 export type Exit<
-  Scope extends string = string,
+  Scope extends AnyScope = AnyScope,
   A = unknown,
   F extends Fail<unknown> = Fail<unknown>,
   R = unknown
@@ -36,108 +71,109 @@ export interface Failure<F extends Fail<unknown>> {
   readonly failure: F
 }
 
-export interface ReturnedFrom<Scope extends string, A> {
+export interface ReturnedFrom<Scope extends AnyScope, A> {
   readonly type: 'returnFrom'
   readonly scope: Scope
   readonly value: A
 }
 
-export interface Aborted<Scope extends string> {
+export interface Aborted<Scope extends AnyScope> {
   readonly type: 'abort'
   readonly scope: Scope
 }
 
-export interface Interrupted<Scope extends string> {
+export interface Interrupted<Scope extends AnyScope> {
   readonly type: 'interrupted'
   readonly scope: Scope
   readonly reason?: unknown
 }
 
-export function scope<const Scope extends string>(
-  name: Scope
+export function withScope<const Scope extends AnyScope>(
+  scope: Scope
 ): <const E, const A>(f: Fx<E, A>) => Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>> {
   return <const E, const A>(f: Fx<E, A>) =>
-    new ScopeBoundary(f, name) as Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>>
+    new ScopeBoundary(f, scope) as Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>>
 }
 
-export type ScopeEffects<E, Scope extends string> =
+export type ScopeEffects<E, Scope extends AnyScope> =
   HandleScopeEffect<E, Scope> | CleanupEffects<E, Scope> | CleanupFailure<E, Scope>
 
-type HandleScopeEffect<E, Scope extends string> =
+type HandleScopeEffect<E, Scope extends AnyScope> =
   E extends Finally<Scope, any> ? never
   : E extends ReturnFrom<Scope, any> ? never
   : E
 
-type MatchingFinally<E, Scope extends string> =
+type MatchingFinally<E, Scope extends AnyScope> =
   Extract<E, Finally<Scope, any>>
 
-type FinalizerEffects<E, Scope extends string> =
+type FinalizerEffects<E, Scope extends AnyScope> =
   MatchingFinally<E, Scope> extends never
     ? never
     : MatchingFinally<E, Scope> extends Finally<Scope, infer FE> ? FE : never
 
-type CleanupEffects<E, Scope extends string> =
+type CleanupEffects<E, Scope extends AnyScope> =
   Exclude<FinalizerEffects<E, Scope>, Fail<any>>
 
-type CleanupFailure<E, Scope extends string> =
+type CleanupFailure<E, Scope extends AnyScope> =
   MatchingFinally<E, Scope> extends never ? never : Fail<AggregateError>
 
-export type ReturnValue<E, Scope extends string> =
+export type ReturnValue<E, Scope extends AnyScope> =
   E extends ReturnFrom<Scope, infer A> ? A : never
 
-class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipeable, CapturedHandler {
+class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pipeable, CapturedHandler {
   public readonly pipe = pipeThis as Pipeable['pipe']
 
   constructor(
     public readonly fx: Fx<E, A>,
-    public readonly scopeName: Scope
+    public readonly scope: Scope
   ) { }
 
   wrap(fx: Fx<unknown, unknown>): Fx<unknown, unknown> {
-    return new ScopeBoundary(fx, this.scopeName)
+    return new ScopeBoundary(fx, this.scope)
   }
 
   *[Symbol.iterator](): Iterator<unknown, A> {
     const finalizers = [] as Finalizer<unknown>[]
-    const { scopeName } = this
-    const i = withActiveScope(scopeName, this.fx)[Symbol.iterator]()
+    const { scope } = this
+    const activeScope = scopeLabel(scope)
+    const i = withActiveScope(activeScope, this.fx)[Symbol.iterator]()
     const captured: CapturedHandler = {
-      wrap: fx => new ScopeBoundary(fx, scopeName)
+      wrap: fx => new ScopeBoundary(fx, scope)
     }
     let released = false
     const release = function* (exit: Exit): Generator<unknown, readonly unknown[]> {
       if (released) return []
       released = true
-      return yield* withActiveScope(scopeName, releaseSafely(finalizers, exit))
+      return yield* withActiveScope(activeScope, releaseSafely(finalizers, exit))
     }
     const step = function* (ir: IteratorResult<unknown, A>): Generator<unknown, A, unknown> {
       while (!ir.done) {
         if (isEffect(ir.value)) {
           const effect = ir.value
-          const sameScope = (effect as { readonly scope?: unknown }).scope === scopeName
+          const sameScope = (effect as { readonly scope?: unknown }).scope === scope
 
           if (sameScope && Finally.is(effect)) {
             finalizers.push(effect.arg)
             ir = i.next(undefined)
           } else if (sameScope && ReturnFrom.is(effect)) {
-            const exit = { type: 'returnFrom', scope: scopeName, value: effect.arg } satisfies Exit<Scope>
+            const exit = { type: 'returnFrom', scope, value: effect.arg } satisfies Exit<Scope>
             const failures = yield* release(exit)
-            if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup(failures))) as A
+            if (failures.length > 0) return (yield* withActiveScope(activeScope, failCleanup(failures))) as A
             return effect.arg as A
           } else if (sameScope && Abort.is(effect)) {
-            const exit = { type: 'abort', scope: scopeName } satisfies Exit<Scope>
+            const exit = { type: 'abort', scope } satisfies Exit<Scope>
             const failures = yield* release(exit)
-            if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup(failures))) as A
+            if (failures.length > 0) return (yield* withActiveScope(activeScope, failCleanup(failures))) as A
             return (yield effect) as A
           } else if (sameScope && InterruptFrom.is(effect)) {
-            const exit = interruptedExit(scopeName, effect.arg)
+            const exit = interruptedExit(scope, effect.arg)
             const failures = yield* release(exit)
-            if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup(failures))) as A
+            if (failures.length > 0) return (yield* withActiveScope(activeScope, failCleanup(failures))) as A
             return (yield effect) as A
           } else if (Fail.is(effect)) {
             const exit = { type: 'failure', failure: effect } satisfies Exit
             const failures = yield* release(exit)
-            if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup([effect.arg, ...failures]))) as A
+            if (failures.length > 0) return (yield* withActiveScope(activeScope, failCleanup([effect.arg, ...failures]))) as A
             return (yield effect) as A
           } else if (HandlerCapture.is(effect)) {
             ir = i.next([captured, ...(yield effect) as any])
@@ -151,7 +187,7 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
 
       const exit = { type: 'success', value: ir.value } satisfies Exit<Scope, A>
       const failures = yield* release(exit)
-      if (failures.length > 0) return (yield* withActiveScope(scopeName, failCleanup(failures))) as A
+      if (failures.length > 0) return (yield* withActiveScope(activeScope, failCleanup(failures))) as A
       return ir.value
     }
 
@@ -161,14 +197,14 @@ class ScopeBoundary<E, A, Scope extends string> implements Fx<unknown, A>, Pipea
       completed = true
       return value
     } finally {
-      const cleanupFailures = yield* collectInterruptedCleanupFailures(scopeName, release, completed, isInterpretingReturn(), i, step)
-      if (cleanupFailures.length > 0) yield* withActiveScope(scopeName, failCleanup(cleanupFailures))
+      const cleanupFailures = yield* collectInterruptedCleanupFailures(scope, release, completed, isInterpretingReturn(), i, step)
+      if (cleanupFailures.length > 0) yield* withActiveScope(activeScope, failCleanup(cleanupFailures))
     }
   }
 }
 
-const collectInterruptedCleanupFailures = function* <A, Scope extends string>(
-  scopeName: Scope,
+const collectInterruptedCleanupFailures = function* <A, Scope extends AnyScope>(
+  scope: Scope,
   release: (exit: Exit) => Generator<unknown, readonly unknown[]>,
   completed: boolean,
   shouldDrainReturn: boolean,
@@ -176,7 +212,7 @@ const collectInterruptedCleanupFailures = function* <A, Scope extends string>(
   step: (ir: IteratorResult<unknown, A>) => Generator<unknown, A, unknown>
 ): Generator<unknown, readonly unknown[], unknown> {
   const failures = [] as unknown[]
-  const exit = interruptedExit(scopeName, interruptionReason())
+  const exit = interruptedExit(scope, interruptionReason())
 
   yield* collectCleanupFailures(failures, function* () {
     failures.push(...yield* release(exit))
@@ -194,7 +230,7 @@ const collectInterruptedCleanupFailures = function* <A, Scope extends string>(
   return failures
 }
 
-const interruptedExit = <Scope extends string>(scope: Scope, reason: unknown): Exit<Scope> =>
+const interruptedExit = <Scope extends AnyScope>(scope: Scope, reason: unknown): Exit<Scope> =>
   reason === undefined
     ? { type: 'interrupted', scope }
     : { type: 'interrupted', scope, reason }

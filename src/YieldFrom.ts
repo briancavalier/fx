@@ -4,6 +4,7 @@ import { Fail } from './Fail.js'
 import { Fx, assertSync, bracket, fx, map, ok } from './Fx.js'
 import { handleScoped } from './Handler.js'
 import { Sink, ExcludeSink, type Receiving, type SinkInput } from './Sink.js'
+import { scopeLabel, type AnyScope } from './Scope.js'
 import type { Interrupt } from './Interrupt.js'
 import * as Queue from './internal/Queue.js'
 import { dispose } from './internal/disposable.js'
@@ -29,22 +30,22 @@ export type YieldInput<Scope> =
  * Yield a value to the named scope.
  */
 export class YieldFrom<
-  const Scope extends string & Yielding<unknown, unknown>
+  const Scope extends AnyScope & Yielding<unknown, unknown>
 > extends ScopedEffect('fx/YieldFrom')<Scope, YieldOutput<Scope>, YieldInput<Scope>> { }
 
 /**
  * Yield a value to the named scope.
  */
-export const yieldFrom = <const Scope extends string & Yielding<unknown, unknown>>(
+export const yieldFrom = <const Scope extends AnyScope & Yielding<unknown, unknown>>(
   scope: Scope,
   value: YieldOutput<Scope>
 ): YieldFrom<Scope> =>
   new YieldFrom(scope, value)
 
-export type YieldValue<E, Scope extends string & Yielding<unknown, unknown>> =
+export type YieldValue<E, Scope extends AnyScope & Yielding<unknown, unknown>> =
   E extends YieldFrom<Scope> ? YieldOutput<Scope> : never
 
-export type ExcludeYieldFrom<E, Scope extends string & Yielding<unknown, unknown>, E2 = never> =
+export type ExcludeYieldFrom<E, Scope extends AnyScope & Yielding<unknown, unknown>, E2 = never> =
   E extends YieldFrom<Scope> ? E2 : E
 
 export interface IterableWithReturn<Y, R> {
@@ -62,7 +63,7 @@ export type PipeResult<Source, Sink> =
 /**
  * Collect all one-way yields from the named scope.
  */
-export const collectFrom = <const Scope extends string & Yielding<unknown, void>>(scope: Scope) =>
+export const collectFrom = <const Scope extends AnyScope & Yielding<unknown, void>>(scope: Scope) =>
   <const E, const A>(
     f: Fx<E, A>
   ): Fx<ExcludeYieldFrom<E, Scope>, readonly [A, readonly YieldValue<E, Scope>[]]> => {
@@ -78,7 +79,7 @@ export const collectFrom = <const Scope extends string & Yielding<unknown, void>
 /**
  * Apply an effectful function to each yield from the named scope.
  */
-export const forEachFrom = <const Scope extends string & Yielding<unknown, void>, E, R, E2>(
+export const forEachFrom = <const Scope extends AnyScope & Yielding<unknown, void>, E, R, E2>(
   scope: Scope,
   f: Fx<E, R>,
   each: (a: YieldValue<E, Scope>) => Fx<E2, void>
@@ -90,7 +91,7 @@ export const forEachFrom = <const Scope extends string & Yielding<unknown, void>
 /**
  * Create a scoped yield source from a {@link Queue.Dequeue}.
  */
-export const fromDequeue = <const Scope extends string & Yielding<unknown, void>>(
+export const fromDequeue = <const Scope extends AnyScope & Yielding<unknown, void>>(
   scope: Scope,
   queue: Queue.Dequeue<YieldOutput<Scope>>
 ): Fx<Async | YieldFrom<Scope>, void> => fx(function* () {
@@ -105,7 +106,7 @@ export const fromDequeue = <const Scope extends string & Yielding<unknown, void>
 /**
  * Create a scoped yield source from values enqueued by f.
  */
-export const withEnqueue = <const Scope extends string & Yielding<unknown, void>>(
+export const withEnqueue = <const Scope extends AnyScope & Yielding<unknown, void>>(
   scope: Scope,
   f: (o: Queue.Enqueue<YieldOutput<Scope>>) => Disposable,
   queue: Queue.Queue<YieldOutput<Scope>> = new Queue.UnboundedQueue()
@@ -118,7 +119,7 @@ export const withEnqueue = <const Scope extends string & Yielding<unknown, void>
 /**
  * Create a scoped yield source from an Iterable.
  */
-export const fromIterable = <const Scope extends string & Yielding<unknown, void>, R>(
+export const fromIterable = <const Scope extends AnyScope & Yielding<unknown, void>, R>(
   scope: Scope,
   i: IterableWithReturn<YieldOutput<Scope>, R>
 ): Fx<YieldFrom<Scope> | Interrupt, IfAny<R, void>> => bracket(
@@ -137,7 +138,7 @@ export const fromIterable = <const Scope extends string & Yielding<unknown, void
 /**
  * Create a scoped yield source from an AsyncIterable.
  */
-export const fromAsyncIterable = <const Scope extends string & Yielding<unknown, void>, R>(
+export const fromAsyncIterable = <const Scope extends AnyScope & Yielding<unknown, void>, R>(
   scope: Scope,
   f: () => AsyncIterableWithReturn<YieldOutput<Scope>, R>
 ): Fx<Async | YieldFrom<Scope> | Interrupt, R> => bracket(
@@ -154,7 +155,7 @@ export const fromAsyncIterable = <const Scope extends string & Yielding<unknown,
   })
 )
 
-export const toAsyncIterable = <const Scope extends string & Yielding<unknown, void>, E extends Async | YieldFrom<Scope> | Fail<any>, A>(
+export const toAsyncIterable = <const Scope extends AnyScope & Yielding<unknown, void>, E extends Async | YieldFrom<Scope> | Fail<any>, A>(
   scope: Scope,
   f: Fx<E, A>
 ): AsyncIterableWithReturn<YieldValue<E, Scope>, A> => ({
@@ -175,7 +176,7 @@ export const toAsyncIterable = <const Scope extends string & Yielding<unknown, v
             yield next.arg as YieldValue<E, Scope>
             result = iterator.next()
           } else {
-            throw new Error(`Unexpected effect while converting YieldFrom scope ${scope} to AsyncIterable`)
+            throw new Error(`Unexpected effect while converting YieldFrom scope ${scopeLabel(scope)} to AsyncIterable`)
           }
         }
         return result.value
@@ -190,8 +191,8 @@ export const toAsyncIterable = <const Scope extends string & Yielding<unknown, v
  * Pipe all one-way yields from one scope into a sink from another scope.
  */
 export const to = <
-  const SourceScope extends string & Yielding<unknown, void>,
-  const SinkScope extends string & Receiving<YieldOutput<SourceScope>>,
+  const SourceScope extends AnyScope & Yielding<unknown, void>,
+  const SinkScope extends AnyScope & Receiving<YieldOutput<SourceScope>>,
   E1,
   E2,
   R1,

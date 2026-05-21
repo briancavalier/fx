@@ -6,14 +6,14 @@ import { fx, ok, run, runPromise } from './Fx.js'
 import { andFinallyExit } from './Finalization.js'
 import { control } from './Handler.js'
 import { InterruptFrom } from './InterruptFrom.js'
-import { scope, type Exit } from './Scope.js'
+import { scope, withScope, type Exit } from './Scope.js'
 import { TimeoutInterrupt, timeout } from './Timeout.js'
 import { sleep, withClock } from './Time.js'
 import { getTrace } from './Trace.js'
 import { VirtualClock } from './internal/time.js'
 
 describe('Timeout', () => {
-  const TestScope = 'test/Timeout' as const
+  const TestScope = scope('test/Timeout')
 
   it('returns the result when the Fx completes before the timeout', async () => {
     const c = new VirtualClock(0)
@@ -27,7 +27,7 @@ describe('Timeout', () => {
         ms: 100,
         reason: () => void (reasons += 1)
       }),
-      scope(TestScope),
+      withScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       returnFail,
       unbounded,
@@ -57,7 +57,7 @@ describe('Timeout', () => {
       completed = true
     }).pipe(
       timeout(TestScope, { ms: 50, reason: () => reason }),
-      scope(TestScope),
+      withScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       returnFail,
       unbounded,
@@ -84,7 +84,7 @@ describe('Timeout', () => {
       yield* sleep(100)
     }).pipe(
       timeout(TestScope, { ms: 50 }),
-      scope(TestScope),
+      withScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       returnFail,
       unbounded,
@@ -100,7 +100,7 @@ describe('Timeout', () => {
     assert.equal(reason.code, 'FX_TIMEOUT_INTERRUPT')
     assert.ok(reason.cause instanceof Error)
     assert.match(reason.cause.stack ?? '', /Timeout\.test\.ts/)
-    assert.deepEqual(traceMessages(reason).slice(0, 1), [`Timeout interrupted ${TestScope} after 50ms`])
+    assert.deepEqual(traceMessages(reason).slice(0, 1), [`Timeout interrupted ${TestScope.name} after 50ms`])
     assert.equal(exit.type, 'interrupted')
     assert.equal(exit.reason, reason)
   })
@@ -114,7 +114,7 @@ describe('Timeout', () => {
       return 'unreachable'
     }).pipe(
       timeout(TestScope, { ms: 100 }),
-      scope(TestScope),
+      withScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       returnFail,
       unbounded,
@@ -143,7 +143,7 @@ describe('Timeout', () => {
       yield* sleep(100)
     }).pipe(
       timeout(TestScope, { ms: 50 }),
-      scope(TestScope),
+      withScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       returnFail,
       unbounded,
@@ -169,7 +169,7 @@ describe('Timeout', () => {
   it('leaves timeout interruption visible until explicitly handled', () => {
     assert.throws(() => {
       // @ts-expect-error Timeout interruption is not handled
-      run(ok('ok').pipe(timeout(TestScope, { ms: 1 }), scope(TestScope)))
+      run(ok('ok').pipe(timeout(TestScope, { ms: 1 }), withScope(TestScope)))
     }, /Unhandled effect in run/)
   })
 })

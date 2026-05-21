@@ -5,7 +5,7 @@ import { assert as assertNoFail } from './Fail.js'
 import { andFinally } from './Finalization.js'
 import { fx, type Fx } from './Fx.js'
 import { runNodeMain, runNodePromise, type NodeSignalName, type NodeSignalProcess } from './NodeRuntime.js'
-import { scope } from './Scope.js'
+import { scope, withScope } from './Scope.js'
 
 describe('NodeRuntime', () => {
   it('installs and removes SIGINT and SIGTERM listeners by default', async () => {
@@ -37,7 +37,7 @@ describe('NodeRuntime', () => {
 
   it('interrupts the running task when a configured signal arrives', async () => {
     const process = fakeProcess()
-    const TestScope = 'test/NodeRuntime/interrupt' as const
+    const TestScope = scope('test/NodeRuntime/interrupt')
     let asyncAborted = false
     let released = false
 
@@ -49,7 +49,7 @@ describe('NodeRuntime', () => {
         asyncAborted = true
       })
     }).pipe(
-      scope(TestScope),
+      withScope(TestScope),
       assertNoFail
     ), { process })
 

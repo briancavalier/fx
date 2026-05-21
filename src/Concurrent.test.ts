@@ -7,7 +7,7 @@ import { RaceAllFailed, all, bounded, defaultAll, firstSettled, firstSuccess, fo
 import { andFinally, andFinallyExit } from './Finalization.js'
 import { bracket, flatMap, fx, ok, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
-import { scope, type Exit } from './Scope.js'
+import { scope, withScope, type Exit } from './Scope.js'
 import { Task, wait } from './Task.js'
 import { getTrace, snapshotError } from './Trace.js'
 
@@ -274,7 +274,7 @@ describe('Fork', () => {
     })
 
     it('runs children with scopes between all and defaultAll', async () => {
-      const TestScope = 'test/Fork/AllScope' as const
+      const TestScope = scope('test/Fork/AllScope')
       const released = [] as string[]
       const cause = new Error('all scope failed')
 
@@ -284,7 +284,7 @@ describe('Fork', () => {
         }))
         yield* fail(cause)
       })]).pipe(
-        scope(TestScope),
+        withScope(TestScope),
         defaultAll,
         returnFail,
         unbounded,
@@ -297,7 +297,7 @@ describe('Fork', () => {
     })
 
     it('releases scoped finalizers when all cancels a sibling', async () => {
-      const TestScope = 'test/Fork/AllCancelScope' as const
+      const TestScope = scope('test/Fork/AllCancelScope')
       const released = [] as string[]
       const cause = new Error('all failed')
 
@@ -314,7 +314,7 @@ describe('Fork', () => {
 
       const result = await all([slow, bad]).pipe(
         defaultAll,
-        scope(TestScope),
+        withScope(TestScope),
         returnFail,
         unbounded,
         runPromise
@@ -326,7 +326,7 @@ describe('Fork', () => {
     })
 
     it('surfaces cleanup failures when all cancels a sibling', async () => {
-      const TestScope = 'test/Fork/AllCancelCleanupFailure' as const
+      const TestScope = scope('test/Fork/AllCancelCleanupFailure')
       const cause = new Error('all failed')
       const releaseFailure = new Error('release failed')
 
@@ -341,7 +341,7 @@ describe('Fork', () => {
 
       const result = await all([slow, bad]).pipe(
         defaultAll,
-        scope(TestScope),
+        withScope(TestScope),
         returnFail,
         unbounded,
         runPromise
@@ -356,7 +356,7 @@ describe('Fork', () => {
     })
 
     it('reports every cleanup failure when all cancels siblings', async () => {
-      const TestScope = 'test/Fork/AllCancelMultipleCleanupFailures' as const
+      const TestScope = scope('test/Fork/AllCancelMultipleCleanupFailures')
       const cause = new Error('all failed')
       const firstReleaseFailure = new Error('first release failed')
       const secondReleaseFailure = new Error('second release failed')
@@ -372,7 +372,7 @@ describe('Fork', () => {
 
       const result = await all([slow(firstReleaseFailure), bad, slow(secondReleaseFailure)]).pipe(
         defaultAll,
-        scope(TestScope),
+        withScope(TestScope),
         returnFail,
         unbounded,
         runPromise
@@ -435,7 +435,7 @@ describe('Fork', () => {
     })
 
     it('releases scoped finalizers when race cancels the loser', async () => {
-      const TestScope = 'test/Fork/RaceCancelScope' as const
+      const TestScope = scope('test/Fork/RaceCancelScope')
       const released = [] as string[]
 
       const slow = fx(function* () {
@@ -447,7 +447,7 @@ describe('Fork', () => {
 
       const result = await race([ok('winner'), slow]).pipe(
         firstSettled,
-        scope(TestScope),
+        withScope(TestScope),
         returnFail,
         unbounded,
         runPromise
@@ -458,7 +458,7 @@ describe('Fork', () => {
     })
 
     it('fails when a race loser cleanup fails after a successful winner', async () => {
-      const TestScope = 'test/Fork/RaceCancelCleanupFailure' as const
+      const TestScope = scope('test/Fork/RaceCancelCleanupFailure')
       const releaseFailure = new Error('release failed')
 
       const slow = fx(function* () {
@@ -468,7 +468,7 @@ describe('Fork', () => {
 
       const result = await race([ok('winner'), slow]).pipe(
         firstSettled,
-        scope(TestScope),
+        withScope(TestScope),
         returnFail,
         unbounded,
         runPromise
@@ -547,7 +547,7 @@ describe('Fork', () => {
     })
 
     it('fails when firstSuccess loser cleanup fails after a successful winner', async () => {
-      const TestScope = 'test/Fork/FirstSuccessCancelCleanupFailure' as const
+      const TestScope = scope('test/Fork/FirstSuccessCancelCleanupFailure')
       const releaseFailure = new Error('release failed')
 
       const slow = fx(function* () {
@@ -557,7 +557,7 @@ describe('Fork', () => {
 
       const result = await race([ok('winner'), slow]).pipe(
         firstSuccess,
-        scope(TestScope),
+        withScope(TestScope),
         returnFail,
         unbounded,
         runPromise
@@ -637,7 +637,7 @@ describe('Fork', () => {
 
 describe('Task interruption finalization', () => {
   it('explicit task interruption releases scoped finalizers', async () => {
-    const TestScope = 'test/Fork/DisposeScope' as const
+    const TestScope = scope('test/Fork/DisposeScope')
     const released = [] as string[]
 
     const task = taskOrThrow(await fx(function* () {
@@ -648,7 +648,7 @@ describe('Task interruption finalization', () => {
         yield* awaitAbort()
       }))
     }).pipe(
-      scope(TestScope),
+      withScope(TestScope),
       returnFail,
       unbounded,
       runPromise
@@ -660,7 +660,7 @@ describe('Task interruption finalization', () => {
   })
 
   it('runs interrupted scoped finalizers once when task interruption is repeated', async () => {
-    const TestScope = 'test/Fork/DisposeOnceScope' as const
+    const TestScope = scope('test/Fork/DisposeOnceScope')
     const released = [] as string[]
 
     const task = taskOrThrow(await fx(function* () {
@@ -671,7 +671,7 @@ describe('Task interruption finalization', () => {
         yield* awaitAbort()
       }))
     }).pipe(
-      scope(TestScope),
+      withScope(TestScope),
       returnFail,
       unbounded,
       runPromise
@@ -684,7 +684,7 @@ describe('Task interruption finalization', () => {
   })
 
   it('provides interrupted exit to exit-aware finalizers', async () => {
-    const TestScope = 'test/Fork/InterruptedExitScope' as const
+    const TestScope = scope('test/Fork/InterruptedExitScope')
     const exits = [] as Exit[]
 
     const task = taskOrThrow(await fx(function* () {
@@ -695,7 +695,7 @@ describe('Task interruption finalization', () => {
         yield* awaitAbort()
       }))
     }).pipe(
-      scope(TestScope),
+      withScope(TestScope),
       returnFail,
       unbounded,
       runPromise
@@ -734,7 +734,7 @@ describe('Task interruption finalization', () => {
   })
 
   it('runs async effects in interrupted finalizers before interruption completes', async () => {
-    const TestScope = 'test/Fork/InterruptedAsyncFinalizer' as const
+    const TestScope = scope('test/Fork/InterruptedAsyncFinalizer')
     const released = [] as string[]
 
     const task = taskOrThrow(await fx(function* () {
@@ -746,7 +746,7 @@ describe('Task interruption finalization', () => {
         yield* awaitAbort()
       }))
     }).pipe(
-      scope(TestScope),
+      withScope(TestScope),
       returnFail,
       unbounded,
       runPromise
@@ -758,7 +758,7 @@ describe('Task interruption finalization', () => {
   })
 
   it('drains effects yielded from wrapped iterator return during interruption', async () => {
-    const TestScope = 'test/Fork/InterruptedInnerReturn' as const
+    const TestScope = scope('test/Fork/InterruptedInnerReturn')
     const released = [] as string[]
 
     const task = taskOrThrow(await fx(function* () {
@@ -773,7 +773,7 @@ describe('Task interruption finalization', () => {
         )
       }))
     }).pipe(
-      scope(TestScope),
+      withScope(TestScope),
       returnFail,
       unbounded,
       runPromise
@@ -785,7 +785,7 @@ describe('Task interruption finalization', () => {
   })
 
   it('drains wrapped iterator return after interrupted scoped finalizer yields', async () => {
-    const TestScope = 'test/Fork/InterruptedScopeThenInnerReturn' as const
+    const TestScope = scope('test/Fork/InterruptedScopeThenInnerReturn')
     const released = [] as string[]
 
     const task = taskOrThrow(await fx(function* () {
@@ -804,7 +804,7 @@ describe('Task interruption finalization', () => {
         )
       }))
     }).pipe(
-      scope(TestScope),
+      withScope(TestScope),
       returnFail,
       unbounded,
       runPromise
@@ -816,7 +816,7 @@ describe('Task interruption finalization', () => {
   })
 
   it('documents async cleanup rejection wrapper during interruption', async () => {
-    const TestScope = 'test/Fork/InterruptedAsyncCleanupRejection' as const
+    const TestScope = scope('test/Fork/InterruptedAsyncCleanupRejection')
     const releaseFailure = new Error('async release failed')
 
     const slow = fx(function* () {
@@ -826,7 +826,7 @@ describe('Task interruption finalization', () => {
 
     const result = await race([ok('winner'), slow]).pipe(
       firstSettled,
-      scope(TestScope),
+      withScope(TestScope),
       returnFail,
       unbounded,
       runPromise
@@ -843,7 +843,7 @@ describe('Task interruption finalization', () => {
   })
 
   it('aggregates interrupted scoped and wrapped iterator cleanup failures', async () => {
-    const TestScope = 'test/Fork/InterruptedMultipleCleanupFailures' as const
+    const TestScope = scope('test/Fork/InterruptedMultipleCleanupFailures')
     const scopeFailure = new Error('scope release failed')
     const innerFailure = new Error('inner release failed')
 
@@ -858,7 +858,7 @@ describe('Task interruption finalization', () => {
 
     const result = await race([ok('winner'), slow]).pipe(
       firstSettled,
-      scope(TestScope),
+      withScope(TestScope),
       returnFail,
       unbounded,
       runPromise
@@ -871,7 +871,7 @@ describe('Task interruption finalization', () => {
   })
 
   it('aggregates interrupted scoped cleanup failure with synchronous iterator return throw', async () => {
-    const TestScope = 'test/Fork/InterruptedReturnThrow' as const
+    const TestScope = scope('test/Fork/InterruptedReturnThrow')
     const scopeFailure = new Error('scope release failed')
     const innerFailure = new Error('inner hard throw')
     const throwsOnReturn = (): ReturnType<typeof awaitAbort> => ({
@@ -894,7 +894,7 @@ describe('Task interruption finalization', () => {
 
     const result = await race([ok('winner'), slow]).pipe(
       firstSettled,
-      scope(TestScope),
+      withScope(TestScope),
       returnFail,
       unbounded,
       runPromise
@@ -907,7 +907,7 @@ describe('Task interruption finalization', () => {
   })
 
   it('runs interrupted finalizers through outer handlers', async () => {
-    const TestScope = 'test/Fork/InterruptedOuterHandler' as const
+    const TestScope = scope('test/Fork/InterruptedOuterHandler')
     class Release extends Effect('test/Fork/InterruptedOuterHandler/Release')<void, void> { }
     const released = [] as string[]
 
@@ -917,7 +917,7 @@ describe('Task interruption finalization', () => {
         yield* awaitAbort()
       }))
     }).pipe(
-      scope(TestScope),
+      withScope(TestScope),
       returnFail,
       unbounded,
       handle(Release, () => fx(function* () {
@@ -932,7 +932,7 @@ describe('Task interruption finalization', () => {
   })
 
   it('runs interrupted finalizers through captured handlers', async () => {
-    const TestScope = 'test/Fork/InterruptedCapturedHandler' as const
+    const TestScope = scope('test/Fork/InterruptedCapturedHandler')
     class Release extends Effect('test/Fork/InterruptedCapturedHandler/Release')<void, void> { }
     const released = [] as string[]
 
@@ -942,7 +942,7 @@ describe('Task interruption finalization', () => {
         yield* awaitAbort()
       }))
     }).pipe(
-      scope(TestScope),
+      withScope(TestScope),
       handle(Release, () => fx(function* () {
         released.push('task')
       })),

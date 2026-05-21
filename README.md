@@ -99,7 +99,7 @@ their named subpaths.
 | Retry and timeout policies | `@briancavalier/fx/retry`, `@briancavalier/fx/timeout` |
 | HTTP client and transport-neutral HTTP server routes | `@briancavalier/fx/http-client`, `@briancavalier/fx/http-server` |
 | Node runtime, process, diagnostics, and HTTP transport | `@briancavalier/fx/platform-node` |
-| Mutable references | `@briancavalier/fx/ref` |
+| Mutable reference primitive | `@briancavalier/fx/ref` |
 
 ---
 

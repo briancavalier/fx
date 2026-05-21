@@ -30,16 +30,16 @@ export function interruptFrom(scope: string, reason?: unknown): Fx<InterruptFrom
  * this boundary. It does not resume the interrupted computation. Interruptions
  * from other scopes are left visible for another handler.
  */
-export const recoverInterrupt = <const Scope extends string, const HandlerEffects, const R, Reason = unknown>(
+export const recoverInterrupt = <const Scope extends string, const HandlerEffects, const R>(
   scope: Scope,
-  handler: (reason: Reason) => Fx<HandlerEffects, R>
+  handler: (reason: unknown) => Fx<HandlerEffects, R>
 ) => <const E, const A>(
   f: Fx<E, A>
 ): Fx<RecoverInterrupt<E, Scope, HandlerEffects>, A | R> =>
     f.pipe(
       control(InterruptFrom, (_, interrupt): Fx<HandlerEffects | InterruptFrom<string, unknown>, R> =>
         (interrupt.scope === scope
-          ? handler(interrupt.arg as Reason)
+          ? handler(interrupt.arg)
           : interrupt as Fx<InterruptFrom<string, unknown>, never>) as Fx<HandlerEffects | InterruptFrom<string, unknown>, R>)
     ) as Fx<RecoverInterrupt<E, Scope, HandlerEffects>, A | R>
 

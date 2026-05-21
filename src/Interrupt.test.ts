@@ -39,6 +39,31 @@ describe('Typed interruption', () => {
     assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope, reason }])
   })
 
+  it('types recovery reasons as unknown', () => {
+    const reason = { type: 'test-interrupt' } as const
+    const recovered = interruptFrom(TestScope, reason).pipe(
+      scope(TestScope),
+      recoverInterrupt(TestScope, r => {
+        const _: unknown = r
+        void _
+        return ok('interrupted')
+      })
+    )
+
+    const _: Fx<never, 'interrupted'> = recovered
+    void _
+  })
+
+  it('rejects incompatible recovery reason annotations', () => {
+    const recovered = interruptFrom(TestScope, 123).pipe(
+      scope(TestScope),
+      // @ts-expect-error recovery reasons are unknown until narrowed by the handler
+      recoverInterrupt(TestScope, (r: string) => ok(r))
+    )
+
+    void recovered
+  })
+
   it('leaves interruptions from other scopes visible', () => {
     const OtherScope = 'test/InterruptFrom/recover-other' as const
 

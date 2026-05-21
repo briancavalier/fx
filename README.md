@@ -162,6 +162,7 @@ their named subpaths.
 | Capability | Import from |
 | --- | --- |
 | Core programs, effects, handlers, failure, async, env, task, console, basic diagnostics | `@briancavalier/fx` |
+| Encoding and decoding external data with branded codec keys | `@briancavalier/fx/codec` |
 | Advanced trace capture, snapshots, and trace formatting options | `@briancavalier/fx/trace` |
 | Named scopes, abort, finalization, early return, scoped yielding | `@briancavalier/fx/scope` |
 | Sinks for receiving values | `@briancavalier/fx/sink` |
@@ -242,6 +243,10 @@ No container, no wiring graph—just a pipeline.
 
 - **Scoped yielding**
   Programs emit values to named channels with `yieldFrom`
+
+- **External data boundaries**
+  Branded codec keys keep parsing, serialization, and validation explicit
+  without coupling reusable programs to a schema library
 
 - **Explicit runtime boundaries**
   Async, platform, HTTP, time, random, trace, and Node behavior are interpreted

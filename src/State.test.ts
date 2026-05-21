@@ -1,11 +1,11 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { returnFail } from './Fail.js'
+import { returnFail, type Fail } from './Fail.js'
 import { andFinally } from './Finalization.js'
-import { fx, run } from './Fx.js'
+import { fx, run, type Fx } from './Fx.js'
 import { brand, scope } from './Scope.js'
-import { GetState, getState, modifyState, type Stateful, withState } from './State.js'
+import { GetState, getState, modifyState, type ModifyState, type Stateful, withState } from './State.js'
 
 describe('State', () => {
   const CounterState = brand<Stateful<number>>()('test/State/Counter')
@@ -82,5 +82,24 @@ describe('State', () => {
 
     assert.equal(program, 2)
     assert.equal(finalizerState, 2)
+  })
+
+  it('leaves cleanup state effects typed when withState is inside the scope boundary', () => {
+    const program = fx(function* () {
+      yield* andFinally(CounterState, modifyState(CounterState, count => [count + 1, undefined]))
+      return 'done'
+    })
+    const wrongOrder = program.pipe(withState(CounterState, 1), scope(CounterState))
+    const rightOrder = program.pipe(scope(CounterState), withState(CounterState, 1))
+
+    type WrongEffects = typeof wrongOrder extends Fx<infer E, 'done'> ? E : never
+    type RightEffects = typeof rightOrder extends Fx<infer E, 'done'> ? E : never
+    const cleanupStateIsVisible: Extract<WrongEffects, ModifyState<typeof CounterState, any>> extends never ? false : true = true
+    const cleanupStateIsHandled: Extract<RightEffects, ModifyState<typeof CounterState, any>> extends never ? true : false = true
+    const cleanupFailureRemains: RightEffects extends Fail<AggregateError> ? true : false = true
+
+    assert.equal(typeof cleanupStateIsVisible, 'boolean')
+    assert.equal(typeof cleanupStateIsHandled, 'boolean')
+    assert.equal(typeof cleanupFailureRemains, 'boolean')
   })
 })

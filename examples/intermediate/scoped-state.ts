@@ -1,4 +1,4 @@
-import { consoleLog, defaultConsole, fx, runPromise } from '@briancavalier/fx'
+import { consoleLog, defaultConsole, fx, runPromise, trySync } from '@briancavalier/fx'
 import { brand, scope } from '@briancavalier/fx/scope'
 import { getState, modifyState, type Stateful, withStateInit } from '@briancavalier/fx/state'
 
@@ -26,9 +26,7 @@ const program = fx(function* () {
 
 await program.pipe(
   scope(SessionState),
-  withStateInit(SessionState, fx(function* () {
-    return { requests: 0, lastRoute: 'none' }
-  })),
+  withStateInit(SessionState, trySync(() => ({ requests: 0, lastRoute: 'none' }))),
   defaultConsole,
   runPromise
 ).then(console.log)

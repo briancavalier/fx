@@ -12,8 +12,9 @@ type User = {
   readonly name: string
 }
 
-const UserJsonSymbol = Symbol("UserJson")
-const UserJson = codecKey<User, string>()(UserJsonSymbol)
+const UserJson = codecKey<User, string>()("UserJson", {
+  description: "User encoded as JSON"
+})
 
 const program = (input: string) => fx(function* () {
   const user = yield* decode(UserJson, input)
@@ -23,7 +24,8 @@ const program = (input: string) => fx(function* () {
 
 A codec key is both a runtime identity and a phantom type. Use `codecKey` with
 a string literal or a `const` symbol so TypeScript preserves the specific key
-identity. The handler matches the runtime key with `Object.is`, while
+identity. You can attach metadata such as `description` for diagnostics and
+documentation. The handler matches the key identity with `Object.is`, while
 TypeScript tracks the decoded and encoded types.
 
 Handler pipeline:

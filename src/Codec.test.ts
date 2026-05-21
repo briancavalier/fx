@@ -24,7 +24,9 @@ type User = {
 
 const UserJsonSymbol = Symbol('UserJson')
 const OtherUserJsonSymbol = Symbol('OtherUserJson')
-const UserJson = codecKey<User, string>()(UserJsonSymbol)
+const UserJson = codecKey<User, string>()(UserJsonSymbol, {
+  description: 'User encoded as JSON'
+})
 const OtherUserJson = codecKey<User, string>()(OtherUserJsonSymbol)
 const CountText = codecKey<number, string>()('CountText')
 
@@ -65,6 +67,12 @@ describe('Codec', () => {
     assert.deepEqual(JSON.parse(actual), { id: 'u1', name: 'ADA' })
   })
 
+  it('creates codec keys with string or symbol identity and metadata', () => {
+    assert.equal(UserJson.id, UserJsonSymbol)
+    assert.equal(UserJson.description, 'User encoded as JSON')
+    assert.equal(CountText.id, 'CountText')
+  })
+
   it('preserves non-matching codec keys as unhandled effects', () => {
     const program = fx(function* () {
       const user = yield* decode(UserJson, '{"id":"u1","name":"Ada"}')
@@ -90,8 +98,21 @@ describe('Codec', () => {
     const residualEffect: EffectsOf<typeof program> =
       new Decode({ codec: OtherUserJson, encoded: '{"id":"u2","name":"Grace"}' })
 
-    assert.equal(residualEffect.arg.codec, OtherUserJson)
+    assert.equal(residualEffect.arg.codec.id, OtherUserJsonSymbol)
     assert.throws(() => run(residual as any), /Unhandled effect in run/)
+  })
+
+  it('matches different codec key objects with the same identity', () => {
+    const SameCountText = codecKey<number, string>()('CountText', {
+      description: 'Same codec identity with different metadata'
+    })
+
+    const actual = decode(CountText, '41').pipe(
+      withDecoder(SameCountText, text => ok(Number(text))),
+      run
+    )
+
+    assert.equal(actual, 41)
   })
 
   it('propagates provider failures as Fail', () => {

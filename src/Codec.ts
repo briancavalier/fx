@@ -5,28 +5,42 @@ import { handle } from './Handler.js'
 
 export const CodecKeyTypeId: unique symbol = Symbol('fx/Codec/key')
 
-export type CodecKey<A, Encoded> =
-  (string | symbol) & {
-    readonly [CodecKeyTypeId]: {
-      readonly value: A
-      readonly encoded: Encoded
-    }
-  }
+export interface CodecKeyMetadata {
+  readonly description?: string
+}
 
-export type AnyCodecKey = CodecKey<any, any>
+export type CodecKey<A, Encoded, Id extends string | symbol = string | symbol> = {
+  readonly [CodecKeyTypeId]: {
+    readonly value: A
+    readonly encoded: Encoded
+    readonly id: Id
+  }
+  readonly id: Id
+  readonly description?: string
+}
+
+export type AnyCodecKey = CodecKey<any, any, any>
 
 /**
- * Brand a string or symbol as a codec key while preserving its identity.
+ * Create a codec key with a string or symbol identity and optional metadata.
  */
 export const codecKey = <A, Encoded>() =>
-  <const Key extends string | symbol>(key: Key): Key & CodecKey<A, Encoded> =>
-    key as Key & CodecKey<A, Encoded>
+  <const Id extends string | symbol>(id: Id, metadata: CodecKeyMetadata = {}): CodecKey<A, Encoded, Id> =>
+    Object.defineProperty({
+      ...metadata,
+      id
+    }, CodecKeyTypeId, {
+      value: { id },
+      enumerable: false,
+      writable: false,
+      configurable: false
+    }) as CodecKey<A, Encoded, Id>
 
 export type CodecValue<K> =
-  K extends CodecKey<infer A, any> ? A : never
+  K extends CodecKey<infer A, any, any> ? A : never
 
 export type CodecEncoded<K> =
-  K extends CodecKey<any, infer Encoded> ? Encoded : never
+  K extends CodecKey<any, infer Encoded, any> ? Encoded : never
 
 export type CodecImplementation<K extends AnyCodecKey, EncodeEffects = never, DecodeEffects = never> = {
   readonly encode: Encoder<K, EncodeEffects>
@@ -94,7 +108,7 @@ export const withEncoder = <const K extends AnyCodecKey, EncodeEffects = never>(
   <const E, const A>(fx: Fx<E, A>): Fx<WithEncoder<E, K, EncodeEffects>, A> =>
     fx.pipe(
       handle(Encode, effect =>
-        (Object.is(effect.arg.codec, codec)
+        (Object.is(effect.arg.codec.id, codec.id)
           ? encode(effect.arg.value as CodecValue<K>)
           : effect as Fx<typeof effect, CodecEncoded<typeof effect.arg.codec>>
         ) as Fx<EncodeEffects | Encode<AnyCodecKey>, CodecEncoded<typeof effect.arg.codec>>)
@@ -110,7 +124,7 @@ export const withDecoder = <const K extends AnyCodecKey, DecodeEffects = never>(
   <const E, const A>(fx: Fx<E, A>): Fx<WithDecoder<E, K, DecodeEffects>, A> =>
     fx.pipe(
       handle(Decode, effect =>
-        (Object.is(effect.arg.codec, codec)
+        (Object.is(effect.arg.codec.id, codec.id)
           ? decode(effect.arg.encoded as CodecEncoded<K>)
           : effect as Fx<typeof effect, CodecValue<typeof effect.arg.codec>>
         ) as Fx<DecodeEffects | Decode<AnyCodecKey>, CodecValue<typeof effect.arg.codec>>)

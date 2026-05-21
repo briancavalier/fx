@@ -7,8 +7,9 @@ type User = {
   readonly createdAt: Date
 }
 
-const UserJsonSymbol = Symbol('UserJson')
-const UserJson = codecKey<User, string>()(UserJsonSymbol)
+const UserJson = codecKey<User, string>()('UserJson', {
+  description: 'User encoded as JSON with createdAt as an ISO string'
+})
 
 class InvalidUserJson extends Error { }
 

@@ -46,7 +46,7 @@ subpaths for optional feature areas and advanced trace tools.
 | Structured logging | `@briancavalier/fx/log` |
 | Retry and timeout | `@briancavalier/fx/retry`, `@briancavalier/fx/timeout` |
 | HTTP and Node platform boundaries | `@briancavalier/fx/http-client`, `@briancavalier/fx/http-server`, `@briancavalier/fx/platform-node` |
-| Mutable references | `@briancavalier/fx/ref` |
+| Mutable reference primitive | `@briancavalier/fx/ref` |
 
 For simple console output, use `consoleLog` with `defaultConsole` from the root
 import. Use `log`, `info`, `warn`, `error`, and `withConsoleLog` from

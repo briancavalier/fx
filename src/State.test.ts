@@ -4,7 +4,7 @@ import { describe, it } from 'node:test'
 import { returnFail } from './Fail.js'
 import { andFinally } from './Finalization.js'
 import { fx, run } from './Fx.js'
-import { brand } from './Scope.js'
+import { brand, scope } from './Scope.js'
 import { GetState, getState, modifyState, type Stateful, withState } from './State.js'
 
 describe('State', () => {
@@ -78,7 +78,7 @@ describe('State', () => {
       }))
 
       return yield* getState(CounterState)
-    }).pipe(withState(CounterState, 1), returnFail, run)
+    }).pipe(scope(CounterState), withState(CounterState, 1), returnFail, run)
 
     assert.equal(program, 2)
     assert.equal(finalizerState, 2)

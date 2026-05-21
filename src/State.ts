@@ -1,7 +1,6 @@
 import { ScopedEffect } from './Effect.js'
 import { Fx, fx, ok } from './Fx.js'
 import { handleScoped, type HandleScoped } from './Handler.js'
-import { scope as scoped, type ReturnValue, type ScopeEffects } from './Scope.js'
 
 declare const StatefulTypeId: unique symbol
 
@@ -48,12 +47,11 @@ export const withState = <const Scope extends string & Stateful<unknown>>(
   initial: StateOf<Scope>
 ) => <const E, const A>(
   f: Fx<E, A>
-): Fx<ExcludeState<ScopeEffects<E, Scope>, Scope>, A | ReturnValue<E, Scope>> =>
+): Fx<ExcludeState<E, Scope>, A> =>
     fx(function* () {
       let state = initial
 
       return yield* f.pipe(
-        scoped(scope),
         handleScoped(GetState<Scope>, scope, () => ok(state)),
         handleScoped(ModifyState<Scope>, scope, effect => {
           const [next, result] = effect.arg(state)
@@ -61,4 +59,4 @@ export const withState = <const Scope extends string & Stateful<unknown>>(
           return ok(result)
         })
       )
-    }) as Fx<ExcludeState<ScopeEffects<E, Scope>, Scope>, A | ReturnValue<E, Scope>>
+    }) as Fx<ExcludeState<E, Scope>, A>

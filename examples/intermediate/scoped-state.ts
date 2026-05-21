@@ -1,5 +1,5 @@
 import { consoleLog, defaultConsole, fx, runPromise } from '@briancavalier/fx'
-import { brand } from '@briancavalier/fx/scope'
+import { brand, scope } from '@briancavalier/fx/scope'
 import { getState, modifyState, type Stateful, withState } from '@briancavalier/fx/state'
 
 type Session = {
@@ -25,6 +25,7 @@ const program = fx(function* () {
 })
 
 await program.pipe(
+  scope(SessionState),
   withState(SessionState, { requests: 0, lastRoute: 'none' }),
   defaultConsole,
   runPromise

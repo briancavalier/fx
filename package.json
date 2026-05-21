@@ -14,6 +14,10 @@
       "types": "./dist/exports/index.d.ts",
       "import": "./dist/exports/index.js"
     },
+    "./codec": {
+      "types": "./dist/exports/codec.d.ts",
+      "import": "./dist/exports/codec.js"
+    },
     "./concurrent": {
       "types": "./dist/exports/concurrent.d.ts",
       "import": "./dist/exports/concurrent.js"
@@ -85,10 +89,12 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^25.9.0",
+    "effect": "^3.21.2",
     "oxfmt": "^0.50.0",
     "oxlint": "^1.65.0",
     "oxlint-tsgolint": "^0.22.1",
     "tsx": "^4.22.1",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "zod": "^4.4.3"
   }
 }

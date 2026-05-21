@@ -159,7 +159,7 @@ describe('Trace', () => {
     )
   })
 
-  it('keeps the scope brand non-enumerable', () => {
+  it('keeps the scope token marker non-enumerable', () => {
     const TestScope = scope('test/Trace/non-enumerable', { label: 'non-enumerable' })
 
     assert.equal(Object.getOwnPropertyDescriptor(TestScope, ScopeTypeId)?.enumerable, false)

@@ -146,7 +146,7 @@ describe('YieldFrom', () => {
     assert.equal(f.pipe(run), 'accepted')
   })
 
-  it('requires yielded values to match the scope brand', () => {
+  it('requires yielded values to match the scope token protocol', () => {
     // @ts-expect-error NumberScope yields numbers
     const _ = yieldFrom(NumberScope, 'not a number')
 

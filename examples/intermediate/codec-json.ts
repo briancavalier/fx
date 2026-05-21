@@ -11,6 +11,9 @@ const UserJson = Symbol('UserJson') as CodecKey<User, string>
 
 class InvalidUserJson extends Error { }
 
+// This example keeps the codec implementation hand-rolled so it has no
+// dependencies. Real handlers can delegate to any schema or codec library, such
+// as Zod codecs, Effect Schema, Valibot, Arktype, or a project-local parser.
 const incomingJson = JSON.stringify({
   id: 'user-1',
   name: 'Ada',
@@ -28,6 +31,8 @@ const roundTrip = <K extends CodecKey<User, string>>(codec: K, input: CodecEncod
     flatMap(user => encode(codec, { ...user, name: user.name.toUpperCase() }))
   )
 
+// The reusable program above only knows about the codec key. The concrete JSON
+// parsing, validation, and Date conversion live in the boundary handler below.
 const decodeUser = (value: unknown) => {
   if (
     value !== null

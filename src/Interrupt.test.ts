@@ -7,12 +7,97 @@ import { firstSettled, race, unbounded } from './Concurrent.js'
 import { andFinally, andFinallyExit, managed, using, usingManaged } from './Finalization.js'
 import { bracket, fx, ok, run, runPromise, runTask, type Fx } from './Fx.js'
 import { control, handle } from './Handler.js'
-import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
+import { InterruptFrom, interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible, uninterruptibleMask, type Interrupt, type RestoreInterrupt } from './Interrupt.js'
 import { scope, type Exit } from './Scope.js'
 
 describe('Typed interruption', () => {
   const TestScope = 'test/InterruptFrom' as const
+
+  it('recovers matching scoped interruptions without resuming', () => {
+    const reason = { type: 'test-interrupt' } as const
+    const exits = [] as Exit[]
+    let recoveredReason: unknown
+
+    const result = fx(function* () {
+      yield* andFinallyExit(TestScope, exit => fx(function* () {
+        exits.push(exit)
+      }))
+      yield* interruptFrom(TestScope, reason)
+    }).pipe(
+      scope(TestScope),
+      recoverInterrupt(TestScope, r => {
+        recoveredReason = r
+        return ok('interrupted')
+      }),
+      returnFail,
+      run
+    )
+
+    assert.equal(result, 'interrupted')
+    assert.equal(recoveredReason, reason)
+    assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope, reason }])
+  })
+
+  it('types recovery reasons as unknown', () => {
+    const reason = { type: 'test-interrupt' } as const
+    const recovered = interruptFrom(TestScope, reason).pipe(
+      scope(TestScope),
+      recoverInterrupt(TestScope, r => {
+        const _: unknown = r
+        void _
+        return ok('interrupted')
+      })
+    )
+
+    const _: Fx<never, 'interrupted'> = recovered
+    void _
+  })
+
+  it('rejects incompatible recovery reason annotations', () => {
+    const recovered = interruptFrom(TestScope, 123).pipe(
+      scope(TestScope),
+      // @ts-expect-error recovery reasons are unknown until narrowed by the handler
+      recoverInterrupt(TestScope, (r: string) => ok(r))
+    )
+
+    void recovered
+  })
+
+  it('leaves interruptions from other scopes visible', () => {
+    const OtherScope = 'test/InterruptFrom/recover-other' as const
+
+    const f = fx(function* () {
+      yield* interruptFrom(OtherScope, 'other')
+      return 'done'
+    }).pipe(
+      scope(TestScope),
+      recoverInterrupt(TestScope, () => ok('interrupted'))
+    )
+
+    const next = f[Symbol.iterator]().next()
+
+    assert.equal(InterruptFrom.is(next.value), true)
+    assert.equal((next.value as InterruptFrom<typeof OtherScope, 'other'>).scope, OtherScope)
+  })
+
+  it('surfaces cleanup failures before recovering an interruption', () => {
+    const cleanupFailure = new Error('cleanup failed')
+
+    const result = fx(function* () {
+      yield* andFinally(TestScope, fail(cleanupFailure))
+      yield* interruptFrom(TestScope)
+    }).pipe(
+      scope(TestScope),
+      recoverInterrupt(TestScope, () => ok('interrupted')),
+      returnFail,
+      run
+    )
+
+    assert.ok(result instanceof Fail)
+    assert.ok(result.arg instanceof AggregateError)
+    assert.deepEqual(result.arg.errors, [cleanupFailure])
+  })
 
   it('provides the reason to exit-aware finalizers', () => {
     const reason = { type: 'test-interrupt' }

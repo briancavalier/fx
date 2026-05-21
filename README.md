@@ -105,13 +105,12 @@ how to recover:
 import {
   assert as assertNoFail,
   consoleLog,
-  control,
   defaultConsole,
   fx,
   runPromise
 } from "@briancavalier/fx"
 import { unbounded } from "@briancavalier/fx/concurrent"
-import { andFinallyExit, InterruptFrom, scope } from "@briancavalier/fx/scope"
+import { andFinallyExit, recoverInterrupt, scope } from "@briancavalier/fx/scope"
 import { defaultTime, sleep } from "@briancavalier/fx/time"
 import { timeout } from "@briancavalier/fx/timeout"
 
@@ -136,7 +135,7 @@ const program = fx(function* () {
 
 await program.pipe(
   scope(RequestScope),
-  control(InterruptFrom, () => consoleLog("request timed out")),
+  recoverInterrupt(RequestScope, () => consoleLog("request timed out")),
   defaultTime,
   unbounded,
   defaultConsole,

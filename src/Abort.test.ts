@@ -7,39 +7,50 @@ import { fail, Fail, returnFail } from './Fail.js'
 import { andFinally } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope } from './Scope.js'
+import { scope, withScope } from './Scope.js'
 
 describe('Abort', () => {
-  const TestScope = 'test/Abort' as const
+  const TestScope = scope('test/Abort')
 
   describe('scope', () => {
+    it('handles Abort from a same-name scope token', () => {
+      const FirstScope = scope('test/Abort/same-name')
+      const SecondScope = scope('test/Abort/same-name')
+      const result = fx(function* () {
+        yield* abort(SecondScope)
+        return 'done'
+      }).pipe(withScope(FirstScope), orReturn(FirstScope, 'aborted'), run)
+
+      assert.equal(result, 'aborted')
+    })
+
     it('given matching Abort with fallback, returns alternative', () => {
       const r = Math.random()
-      const a = abort(TestScope).pipe(scope(TestScope), orReturn(TestScope, r), run)
+      const a = abort(TestScope).pipe(withScope(TestScope), orReturn(TestScope, r), run)
 
       assert.equal(a, r)
     })
 
     it('given success, returns original value', () => {
       const r = Math.random()
-      const a = ok(r).pipe(scope(TestScope), orReturn(TestScope, r + 1), run)
+      const a = ok(r).pipe(withScope(TestScope), orReturn(TestScope, r + 1), run)
 
       assert.equal(a, r)
     })
 
     it('leaves matching Abort unhandled when fallback is omitted', () => {
-      const f = abort(TestScope).pipe(scope(TestScope))
+      const f = abort(TestScope).pipe(withScope(TestScope))
       const _: typeof f extends import('./Fx.js').Fx<Abort<typeof TestScope>, never> ? true : false = true
 
       assert.equal(Abort.is(f[Symbol.iterator]().next().value), true)
     })
 
     it('does not handle Abort from a different scope', () => {
-      const OtherScope = 'test/Abort/other' as const
+      const OtherScope = scope('test/Abort/other')
       const f = fx(function* () {
         yield* abort(OtherScope)
         return 'done'
-      }).pipe(scope(TestScope), orReturn(TestScope, 'aborted'))
+      }).pipe(withScope(TestScope), orReturn(TestScope, 'aborted'))
 
       assert.equal(Abort.is(f[Symbol.iterator]().next().value), true)
     })
@@ -147,7 +158,7 @@ describe('Abort', () => {
     })
 
     it('does not restart Abort from a different scope', () => {
-      const OtherScope = 'test/Abort/restartOnAbort/other' as const
+      const OtherScope = scope('test/Abort/restartOnAbort/other')
       let attempts = 0
 
       const f = fx(function* () {

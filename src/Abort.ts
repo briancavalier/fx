@@ -2,20 +2,21 @@ import { at } from './Breadcrumb.js'
 import { ScopedEffect, withOrigin } from './Effect.js'
 import { Fx, fx, ok } from './Fx.js'
 import { control } from './Handler.js'
-import { scope as scoped, type ReturnValue, type ScopeEffects } from './Scope.js'
+import { withScope, type AnyScope, type ReturnValue, type ScopeEffects } from './Scope.js'
+import { sameScope } from './internal/scopeIdentity.js'
 
 /**
  * Abort the named scope without returning a result.
  */
-export class Abort<const Scope extends string> extends ScopedEffect('fx/Abort')<Scope, void, never> { }
+export class Abort<const Scope extends AnyScope> extends ScopedEffect('fx/Abort')<Scope, void, never> { }
 
-export const abort = <const Scope extends string>(scope: Scope): Fx<Abort<Scope>, never> =>
+export const abort = <const Scope extends AnyScope>(scope: Scope): Fx<Abort<Scope>, never> =>
   withOrigin(new Abort(scope, undefined), at('fx/Abort/abort', abort))
 
 /**
  * Return a default value from an abort of the named scope.
  */
-export const orReturn = <const Scope extends string, const R>(
+export const orReturn = <const Scope extends AnyScope, const R>(
   scope: Scope,
   value: R
 ) => <const E, const A>(
@@ -23,7 +24,7 @@ export const orReturn = <const Scope extends string, const R>(
 ): Fx<Exclude<E, Abort<Scope>>, A | R> =>
     f.pipe(
       control(Abort, (_, abort) =>
-        (abort.scope === scope ? ok(value) : abort) as Fx<Exclude<E, Abort<Scope>>, A | R>)
+        (sameScope(abort.scope, scope) ? ok(value) : abort) as Fx<Exclude<E, Abort<Scope>>, A | R>)
     ) as Fx<Exclude<E, Abort<Scope>>, A | R>
 
 export interface RestartOnAbortOptions {
@@ -38,7 +39,7 @@ const Restart = Symbol('fx/Abort/restartOnAbort')
 /**
  * Restart a scoped computation when it aborts the named scope.
  */
-export const restartOnAbort = <const Scope extends string>(
+export const restartOnAbort = <const Scope extends AnyScope>(
   scope: Scope,
   options: RestartOnAbortOptions
 ) => <const E, const A>(
@@ -48,9 +49,9 @@ export const restartOnAbort = <const Scope extends string>(
     let restarts = 0
     let aborted: Abort<Scope> | undefined
     const attempt = f.pipe(
-      scoped(scope),
+      withScope(scope),
       control(Abort, (_, abort) => {
-        if (abort.scope !== scope) return abort
+        if (!sameScope(abort.scope, scope)) return abort
 
         aborted = abort as Abort<Scope>
         return ok(Restart)

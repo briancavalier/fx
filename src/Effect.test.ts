@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { at } from './Breadcrumb.js'
 import { Effect, EffectOriginTypeId, originOf, ScopedEffect, traceOriginOf, withOrigin, withTraceOrigin } from './Effect.js'
+import { scope } from './Scope.js'
 import { captureTrace, setTraceCapturePolicy } from './Trace.js'
 
 describe('Effect', () => {
@@ -21,17 +22,19 @@ describe('Effect', () => {
 
   describe('ScopedEffect', () => {
     it('uses a top-level scope field', () => {
-      class T extends ScopedEffect('T/Scoped')<'test/scope', { readonly value: number }, string> { }
-      const effect = new T('test/scope', { value: 1 })
+      const TestScope = scope('test/scope')
+      class T extends ScopedEffect('T/Scoped')<typeof TestScope, { readonly value: number }, string> { }
+      const effect = new T(TestScope, { value: 1 })
 
       assert.ok(T.is(effect))
-      assert.equal(effect.scope, 'test/scope')
+      assert.equal(effect.scope, TestScope)
       assert.deepEqual(effect.arg, { value: 1 })
     })
 
     it('yields and resumes like an ordinary effect', () => {
-      class T extends ScopedEffect('T/ScopedIterator')<'test/scope', void, string> { }
-      const effect = new T('test/scope', undefined)
+      const TestScope = scope('test/scope')
+      class T extends ScopedEffect('T/ScopedIterator')<typeof TestScope, void, string> { }
+      const effect = new T(TestScope, undefined)
       const iterator = effect[Symbol.iterator]()
 
       const yielded = iterator.next()

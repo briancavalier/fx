@@ -1,10 +1,10 @@
 import { consoleLog, defaultConsole, fx, run } from '@briancavalier/fx'
 
 import { next, type Receiving } from '@briancavalier/fx/sink'
-import { brand, fromIterable, to, type PipeResult, type Yielding } from '@briancavalier/fx/scope'
+import { fromIterable, scope, to, type PipeResult, type Yielding } from '@briancavalier/fx/scope'
 
-const Numbers = brand<Yielding<number>>()('examples/intermediate/yield-sink-pipeline/Numbers')
-const NumberReceiver = brand<Receiving<number>>()('examples/intermediate/yield-sink-pipeline/NumberReceiver')
+const Numbers = scope<Yielding<number>>()('examples/intermediate/yield-sink-pipeline/Numbers')
+const NumberReceiver = scope<Receiving<number>>()('examples/intermediate/yield-sink-pipeline/NumberReceiver')
 
 const produceNumbers = (values: readonly number[]) =>
   fromIterable(Numbers, values)

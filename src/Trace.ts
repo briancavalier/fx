@@ -32,10 +32,16 @@ export interface TraceFrame {
   readonly index?: number
 }
 
+export interface ActiveScopeDiagnostic {
+  readonly id: string
+  readonly label: string
+  readonly description?: string
+}
+
 export interface Trace {
   readonly frame: TraceFrame
   readonly parent?: Trace
-  readonly activeScopes?: readonly string[]
+  readonly activeScopes?: readonly ActiveScopeDiagnostic[]
   readonly depth: number
   readonly truncated: boolean
   readonly acyclic?: true
@@ -67,7 +73,7 @@ export interface TraceSnapshotFrame {
 
 export interface TraceSnapshot {
   readonly frames: readonly TraceSnapshotFrame[]
-  readonly activeScopes?: readonly string[]
+  readonly activeScopes?: readonly ActiveScopeDiagnostic[]
   readonly truncated: boolean
   readonly cycleDetected: boolean
 }
@@ -280,7 +286,7 @@ const prependFrame = (frame: TraceFrame, parent?: Trace): Trace => {
   return fromFrames(frames, true, scopes.activeScopes)
 }
 
-const fromFrames = (frames: readonly TraceFrame[], truncated: boolean, activeScopes?: readonly string[]): Trace => {
+const fromFrames = (frames: readonly TraceFrame[], truncated: boolean, activeScopes?: readonly ActiveScopeDiagnostic[]): Trace => {
   let trace: Trace | undefined
 
   for (let i = frames.length - 1; i >= 0; i--) {
@@ -461,14 +467,19 @@ const aggregateErrors = (error: unknown): readonly unknown[] | undefined => {
   return undefined
 }
 
-const formatActiveScopes = (scopes: readonly string[] | undefined, context?: FormatContext): readonly string[] => {
+const formatActiveScopes = (scopes: readonly ActiveScopeDiagnostic[] | undefined, context?: FormatContext): readonly string[] => {
   if (scopes === undefined || scopes.length === 0) return []
   const label = context?.style.section('Active scopes') ?? 'Active scopes'
-  return [`${label}: ${compactActiveScopes(scopes).join(' > ')}`]
+  return [`${label}: ${compactActiveScopes(scopes).map(formatActiveScopeLabel).join(' > ')}`]
 }
 
-const compactActiveScopes = (scopes: readonly string[]): readonly string[] =>
+type CompactActiveScope = ActiveScopeDiagnostic | '...'
+
+const compactActiveScopes = (scopes: readonly ActiveScopeDiagnostic[]): readonly CompactActiveScope[] =>
   scopes.length <= 4 ? scopes : [scopes[0], '...', ...scopes.slice(-3)]
+
+const formatActiveScopeLabel = (scope: CompactActiveScope): string =>
+  scope === '...' ? '...' : scope.label
 
 interface FormatContext {
   readonly style: DiagnosticStyle
@@ -545,7 +556,7 @@ const formatDiagnosticError = (
 }
 
 const formatDiagnosticActiveScopes = (
-  scopes: readonly string[] | undefined,
+  scopes: readonly ActiveScopeDiagnostic[] | undefined,
   lines: string[],
   indent: number,
   context: FormatContext
@@ -554,6 +565,29 @@ const formatDiagnosticActiveScopes = (
   if (formatted.length === 0) return
   const prefix = ' '.repeat(indent)
   lines.push(`${prefix}${formatted[0]}`)
+  formatDiagnosticActiveScopeDetails(scopes, lines, indent, context)
+}
+
+const formatDiagnosticActiveScopeDetails = (
+  scopes: readonly ActiveScopeDiagnostic[] | undefined,
+  lines: string[],
+  indent: number,
+  context: FormatContext
+): void => {
+  if (scopes === undefined || scopes.length === 0) return
+
+  const compacted = compactActiveScopes(scopes)
+  if (!compacted.some(scope => scope !== '...' && scope.description !== undefined)) return
+
+  const prefix = ' '.repeat(indent)
+  lines.push(`${prefix}${context.style.section('Active scope details:')}`)
+  for (const scope of compacted) {
+    if (scope === '...') {
+      lines.push(`${prefix}  ...`)
+    } else if (scope.description !== undefined) {
+      lines.push(`${prefix}  ${scope.label}: ${scope.description}`)
+    }
+  }
 }
 
 const formatDiagnosticHeader = (error: DiagnosticErrorSnapshot, context: FormatContext): string => {

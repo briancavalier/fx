@@ -9,7 +9,7 @@ import { fx, runPromise } from './Fx.js'
 import { control } from './Handler.js'
 import { InterruptFrom } from './InterruptFrom.js'
 import { defaultRetry, retry } from './Retry.js'
-import { scope } from './Scope.js'
+import { ScopeTypeId, scope, withScope } from './Scope.js'
 import { wait } from './Task.js'
 import { sleep, withClock } from './Time.js'
 import { TimeoutInterrupt, timeout } from './Timeout.js'
@@ -141,17 +141,117 @@ describe('Trace', () => {
   })
 
   it('captures active scopes in trace snapshots ordered outer-to-inner', async () => {
+    const DbTransaction = scope('db/transaction')
+    const HttpRequest = scope('http/request')
     const f = fx(function* () {
       yield* fail(new Error('scoped failure'))
     }).pipe(
-      scope('db/transaction'),
-      scope('http/request')
+      withScope(DbTransaction),
+      withScope(HttpRequest)
     )
 
     await assert.rejects(
       runPromise(f as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request', 'db/transaction'])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [
+          { id: 'http/request', label: 'http/request', description: undefined },
+          { id: 'db/transaction', label: 'db/transaction', description: undefined }
+        ])
+        return true
+      }
+    )
+  })
+
+  it('keeps the scope token marker non-enumerable', () => {
+    const TestScope = scope('test/Trace/non-enumerable', { label: 'non-enumerable' })
+
+    assert.equal(Object.getOwnPropertyDescriptor(TestScope, ScopeTypeId)?.enumerable, false)
+    assert.deepEqual(Object.keys(TestScope), ['label', 'name'])
+  })
+
+  it('preserves the explicit scope identity when metadata contains a name', () => {
+    const metadata: { readonly name: string, readonly label: string } = {
+      name: 'test/Trace/metadata-name',
+      label: 'metadata name'
+    }
+    const TestScope = scope('test/Trace/explicit-name', metadata)
+
+    assert.equal(TestScope.name, 'test/Trace/explicit-name')
+    assert.equal(TestScope[ScopeTypeId], 'test/Trace/explicit-name')
+    assert.equal(TestScope.label, 'metadata name')
+  })
+
+  it('uses scope labels in active-scope diagnostics', async () => {
+    const RequestScope = scope('test/Trace/request', { label: 'request' })
+    const f = fx(function* () {
+      yield* fail(new Error('labeled scope'))
+    }).pipe(withScope(RequestScope))
+
+    await assert.rejects(
+      runPromise(f as never),
+      e => {
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'test/Trace/request',
+          label: 'request',
+          description: undefined
+        }])
+        assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: request/)
+        return true
+      }
+    )
+  })
+
+  it('uses scope descriptions in diagnostic active-scope details', async () => {
+    const RequestScope = scope('test/Trace/request-description', {
+      label: 'request',
+      description: 'Handles one HTTP request from accept through response write'
+    })
+    const f = fx(function* () {
+      yield* fail(new Error('described scope'))
+    }).pipe(withScope(RequestScope))
+
+    await assert.rejects(
+      runPromise(f as never),
+      e => {
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'test/Trace/request-description',
+          label: 'request',
+          description: 'Handles one HTTP request from accept through response write'
+        }])
+        const diagnostic = formatDiagnostic(e, { colors: 'never' })
+        assert.match(diagnostic, /Active scopes: request/)
+        assert.match(diagnostic, /Active scope details:\n  request: Handles one HTTP request from accept through response write/)
+        assert.doesNotMatch(formatError(e), /Active scope details:/)
+        return true
+      }
+    )
+  })
+
+  it('keeps distinct active scopes with the same diagnostic text', async () => {
+    const OuterRequest = scope('test/Trace/outer-request', {
+      label: 'request',
+      description: 'Shared request description'
+    })
+    const InnerRequest = scope('test/Trace/inner-request', {
+      label: 'request',
+      description: 'Shared request description'
+    })
+    const f = fx(function* () {
+      yield* fail(new Error('same diagnostic text'))
+    }).pipe(
+      withScope(InnerRequest),
+      withScope(OuterRequest)
+    )
+
+    await assert.rejects(
+      runPromise(f as never),
+      e => {
+        const activeScopes = snapshotError(e).trace?.activeScopes
+        assert.deepEqual(activeScopes, [
+          { id: 'test/Trace/outer-request', label: 'request', description: 'Shared request description' },
+          { id: 'test/Trace/inner-request', label: 'request', description: 'Shared request description' }
+        ])
+        assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: request > request/)
         return true
       }
     )
@@ -164,11 +264,13 @@ describe('Trace', () => {
   })
 
   it('formats active scopes compactly on one line', async () => {
+    const DbTransaction = scope('db/transaction')
+    const HttpRequest = scope('http/request')
     const f = fx(function* () {
       yield* fail(new Error('scoped formatting'))
     }).pipe(
-      scope('db/transaction'),
-      scope('http/request')
+      withScope(DbTransaction),
+      withScope(HttpRequest)
     )
 
     await assert.rejects(
@@ -176,14 +278,39 @@ describe('Trace', () => {
       e => {
         assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: http\/request > db\/transaction/)
         assert.match(formatError(e), /Active scopes: http\/request > db\/transaction/)
+        assert.doesNotMatch(formatDiagnostic(e, { colors: 'never' }), /Active scope details:/)
+        return true
+      }
+    )
+  })
+
+  it('formats active-scope details for described visible scopes only', async () => {
+    const DbTransaction = scope('db/transaction', {
+      description: 'Owns transaction commit and rollback finalization'
+    })
+    const HttpRequest = scope('http/request')
+    const f = fx(function* () {
+      yield* fail(new Error('mixed scope descriptions'))
+    }).pipe(
+      withScope(DbTransaction),
+      withScope(HttpRequest)
+    )
+
+    await assert.rejects(
+      runPromise(f as never),
+      e => {
+        const diagnostic = formatDiagnostic(e, { colors: 'never' })
+        assert.match(diagnostic, /Active scopes: http\/request > db\/transaction/)
+        assert.match(diagnostic, /Active scope details:\n  db\/transaction: Owns transaction commit and rollback finalization/)
+        assert.doesNotMatch(diagnostic, /http\/request:/)
         return true
       }
     )
   })
 
   it('compacts deep active scope stacks', async () => {
-    const scoped = ['a', 'b', 'c', 'd', 'e'].reduceRight(
-      (f, name) => f.pipe(scope(name)),
+    const scoped = ['a', 'b', 'c', 'd', 'e'].map(name => scope(name)).reduceRight(
+      (f, name) => f.pipe(withScope(name)),
       fx(function* () {
         yield* fail(new Error('deep scopes'))
       })
@@ -193,6 +320,32 @@ describe('Trace', () => {
       runPromise(scoped as never),
       e => {
         assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: a > \.\.\. > c > d > e/)
+        return true
+      }
+    )
+  })
+
+  it('compacts deep active-scope details with the active-scope line', async () => {
+    const scoped = [
+      scope('a', { description: 'visible first scope' }),
+      scope('b', { description: 'hidden middle scope' }),
+      scope('c'),
+      scope('d', { description: 'visible second-to-last scope' }),
+      scope('e', { description: 'visible last scope' })
+    ].reduceRight(
+      (f, name) => f.pipe(withScope(name)),
+      fx(function* () {
+        yield* fail(new Error('deep scope descriptions'))
+      })
+    )
+
+    await assert.rejects(
+      runPromise(scoped as never),
+      e => {
+        const diagnostic = formatDiagnostic(e, { colors: 'never' })
+        assert.match(diagnostic, /Active scopes: a > \.\.\. > c > d > e/)
+        assert.match(diagnostic, /Active scope details:\n  a: visible first scope\n  \.\.\.\n  d: visible second-to-last scope\n  e: visible last scope/)
+        assert.doesNotMatch(diagnostic, /hidden middle scope/)
         return true
       }
     )
@@ -266,70 +419,94 @@ describe('Trace', () => {
   })
 
   it('propagates active scopes to forked children', async () => {
+    const HttpRequest = scope('http/request')
     const f = fx(function* () {
       const task = yield* fork(fx(function* () {
         yield* fail(new Error('fork scoped'))
       }))
       yield* wait(task)
-    }).pipe(scope('http/request'))
+    }).pipe(withScope(HttpRequest))
 
     await assert.rejects(
       runPromise(f.pipe(unbounded) as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request'])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'http/request',
+          label: 'http/request',
+          description: undefined
+        }])
         return true
       }
     )
   })
 
   it('propagates active scopes through structured concurrency handlers', async () => {
+    const HttpRequest = scope('http/request')
     const allProgram = fx(function* () {
       yield* all([fx(function* () { yield* fail(new Error('all scoped')) })]).pipe(defaultAll)
-    }).pipe(scope('http/request'))
+    }).pipe(withScope(HttpRequest))
     const raceProgram = fx(function* () {
       yield* race([fx(function* () { yield* fail(new Error('race scoped')) })]).pipe(firstSettled)
-    }).pipe(scope('http/request'))
+    }).pipe(withScope(HttpRequest))
 
     await assert.rejects(
       runPromise(allProgram.pipe(unbounded) as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request'])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'http/request',
+          label: 'http/request',
+          description: undefined
+        }])
         return true
       }
     )
     await assert.rejects(
       runPromise(raceProgram.pipe(unbounded) as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request'])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'http/request',
+          label: 'http/request',
+          description: undefined
+        }])
         return true
       }
     )
   })
 
   it('propagates active scopes to async failures', async () => {
+    const HttpRequest = scope('http/request')
     const f = fx(function* () {
       yield* tryPromise(() => Promise.reject(new Error('async scoped')))
-    }).pipe(scope('http/request'))
+    }).pipe(withScope(HttpRequest))
 
     await assert.rejects(
       runPromise(f as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request'])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'http/request',
+          label: 'http/request',
+          description: undefined
+        }])
         return true
       }
     )
   })
 
   it('captures active scopes for cleanup failures', async () => {
+    const DbTransaction = scope('db/transaction')
     const f = fx(function* () {
-      yield* andFinally('db/transaction', fail(new Error('cleanup scoped')))
-    }).pipe(scope('db/transaction'))
+      yield* andFinally(DbTransaction, fail(new Error('cleanup scoped')))
+    }).pipe(withScope(DbTransaction))
 
     await assert.rejects(
       runPromise(f as never),
       e => {
         const formatted = formatDiagnostic(e, { colors: 'never' })
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['db/transaction'])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'db/transaction',
+          label: 'db/transaction',
+          description: undefined
+        }])
         assert.match(formatted, /AggregateError: Resource release failed/)
         assert.match(formatted, /Active scopes: db\/transaction/)
         return true
@@ -405,13 +582,13 @@ describe('Trace', () => {
 
   it('propagates regional trace policy through timeout and retry handlers', async () => {
     const clock = new VirtualClock(0)
-    const TimeoutScope = 'test/Trace/timeout' as const
+    const TimeoutScope = scope('test/Trace/timeout')
     const timeoutProgram = fx(function* () {
       return yield* sleep(100).pipe(timeout(TimeoutScope, { ms: 50 }))
     })
 
     const timeoutPromise = timeoutProgram.pipe(
-      scope(TimeoutScope),
+      withScope(TimeoutScope),
       control(InterruptFrom, (_, interrupt) => fx(function* () {
         return interrupt.arg
       })),

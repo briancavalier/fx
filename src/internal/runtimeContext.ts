@@ -11,8 +11,14 @@ import { Pipeable, pipeThis } from './pipe.js'
  */
 export interface RuntimeContext {
   readonly traceCapturePolicy?: TraceCapturePolicy
-  readonly activeScopes?: readonly string[]
+  readonly activeScopes?: readonly ActiveScopeDiagnostic[]
   readonly interruptionReason?: unknown
+}
+
+export interface ActiveScopeDiagnostic {
+  readonly id: string
+  readonly label: string
+  readonly description?: string
 }
 
 export const RuntimeContextTypeId = Symbol('fx/RuntimeContext')
@@ -70,7 +76,7 @@ export const capturesTrace = (context?: RuntimeContext): boolean =>
 export const capturesStack = (context?: RuntimeContext): boolean =>
   traceCapturePolicy(context) === 'full'
 
-export const activeScopes = (context: RuntimeContext | undefined = activeRuntimeContext): readonly string[] =>
+export const activeScopes = (context: RuntimeContext | undefined = activeRuntimeContext): readonly ActiveScopeDiagnostic[] =>
   context?.activeScopes ?? []
 
 export const interruptionReason = (context: RuntimeContext | undefined = activeRuntimeContext): unknown =>
@@ -82,9 +88,12 @@ export const withInterruptionReason = (
 ): RuntimeContext | undefined =>
   reason === undefined ? context : { ...context, interruptionReason: reason }
 
-export const withActiveScope = <E, A>(scope: string, fx: Fx<E, A>): Fx<E, A> => {
+export const withActiveScope = <E, A>(scope: ActiveScopeDiagnostic, fx: Fx<E, A>): Fx<E, A> => {
   const scopes = activeScopes()
-  const nextScopes = scopes.at(-1) === scope ? scopes : [...scopes, scope]
+  const previousScope = scopes.at(-1)
+  const nextScopes = previousScope?.id === scope.id
+    ? scopes
+    : [...scopes, scope]
   return withRuntimeContext({ activeScopes: nextScopes }, fx)
 }
 

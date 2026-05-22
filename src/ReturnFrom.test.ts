@@ -2,17 +2,17 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { fx, run } from './Fx.js'
 import { ReturnFrom, returnFrom } from './ReturnFrom.js'
-import { scope } from './Scope.js'
+import { scope, withScope } from './Scope.js'
 
 describe('ReturnFrom', () => {
-  const TestScope = 'test/ReturnFrom' as const
+  const TestScope = scope('test/ReturnFrom')
 
   it('returns early from the matching scope with a value', () => {
     const result = fx(function* () {
       yield* returnFrom(TestScope, 'early')
       return 'late'
     }).pipe(
-      scope(TestScope),
+      withScope(TestScope),
       run
     )
 
@@ -27,7 +27,7 @@ describe('ReturnFrom', () => {
       ran = true
       return 'late'
     }).pipe(
-      scope(TestScope),
+      withScope(TestScope),
       run
     )
 
@@ -36,11 +36,11 @@ describe('ReturnFrom', () => {
   })
 
   it('propagates returnFrom for non-matching scopes', () => {
-    const OtherScope = 'test/ReturnFrom/other' as const
+    const OtherScope = scope('test/ReturnFrom/other')
     const f = fx(function* () {
       yield* returnFrom(OtherScope, 'other')
       return 'late'
-    }).pipe(scope(TestScope))
+    }).pipe(withScope(TestScope))
 
     const next = f[Symbol.iterator]().next()
 
@@ -51,15 +51,15 @@ describe('ReturnFrom', () => {
   })
 
   it('only catches the nearest matching scope name', () => {
-    const OtherScope = 'test/ReturnFrom/other' as const
+    const OtherScope = scope('test/ReturnFrom/other')
 
     const result = fx(function* () {
       return yield* fx(function* () {
         yield* returnFrom(TestScope, 'inner')
         return 'late'
-      }).pipe(scope(OtherScope))
+      }).pipe(withScope(OtherScope))
     }).pipe(
-      scope(TestScope),
+      withScope(TestScope),
       run
     )
 

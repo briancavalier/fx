@@ -4,7 +4,7 @@ import { bounded, defaultAll, firstSuccess } from '@briancavalier/fx/concurrent'
 import { type Async, type Fx, type Interrupt, returnAll, runPromise } from '@briancavalier/fx'
 
 import { collect } from '@briancavalier/fx/log'
-import { scope } from '@briancavalier/fx/scope'
+import { withScope } from '@briancavalier/fx/scope'
 import { withClock, VirtualClock } from '@briancavalier/fx/time'
 
 import {
@@ -117,13 +117,13 @@ describe('incident collector example', () => {
     const fixture = createIncidentCollectorFixture()
     const handled = program.pipe(
       fixture.handle,
-      scope(CollectorScope),
+      withScope(CollectorScope),
       withClock(new VirtualClock(0)),
       collect,
       firstSuccess,
       defaultAll,
       bounded(6),
-      scope(BundleScope),
+      withScope(BundleScope),
       returnAll
     )
 
@@ -141,13 +141,13 @@ const runSnapshot = async (
     services: ['api', 'worker', 'billing']
   }).pipe(
     fixture.handle,
-    scope(CollectorScope),
+    withScope(CollectorScope),
     withClock(clock),
     collect,
     firstSuccess,
     defaultAll,
     bounded(6),
-    scope(BundleScope),
+    withScope(BundleScope),
     returnAll,
     runPromise
   )

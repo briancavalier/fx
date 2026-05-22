@@ -4,7 +4,7 @@ import { bounded, defaultAll } from '@briancavalier/fx/concurrent'
 import { type Async, type Fx, type Interrupt, returnAll, runPromise } from '@briancavalier/fx'
 
 import { collect } from '@briancavalier/fx/log'
-import { collectFrom, scope } from '@briancavalier/fx/scope'
+import { collectFrom, withScope } from '@briancavalier/fx/scope'
 import { withClock, VirtualClock } from '@briancavalier/fx/time'
 
 import {
@@ -144,7 +144,7 @@ describe('tool agent example', () => {
       collect,
       defaultAll,
       bounded(4),
-      scope(AgentSessionScope),
+      withScope(AgentSessionScope),
       returnAll,
       collectFrom(AgentEvents)
     )
@@ -168,7 +168,7 @@ const runToolAgent = async (
     collect,
     defaultAll,
     bounded(4),
-    scope(AgentSessionScope),
+    withScope(AgentSessionScope),
     returnAll,
     collectFrom(AgentEvents),
     runPromise

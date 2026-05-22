@@ -1,5 +1,6 @@
 import type { Breadcrumb } from './Breadcrumb.js'
 import { Fx } from './Fx.js'
+import type { AnyScope } from './Scope.js'
 import { captureTrace } from './Trace.js'
 import type { Trace, TraceOrigin } from './Trace.js'
 import { Once } from './internal/generator.js'
@@ -68,15 +69,15 @@ export const Effect = <const T extends string>(id: T) => class <A, R = unknown> 
  *
  * @example
  * ```ts
- * class Stop<const Scope extends string>
+ * class Stop<const S extends Scope>
  *   extends ScopedEffect('app/Stop')<Scope, void, never> { }
  *
- * const stop = <const Scope extends string>(scope: Scope) =>
+ * const stop = <const S extends Scope>(scope: S) =>
  *   new Stop(scope, undefined)
  * ```
  */
 export const ScopedEffect = <const T extends string>(id: T) => class <
-  const Scope extends string,
+  const Scope extends AnyScope,
   A = void,
   R = unknown
 > extends Effect(id)<A, R> {

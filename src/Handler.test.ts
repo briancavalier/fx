@@ -3,17 +3,18 @@ import { describe, it } from 'node:test'
 import { ScopedEffect } from './Effect.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { handleScoped } from './Handler.js'
+import { scope, type AnyScope } from './Scope.js'
 
 describe('Handler', () => {
   describe('handleScoped', () => {
-    const TestScope = 'test/Handler/handleScoped' as const
-    const OtherScope = 'test/Handler/handleScoped/other' as const
+    const TestScope = scope('test/Handler/handleScoped')
+    const OtherScope = scope('test/Handler/handleScoped/other')
 
-    class Request<const Scope extends string> extends ScopedEffect('test/Handler/Request')<Scope, {
+    class Request<const Scope extends AnyScope> extends ScopedEffect('test/Handler/Request')<Scope, {
       readonly value: number
     }, string> { }
 
-    const request = <const Scope extends string>(scope: Scope, value: number): Request<Scope> =>
+    const request = <const Scope extends AnyScope>(scope: Scope, value: number): Request<Scope> =>
       new Request(scope, { value })
 
     it('handles effects from the matching scope', () => {
@@ -43,6 +44,16 @@ describe('Handler', () => {
       const effect = next.value as Request<typeof OtherScope>
       assert.equal(effect.scope, OtherScope)
       assert.deepEqual(effect.arg, { value: 2 })
+    })
+
+    it('handles same-type effects from a same-name scope token', () => {
+      const FirstScope = scope('test/Handler/same-name')
+      const SecondScope = scope('test/Handler/same-name')
+      const result = fx(function* () {
+        return yield* request(SecondScope, 1)
+      }).pipe(handleScoped(Request, FirstScope, () => ok('handled')))
+
+      assert.equal(run(result), 'handled')
     })
 
     it('narrows only matching scoped effects', () => {

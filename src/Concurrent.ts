@@ -120,6 +120,25 @@ export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(
 }
 
 /**
+ * Map an iterable to child computations and run them concurrently in input
+ * order.
+ *
+ * Pair `mapAll` with {@link defaultAll} and a fork scheduler such as
+ * {@link bounded} or {@link unbounded}.
+ *
+ * @example
+ * const users = yield* mapAll(userIds, id => fetchUser(id))
+ */
+export const mapAll = <const A, const E, const B>(
+  items: Iterable<A>,
+  f: (item: A, index: number) => Fx<E, B>,
+  options?: TraceOptions
+): Fx<Exclude<E, Async | Fail<any>> | All<readonly Fx<E, B>[]> | HandlerCapture<'fx/Concurrent/All'>, readonly B[]> => {
+  const trace = traceOrigin(options, 'fx/Concurrent/mapAll', mapAll, 'all')
+  return all(Array.from(items, f), trace)
+}
+
+/**
  * Request that a tuple of Fx computations race in a structured scope.
  *
  * Pair `race` with {@link firstSettled} for first-settled semantics or

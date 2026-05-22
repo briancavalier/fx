@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
-import { RaceAllFailed, all, bounded, defaultAll, firstSettled, firstSuccess, fork, forkEach, race, unbounded } from './Concurrent.js'
+import { RaceAllFailed, all, bounded, defaultAll, firstSettled, firstSuccess, fork, forkEach, mapAll, race, unbounded } from './Concurrent.js'
 import { andFinally, andFinallyExit } from './Finalization.js'
 import { bracket, flatMap, fx, ok, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
@@ -401,6 +401,167 @@ describe('Fork', () => {
       )
 
       assert.deepEqual(result, [1, 'two'])
+    })
+
+    it('maps iterable items to child values in input order', async () => {
+      const result = await mapAll([3, 1, 2], n => asyncValue(n * 2)).pipe(
+        defaultAll,
+        unbounded,
+        runPromise
+      )
+
+      assert.deepEqual(result, [6, 2, 4])
+    })
+
+    it('passes the zero-based index to the mapper', async () => {
+      const indexes = [] as number[]
+
+      const result = await mapAll(['a', 'b', 'c'], (value, index) => {
+        indexes.push(index)
+        return ok(`${index}:${value}`)
+      }).pipe(
+        defaultAll,
+        unbounded,
+        runPromise
+      )
+
+      assert.deepEqual(indexes, [0, 1, 2])
+      assert.deepEqual(result, ['0:a', '1:b', '2:c'])
+    })
+
+    it('supports general iterables', async () => {
+      function* values() {
+        yield 1
+        yield 2
+        yield 3
+      }
+
+      const result = await mapAll(values(), n => ok(n + 10)).pipe(
+        defaultAll,
+        unbounded,
+        runPromise
+      )
+
+      assert.deepEqual(result, [11, 12, 13])
+    })
+
+    it('starts mapped children concurrently', async () => {
+      const events = [] as string[]
+      const child = (n: number) => fx(function* () {
+        events.push(`start ${n}`)
+        yield* asyncValue(undefined)
+        events.push(`end ${n}`)
+        return n
+      })
+
+      const result = await mapAll([1, 2, 3], child).pipe(
+        defaultAll,
+        unbounded,
+        runPromise
+      )
+
+      assert.deepEqual(result, [1, 2, 3])
+      assert.deepEqual(events.slice(0, 3), ['start 1', 'start 2', 'start 3'])
+    })
+
+    it('respects bounded scheduling for mapped children', async () => {
+      const events = [] as string[]
+      const child = (n: number) => fx(function* () {
+        events.push(`start ${n}`)
+        yield* asyncValue(undefined)
+        events.push(`end ${n}`)
+        return n
+      })
+
+      const result = await mapAll([1, 2, 3], child).pipe(
+        defaultAll,
+        bounded(1),
+        runPromise
+      )
+
+      assert.deepEqual(result, [1, 2, 3])
+      assert.deepEqual(events, ['start 1', 'end 1', 'start 2', 'end 2', 'start 3', 'end 3'])
+    })
+
+    it('cancels mapped siblings when a child fails', async () => {
+      const cause = new Error('mapAll failed')
+      let cancelled = false
+      const slow = assertPromise<void>(signal => new Promise(resolve => {
+        signal.addEventListener('abort', () => {
+          cancelled = true
+          resolve()
+        }, { once: true })
+      }))
+      const child = (n: number) => n === 1
+        ? slow
+        : fx(function* () {
+          yield* asyncValue(undefined)
+          yield* fail(cause)
+        })
+
+      const result = await mapAll([1, 2], child).pipe(
+        defaultAll,
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.equal((result.arg as Error).cause, cause)
+      assert.equal(cancelled, true)
+    })
+
+    it('runs mapped children with handlers between mapAll and defaultAll', async () => {
+      class CurrentValue extends Effect('test/Fork/MapAllCurrentValue')<void, string> { }
+
+      const result = await mapAll([1], () => new CurrentValue()).pipe(
+        handle(CurrentValue, () => ok('handled')),
+        defaultAll,
+        unbounded,
+        runPromise
+      )
+
+      assert.deepEqual(result, ['handled'])
+    })
+
+    it('preserves the mapAll call site in indexed child task failure traces', async () => {
+      const cause = new Error('mapAll traced failure')
+
+      const result = await mapAll([cause], error => fx(function* () {
+        yield* fail(error)
+      })).pipe(
+        defaultAll,
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.match(firstLine(result.arg), /fx\/Fail\/fail/)
+      assert.match(result.arg.stack ?? '', /Concurrent\.test\.ts/)
+      assert.deepEqual(traceMessages(result.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/mapAll[0]', 'fx/Concurrent/mapAll'])
+      assert.equal((result.arg as Error).cause, cause)
+    })
+
+    it('types mapAll as a value array and preserves child Fail errors', async () => {
+      const cause = new Error('mapAll typed failure')
+      const result = await fx(function* () {
+        const values = yield* mapAll([1, 2], n => n === 1 ? ok(n) : fail(cause))
+        const array: readonly number[] = values
+        // @ts-expect-error mapAll returns values directly, not a Task.
+        const task: Task<readonly number[], Fail<Error>> = values
+        void task
+        return array
+      }).pipe(
+        defaultAll,
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      const error: Error = result.arg
+      assert.equal(error.cause, cause)
     })
   })
 

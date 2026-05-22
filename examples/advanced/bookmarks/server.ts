@@ -3,8 +3,9 @@ import { networkInterfaces } from 'node:os'
 import { dirname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { unbounded } from '@briancavalier/fx/concurrent'
-import { assert as assertNoFail, catchAll, type Fail, flatMap, fx, type Fx, map, ok, provide, returnAll, trySync } from '@briancavalier/fx'
+import { assert as assertNoFail, catchAll, Fail, flatMap, fx, type Fx, map, ok, provide, returnAll, trySync } from '@briancavalier/fx'
 
+import { decode, encode } from '@briancavalier/fx/codec'
 import { bytes as readBytes } from '@briancavalier/fx/http-client'
 import { mount, route, routes, serve, type RouteContext, type Routes, type ServerEvent, type ServerListening, type ServerRequest, type ServerResponse } from '@briancavalier/fx/http-server'
 import { info, withConsoleLog, type Log } from '@briancavalier/fx/log'
@@ -20,7 +21,7 @@ import {
   markRead,
   randomBookmarkIds,
   refreshMetadata,
-  type AddBookmarkInput,
+  type Bookmark,
   type BookmarkError,
   type BookmarkQuery,
   type BookmarkStatus,
@@ -28,6 +29,7 @@ import {
   type FetchPageMetadata,
   type NextBookmarkId
 } from './domain.js'
+import { AddBookmarkInputJson, BookmarkJson, BookmarksJson, type AddBookmarkInputWire, InvalidBookmarkJson, withBookmarkCodecs } from './codec.js'
 import { sqliteBookmarkStore } from './store-sqlite.js'
 
 type ServerConfig = {
@@ -52,10 +54,12 @@ const createBookmark = (request: ServerRequest): Fx<BookmarkRouteEffects, Server
   const body = yield* readJson(request)
   if (body.tag === 'invalid') return json({ error: 'InvalidJson' }, 400)
 
-  const input = addBookmarkInput(body.value)
-  if (input === undefined) return json({ error: 'InvalidBookmarkInput' }, 400)
+  const input = yield* withBookmarkCodecs(decode(AddBookmarkInputJson, body.value as AddBookmarkInputWire)).pipe(
+    returnAll
+  )
+  if (input instanceof InvalidBookmarkJson) return json({ error: 'InvalidBookmarkInput' }, 400)
 
-  return yield* respond(addBookmark(input), bookmark => json(bookmark, 201))
+  return yield* respond(addBookmark(input), bookmark => bookmarkResponse(bookmark, 201))
 })
 
 const apiRoutes = routes(
@@ -70,19 +74,19 @@ const apiRoutes = routes(
   route('GET', '/bookmarks', fx(function* ({ request }: RouteContext) {
     const query = bookmarkQuery(request.query)
     if (query === undefined) return json({ error: 'InvalidBookmarkQuery' }, 400)
-    return yield* respond(listBookmarks(query), json)
+    return yield* respond(listBookmarks(query), bookmarksResponse)
   })),
 
   route('PATCH', '/bookmarks/:id/read', fx(function* ({ request }: RouteContext<{ readonly id: string }>) {
-    return yield* respond(markRead(request.params.id), json)
+    return yield* respond(markRead(request.params.id), bookmarkResponse)
   })),
 
   route('PATCH', '/bookmarks/:id/archive', fx(function* ({ request }: RouteContext<{ readonly id: string }>) {
-    return yield* respond(archiveBookmark(request.params.id), json)
+    return yield* respond(archiveBookmark(request.params.id), bookmarkResponse)
   })),
 
   route('POST', '/bookmarks/:id/metadata/refresh', fx(function* ({ request }: RouteContext<{ readonly id: string }>) {
-    return yield* respond(refreshMetadata(request.params.id), json)
+    return yield* respond(refreshMetadata(request.params.id), bookmarkResponse)
   }))
 )
 
@@ -115,24 +119,14 @@ const server = fx(function* ({ host, port }: ServerConfig) {
 
 const respond = <E, A>(
   program: Fx<E, A>,
-  success: (value: A) => ServerResponse<never>
+  success: (value: A) => Fx<never, ServerResponse<never>>
 ): Fx<Exclude<E, Fail<BookmarkError>>, ServerResponse<never>> =>
   program.pipe(
     returnAll,
-    map(result => isBookmarkError(result)
-      ? bookmarkErrorResponse(result)
+    flatMap(result => isBookmarkError(result)
+      ? ok(bookmarkErrorResponse(result))
       : success(result))
   ) as Fx<Exclude<E, Fail<BookmarkError>>, ServerResponse<never>>
-
-const addBookmarkInput = (value: unknown): AddBookmarkInput | undefined => {
-  if (!isRecord(value) || typeof value.url !== 'string') return undefined
-
-  if (value.tags === undefined) return { url: value.url }
-
-  return Array.isArray(value.tags) && value.tags.every(tag => typeof tag === 'string')
-    ? { url: value.url, tags: value.tags }
-    : undefined
-}
 
 const bookmarkQuery = (query: URLSearchParams): BookmarkQuery | undefined => {
   const status = query.get('status') ?? undefined
@@ -209,6 +203,18 @@ const json = (value: unknown, status = 200): ServerResponse<never> => ({
   status,
   body: { type: 'json', value }
 })
+
+const bookmarkResponse = (bookmark: Bookmark, status = 200): Fx<never, ServerResponse<never>> =>
+  withBookmarkCodecs(encode(BookmarkJson, bookmark)).pipe(
+    assertNoFail,
+    map(value => json(value, status))
+  )
+
+const bookmarksResponse = (bookmarks: readonly Bookmark[]): Fx<never, ServerResponse<never>> =>
+  withBookmarkCodecs(encode(BookmarksJson, bookmarks)).pipe(
+    assertNoFail,
+    map(json)
+  )
 
 const readJson = (request: ServerRequest): Fx<never, JsonBody> =>
   readBytes({ status: 200, headers: [], body: request.body }).pipe(

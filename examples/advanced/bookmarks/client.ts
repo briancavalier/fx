@@ -1,8 +1,10 @@
-import { type Async, catchAll, fail, type Fail, flatMap, type Fx, ok } from '@briancavalier/fx'
+import { type Async, catchAll, fail, type Fail, flatMap, type Fx } from '@briancavalier/fx'
 
+import { decode } from '@briancavalier/fx/codec'
 import { expectSuccess, json, request, type HttpRequest, type JSONValue } from '@briancavalier/fx/http-client'
 
-import type { AddBookmarkInput, Bookmark, BookmarkQuery, BookmarkStatus, MetadataStatus } from './domain.js'
+import { BookmarkJson, BookmarksJson, type BookmarkWire, withBookmarkCodecs } from './codec.js'
+import type { AddBookmarkInput, Bookmark, BookmarkQuery } from './domain.js'
 
 export type BookmarkClientError =
   | { readonly tag: 'BookmarkRequestFailed'; readonly cause: unknown }
@@ -102,72 +104,14 @@ const bookmarkQueryParams = (query: BookmarkQuery): URLSearchParams => {
 }
 
 const decodeBookmarks = (value: JSONValue): Fx<Fail<BookmarkClientError>, readonly Bookmark[]> =>
-  Array.isArray(value)
-    ? decodeBookmarkArray(value)
-    : invalidResponse(value)
+  withBookmarkCodecs(decode(BookmarksJson, value as readonly BookmarkWire[])).pipe(
+    catchAll(() => invalidResponse<readonly Bookmark[]>(value))
+  )
 
-const decodeBookmarkArray = (values: readonly JSONValue[]): Fx<Fail<BookmarkClientError>, readonly Bookmark[]> => {
-  const bookmarks: Bookmark[] = []
-  for (const value of values) {
-    const bookmark = parseBookmark(value)
-    if (bookmark === undefined) return invalidResponse(value)
-    bookmarks.push(bookmark)
-  }
-  return ok(bookmarks)
-}
-
-const decodeBookmark = (value: JSONValue): Fx<Fail<BookmarkClientError>, Bookmark> => {
-  const bookmark = parseBookmark(value)
-  return bookmark === undefined ? invalidResponse(value) : ok(bookmark)
-}
+const decodeBookmark = (value: JSONValue): Fx<Fail<BookmarkClientError>, Bookmark> =>
+  withBookmarkCodecs(decode(BookmarkJson, value as BookmarkWire)).pipe(
+    catchAll(() => invalidResponse<Bookmark>(value))
+  )
 
 const invalidResponse = <A>(value: unknown): Fx<Fail<BookmarkClientError>, A> =>
   fail({ tag: 'InvalidBookmarkResponse', value })
-
-const parseBookmark = (value: unknown): Bookmark | undefined => {
-  if (!isRecord(value)) return undefined
-
-  const createdAt = parseDate(value.createdAt)
-  const updatedAt = parseDate(value.updatedAt)
-
-  return typeof value.id === 'string' &&
-    typeof value.url === 'string' &&
-    isStringArray(value.tags) &&
-    isBookmarkStatus(value.status) &&
-    isMetadataStatus(value.metadataStatus) &&
-    createdAt !== undefined &&
-    updatedAt !== undefined
-    ? {
-      id: value.id,
-      url: value.url,
-      title: typeof value.title === 'string' ? value.title : undefined,
-      description: typeof value.description === 'string' ? value.description : undefined,
-      tags: value.tags,
-      status: value.status,
-      metadataStatus: value.metadataStatus,
-      createdAt,
-      updatedAt
-    }
-    : undefined
-}
-
-const parseDate = (value: unknown): Date | undefined => {
-  if (typeof value !== 'string') return undefined
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? undefined : date
-}
-
-const isMetadataStatus = (value: unknown): value is MetadataStatus =>
-  isRecord(value) &&
-  (value.tag === 'not-requested' ||
-    value.tag === 'available' ||
-    (value.tag === 'failed' && typeof value.reason === 'string'))
-
-const isBookmarkStatus = (value: unknown): value is BookmarkStatus =>
-  value === 'unread' || value === 'read' || value === 'archived'
-
-const isStringArray = (value: unknown): value is readonly string[] =>
-  Array.isArray(value) && value.every(item => typeof item === 'string')
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null

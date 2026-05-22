@@ -41,6 +41,8 @@ export const traceCapturePolicy = (context = activeRuntimeContext) => context?.t
 export const capturesTrace = (context) => traceCapturePolicy(context) !== 'off';
 export const capturesStack = (context) => traceCapturePolicy(context) === 'full';
 export const activeScopes = (context = activeRuntimeContext) => context?.activeScopes ?? [];
+export const interruptionReason = (context = activeRuntimeContext) => context?.interruptionReason;
+export const withInterruptionReason = (context, reason) => reason === undefined ? context : { ...context, interruptionReason: reason };
 export const withActiveScope = (scope, fx) => {
     const scopes = activeScopes();
     const nextScopes = scopes.at(-1) === scope ? scopes : [...scopes, scope];

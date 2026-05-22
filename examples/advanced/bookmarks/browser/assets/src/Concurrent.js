@@ -8,8 +8,10 @@ import { Semaphore } from './internal/Semaphore.js';
 import { acquireAndRunFork } from './internal/runFork.js';
 import { currentRuntimeContext } from './internal/runtimeContext.js';
 /**
- * Request that a computation be started concurrently, returning a {@link Task}
- * handle for the running computation.
+ * Request that a computation be started concurrently.
+ *
+ * A `Fork` request returns a {@link Task} handle. The scheduling policy is
+ * supplied by handlers such as {@link bounded} or {@link unbounded}.
  */
 export class Fork extends Effect('fx/Concurrent/Fork') {
 }
@@ -51,7 +53,7 @@ export const fork = (f, options) => {
  * handles.
  *
  * `forkEach` is the explicit handle-based form of concurrency. The caller owns
- * each returned task and decides when to wait for or dispose it.
+ * each returned task and decides when to wait for or interrupt it.
  */
 export const forkEach = (fxs, options) => fx(function* () {
     const parent = traceOrigin(options, 'fx/Concurrent/forkEach', forkEach, 'fork');
@@ -63,8 +65,11 @@ export const forkEach = (fxs, options) => fx(function* () {
     return ps;
 });
 /**
- * Run a tuple of Fx computations concurrently in a structured scope, returning
- * the tuple of child results directly.
+ * Request that a tuple of Fx computations run concurrently in a structured
+ * scope, returning the tuple of child results directly.
+ *
+ * Pair `all` with {@link defaultAll} and a fork scheduler such as
+ * {@link bounded} or {@link unbounded}.
  *
  * @example
  * const [user, posts] = yield* all([fetchUser, fetchPosts])
@@ -77,8 +82,10 @@ export const all = (fxs, options) => {
     })));
 };
 /**
- * Race a tuple of Fx computations in a structured scope, returning the first
- * child result or failure to settle.
+ * Request that a tuple of Fx computations race in a structured scope.
+ *
+ * Pair `race` with {@link firstSettled} for first-settled semantics or
+ * {@link firstSuccess} when failed children should be ignored until all fail.
  *
  * @example
  * const value = yield* race([primary, fallback])
@@ -155,6 +162,11 @@ export class RaceAllFailed extends Error {
  * Structured handlers such as {@link defaultAll} and {@link firstSettled}
  * elaborate into Fork requests, so `bounded` also limits their child
  * concurrency.
+ *
+ * @example
+ * ```ts
+ * program.pipe(defaultAll, bounded(4), runPromise)
+ * ```
  */
 export const bounded = (maxConcurrency) => (f) => withCapturedHandlers('fx/Concurrent/Fork', f).pipe(flatMap(fx => ok(fx.pipe(handleCaptured('fx/Concurrent/Fork', Fork, runForkWith(new Semaphore(maxConcurrency)))))), flatten);
 /**
@@ -177,51 +189,51 @@ const runRace = (race) => forkEach(race.arg.fxs, race.arg).pipe(flatMap(tasks =>
 const runFirstSuccessRace = (race) => forkEach(race.arg.fxs, race.arg).pipe(flatMap(tasks => waitTask(taskFirstSuccess(tasks))));
 const taskAll = (tasks) => {
     tasks.forEach(t => t._markHandled());
-    const d = new DisposeAll(tasks);
+    const d = new InterruptAll(tasks);
     const p = Promise.all(tasks.map(t => t.promise)).then(async (value) => {
-        const cleanupFailures = await d.disposeAndWait();
+        const cleanupFailures = await d.interrupt();
         if (cleanupFailures.length > 0)
             throw resourceReleaseFailed(cleanupFailures);
         return value;
     }, async (failure) => {
-        const cleanupFailures = await d.disposeAndWait();
+        const cleanupFailures = await d.interrupt();
         if (cleanupFailures.length > 0)
             throw resourceReleaseFailed([failure, ...cleanupFailures]);
         throw failure;
     });
-    return new Task(p, d, currentRuntimeContext(), d.disposed);
+    return new Task(p, reason => { void d.interrupt(reason); }, currentRuntimeContext(), d.interrupted);
 };
 const taskRace = (tasks) => {
     tasks.forEach(t => t._markHandled());
-    const d = new DisposeAll(tasks);
+    const d = new InterruptAll(tasks);
     const p = Promise.race(tasks.map(t => t.promise)).then(async (value) => {
-        const cleanupFailures = await d.disposeAndWait();
+        const cleanupFailures = await d.interrupt();
         if (cleanupFailures.length > 0)
             throw resourceReleaseFailed(cleanupFailures);
         return value;
     }, async (failure) => {
-        const cleanupFailures = await d.disposeAndWait();
+        const cleanupFailures = await d.interrupt();
         if (cleanupFailures.length > 0)
             throw resourceReleaseFailed([failure, ...cleanupFailures]);
         throw failure;
     });
-    return new Task(p, d, currentRuntimeContext(), d.disposed);
+    return new Task(p, reason => { void d.interrupt(reason); }, currentRuntimeContext(), d.interrupted);
 };
 const taskFirstSuccess = (tasks) => {
     tasks.forEach(t => t._markHandled());
-    const d = new DisposeAll(tasks);
+    const d = new InterruptAll(tasks);
     const p = firstSuccessfulPromise(tasks).then(async (value) => {
-        const cleanupFailures = await d.disposeAndWait();
+        const cleanupFailures = await d.interrupt();
         if (cleanupFailures.length > 0)
             throw resourceReleaseFailed(cleanupFailures);
         return value;
     }, async (failure) => {
-        const cleanupFailures = await d.disposeAndWait();
+        const cleanupFailures = await d.interrupt();
         if (cleanupFailures.length > 0)
             throw resourceReleaseFailed([failure, ...cleanupFailures]);
         throw failure;
     });
-    return new Task(p, d, currentRuntimeContext(), d.disposed);
+    return new Task(p, reason => { void d.interrupt(reason); }, currentRuntimeContext(), d.interrupted);
 };
 const firstSuccessfulPromise = async (tasks) => {
     const pending = tasks.map((task, index) => task.promise.then(value => ({ type: 'success', index, value }), failure => ({ type: 'failure', index, failure })));
@@ -235,31 +247,30 @@ const firstSuccessfulPromise = async (tasks) => {
     }
     throw new RaceAllFailed(failures);
 };
-class DisposeAll {
+class InterruptAll {
     tasks;
-    disposedResolver = Promise.withResolvers();
-    disposed = this.disposedResolver.promise;
-    disposedPromise;
+    interruptedResolver = Promise.withResolvers();
+    interrupted = this.interruptedResolver.promise;
+    interruptedPromise;
     constructor(tasks) {
         this.tasks = tasks;
-        this.disposed.catch(() => { });
+        this.interrupted.catch(() => { });
     }
-    [Symbol.dispose]() { void this.disposeAndWait(); }
-    disposeAndWait() {
-        this.disposedPromise ??= Promise.allSettled([...this.tasks].map(t => t._disposeAndWait())).then(results => {
+    interrupt(reason) {
+        this.interruptedPromise ??= Promise.allSettled([...this.tasks].map(t => t.interrupt(reason))).then(results => {
             const failures = results.flatMap(result => result.status === 'rejected' ? cleanupFailuresOf(result.reason) : []);
             if (failures.length > 0)
-                this.disposedResolver.reject(resourceReleaseFailed(failures));
+                this.interruptedResolver.reject(resourceReleaseFailed(failures));
             else
-                this.disposedResolver.resolve();
+                this.interruptedResolver.resolve();
             return failures;
         });
-        return this.disposedPromise;
+        return this.interruptedPromise;
     }
 }
 const resourceReleaseFailed = (failures) => new AggregateError(failures, 'Resource release failed');
 const cleanupFailuresOf = (failure) => {
-    // TODO: Investigate focused unwrapping for disposal-time ForkError wrappers
+    // TODO: Investigate focused unwrapping for interruption-time ForkError wrappers
     // around rejected Async cleanup, while preserving useful runtime traces.
     const cleanupFailure = isResourceReleaseFailure(failure)
         ? failure

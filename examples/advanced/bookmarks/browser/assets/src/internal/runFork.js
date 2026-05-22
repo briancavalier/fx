@@ -9,7 +9,7 @@ import { Semaphore } from './Semaphore.js';
 import { DisposableSet } from './disposable.js';
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './interrupt.js';
 import { withInterpretedReturn } from './iteratorClose.js';
-import { currentRuntimeContext, getRuntimeContext, traceCapturePolicy, withActiveRuntimeContext } from './runtimeContext.js';
+import { currentRuntimeContext, getRuntimeContext, traceCapturePolicy, withActiveRuntimeContext, withInterruptionReason } from './runtimeContext.js';
 export const runFork = (f, options = {}) => {
     const disposables = new InterruptState();
     const disposed = Promise.withResolvers();
@@ -19,20 +19,20 @@ export const runFork = (f, options = {}) => {
     const maxConcurrency = options.maxConcurrency ?? Infinity;
     const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, disposed, origin, trace, runtimeContext)
         .finally(() => {
-        disposables.disposeActive();
+        disposables.interruptActive();
         disposed.resolve();
     });
-    return taskWithRuntimeContext(promise, disposables, runtimeContext, disposed.promise);
+    return taskWithRuntimeContext(promise, reason => disposables.interrupt(reason), runtimeContext, disposed.promise);
 };
 export const acquireAndRunFork = (f, s, context = [], runtimeContext = currentRuntimeContext()) => {
     const disposables = new InterruptState();
     const disposed = Promise.withResolvers();
     const promise = acquire(s, disposables, disposed, () => runForkInternal(withHandlerContext(context, f.fx), context, s, disposables, disposed, f.origin, f.trace, runtimeContext)
         .finally(() => {
-        disposables.disposeActive();
+        disposables.interruptActive();
         disposed.resolve();
     }));
-    return taskWithRuntimeContext(promise, disposables, runtimeContext, disposed.promise);
+    return taskWithRuntimeContext(promise, reason => disposables.interrupt(reason), runtimeContext, disposed.promise);
 };
 const runForkInternal = (f, context, semaphore, disposables, disposed, origin, trace, runtimeContext) => {
     let rejectUnhandled = () => { };
@@ -46,9 +46,9 @@ const runForkLoop = async (f, context, semaphore, disposables, disposed, origin,
     let interrupting;
     try {
         const i = iteratorWithRuntimeContext(f, runtimeContext);
-        const interrupt = async (cleanupMasks = disposables.maskSnapshot()) => {
+        const interrupt = async (cleanupMasks = disposables.maskSnapshot(), reason = disposables.interruptionReason) => {
             if (interrupting === undefined) {
-                interrupting = closeInterruptedIterator(i, context, semaphore, origin, trace, unhandled, rejectUnhandled, runtimeContext, disposed, cleanupMasks);
+                interrupting = closeInterruptedIterator(i, context, semaphore, origin, trace, unhandled, rejectUnhandled, runtimeContext, disposed, cleanupMasks, reason);
                 interrupting.catch(() => { });
             }
             await interrupting;
@@ -70,11 +70,12 @@ const runForkLoop = async (f, context, semaphore, disposables, disposed, origin,
         throw error;
     }
 };
-const closeInterruptedIterator = async (i, context, semaphore, origin, trace, unhandled, rejectUnhandled, runtimeContext, disposed, cleanupMasks) => {
+const closeInterruptedIterator = async (i, context, semaphore, origin, trace, unhandled, rejectUnhandled, runtimeContext, disposed, cleanupMasks, reason) => {
     const cleanup = new InterruptState(cleanupMasks);
+    const cleanupContext = withInterruptionReason(runtimeContext, reason);
     try {
-        const ir = returnWithRuntimeContext(i, runtimeContext);
-        await runIterator(ir, i, context, semaphore, cleanup, origin, trace, unhandled, rejectUnhandled, runtimeContext);
+        const ir = returnWithRuntimeContext(i, cleanupContext);
+        await runIterator(ir, i, context, semaphore, cleanup, origin, trace, unhandled, rejectUnhandled, cleanupContext);
         disposed.resolve();
     }
     catch (e) {
@@ -82,7 +83,7 @@ const closeInterruptedIterator = async (i, context, semaphore, origin, trace, un
         throw e;
     }
     finally {
-        cleanup.disposeActive();
+        cleanup.interruptActive();
     }
 };
 const runIterator = async (ir, i, context, semaphore, disposables, origin, trace, unhandled, rejectUnhandled, runtimeContext, interrupt) => {
@@ -91,8 +92,8 @@ const runIterator = async (ir, i, context, semaphore, disposables, origin, trace
             const effectContext = runtimeContextOfEffect(ir.value, runtimeContext);
             const { run, origin } = ir.value.arg;
             const t = runTask(run, effectContext);
-            disposables.add(t);
-            const promise = t.promise.finally(() => disposables.remove(t));
+            disposables.addTask(t);
+            const promise = t.promise.finally(() => disposables.removeTask(t));
             let a;
             try {
                 a = await Promise.race([promise, unhandled]);
@@ -105,7 +106,7 @@ const runIterator = async (ir, i, context, semaphore, disposables, origin, trace
                 const asyncTrace = capturePrependTraceWithContext(effectContext, origin, trace, { kind: 'async' });
                 throw new ForkError('FX_AWAITED_ASYNC_FAILED', `Awaited Async task failed`, origin, traceWithCause(asyncTrace, e, effectContext), effectContext, { cause: e });
             }
-            // stop if the scope was disposed while we were waiting
+            // stop if the scope was interrupted while we were waiting
             if (disposables.canInterrupt && interrupt !== undefined)
                 return await disposables.interruptNow(interrupt);
             ir = resumeWithRuntimeContext(i, effectContext, a);
@@ -115,12 +116,12 @@ const runIterator = async (ir, i, context, semaphore, disposables, origin, trace
             const forkOrigin = ir.value.arg.origin;
             const forkTrace = capturePrependTraceWithContext(effectContext, forkOrigin, trace, forkFrameMetadata(ir.value.arg.trace));
             const t = acquireAndRunFork({ ...ir.value.arg, trace: forkTrace }, semaphore, context, effectContext);
-            disposables.add(t);
+            disposables.addTask(t);
             t.promise
-                .finally(() => disposables.remove(t))
+                .finally(() => disposables.removeTask(t))
                 .catch(e => {
                 queueMicrotask(() => {
-                    if (t._handled || t._disposed || disposables.interruptRequested)
+                    if (t._handled || t._interrupted || disposables.interruptRequested)
                         return;
                     rejectUnhandled(new ForkError('FX_UNHANDLED_FORK_FAILURE', `Unhandled failure in forked task`, forkOrigin, traceWithCause(forkTrace, e, effectContext), effectContext, { cause: e }));
                 });
@@ -157,21 +158,26 @@ const runIterator = async (ir, i, context, semaphore, disposables, origin, trace
 };
 class InterruptState {
     disposables = new DisposableSet();
+    tasks = new Set();
     masks;
-    interrupt;
+    interruptHandler;
     interrupting;
     requested = false;
+    reason;
     constructor(masks = []) {
         this.masks = new InterruptMaskState(masks);
     }
     get interruptRequested() {
         return this.requested;
     }
+    get interruptionReason() {
+        return this.reason;
+    }
     get canInterrupt() {
         return this.requested && this.masks.canInterrupt;
     }
     setInterrupt(interrupt) {
-        this.interrupt = interrupt;
+        this.interruptHandler = interrupt;
         if (this.requested && this.masks.canInterrupt)
             void this.interruptNow(interrupt).catch(() => { });
     }
@@ -180,6 +186,12 @@ class InterruptState {
     }
     remove(disposable) {
         this.disposables.remove(disposable);
+    }
+    addTask(task) {
+        this.tasks.add(task);
+    }
+    removeTask(task) {
+        this.tasks.delete(task);
     }
     maskSnapshot() {
         return this.masks.snapshot();
@@ -190,21 +202,27 @@ class InterruptState {
     unmask(token) {
         this.masks.unmask(token);
     }
-    [Symbol.dispose]() {
+    interrupt(reason) {
         this.requested = true;
+        this.reason = reason;
         if (!this.masks.canInterrupt)
             return;
-        this.disposeActive();
-        if (this.interrupt !== undefined)
-            void this.interruptNow(this.interrupt).catch(() => { });
+        this.interruptActive();
+        if (this.interruptHandler !== undefined)
+            void this.interruptNow(this.interruptHandler).catch(() => { });
     }
-    disposeActive() {
+    interruptActive() {
         this.disposables[Symbol.dispose]();
+        this.interruptActiveTasks();
     }
     async interruptNow(interrupt, masks = this.maskSnapshot()) {
-        this.disposeActive();
-        this.interrupting ??= interrupt(masks);
+        this.interruptActive();
+        this.interrupting ??= interrupt(masks, this.reason);
         return await this.interrupting;
+    }
+    interruptActiveTasks() {
+        for (const task of this.tasks)
+            void task.interrupt(this.reason).catch(() => { });
     }
 }
 class ForkError extends Error {
@@ -275,17 +293,17 @@ const runTask = (run, runtimeContext) => {
     const s = new DisposableAbortController();
     try {
         return runtimeContext === undefined
-            ? new Task(run(s.signal), s, runtimeContext)
-            : withActiveRuntimeContext(runtimeContext, () => new Task(run(s.signal), s, runtimeContext));
+            ? new Task(run(s.signal), reason => s.abort(reason), runtimeContext)
+            : withActiveRuntimeContext(runtimeContext, () => new Task(run(s.signal), reason => s.abort(reason), runtimeContext));
     }
     catch (e) {
         s[Symbol.dispose]();
-        return taskWithRuntimeContext(Promise.reject(e), s, runtimeContext);
+        return taskWithRuntimeContext(Promise.reject(e), reason => s.abort(reason), runtimeContext);
     }
 };
-const taskWithRuntimeContext = (promise, dispose, runtimeContext, disposed) => runtimeContext === undefined
-    ? new Task(promise, dispose, runtimeContext, disposed)
-    : withActiveRuntimeContext(runtimeContext, () => new Task(promise, dispose, runtimeContext, disposed));
+const taskWithRuntimeContext = (promise, interruptTask, runtimeContext, interrupted) => runtimeContext === undefined
+    ? new Task(promise, interruptTask, runtimeContext, interrupted)
+    : withActiveRuntimeContext(runtimeContext, () => new Task(promise, interruptTask, runtimeContext, interrupted));
 const iteratorWithRuntimeContext = (f, runtimeContext) => runtimeContext === undefined
     ? f[Symbol.iterator]()
     : withActiveRuntimeContext(runtimeContext, () => f[Symbol.iterator]());

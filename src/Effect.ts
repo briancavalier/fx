@@ -20,6 +20,34 @@ export interface AnyEffect {
   readonly arg: unknown
 }
 
+export interface EffectInstance<Id, A, R> extends AnyEffect, Pipeable {
+  readonly _fxEffectId: Id
+  readonly arg: A
+  readonly R: R
+
+  returning<RR extends R>(): Fx<this, RR>
+  [Symbol.iterator](): Iterator<this, R, any>
+}
+
+export interface EffectClass<Id> extends EffectType {
+  readonly _fxEffectId: Id
+  new<A, R = unknown>(arg: A): EffectInstance<Id, A, R>
+  is<E extends EffectType>(this: E, x: unknown): x is InstanceType<E>
+}
+
+export interface ScopedEffectInstance<Id, Scope extends AnyScope, A, R> extends EffectInstance<Id, A, R> {
+  readonly scope: Scope
+}
+
+export interface ScopedEffectClass<Id> extends EffectType {
+  readonly _fxEffectId: Id
+  new<const Scope extends AnyScope, A = void, R = unknown>(
+    scope: Scope,
+    arg: A
+  ): ScopedEffectInstance<Id, Scope, A, R>
+  is<E extends EffectType>(this: E, x: unknown): x is InstanceType<E>
+}
+
 export interface EffectOrigin {
   readonly [EffectOriginTypeId]: TraceOrigin
 }
@@ -40,7 +68,7 @@ export interface EffectOrigin {
  * const user = yield* findUser('user-1')
  * ```
  */
-export const Effect = <const T extends string>(id: T) => class <A, R = unknown> implements AnyEffect, Pipeable {
+export const Effect = <const T extends string>(id: T): EffectClass<T> => class <A, R = unknown> implements EffectInstance<T, A, R> {
   public readonly _fxTypeId: typeof EffectTypeId = EffectTypeId;
   public readonly _fxEffectId = id;
   public static readonly _fxEffectId = id;
@@ -58,7 +86,7 @@ export const Effect = <const T extends string>(id: T) => class <A, R = unknown> 
   [Symbol.iterator](): Iterator<this, R, any> {
     return new Once<this, R>(this)
   }
-}
+} as EffectClass<T>
 
 /**
  * Define an effect type whose requests are associated with a named scope.
@@ -80,11 +108,11 @@ export const ScopedEffect = <const T extends string>(id: T) => class <
   const Scope extends AnyScope,
   A = void,
   R = unknown
-> extends Effect(id)<A, R> {
+> extends Effect(id)<A, R> implements ScopedEffectInstance<T, Scope, A, R> {
   constructor(public readonly scope: Scope, arg: A) {
     super(arg)
   }
-}
+} as ScopedEffectClass<T>
 
 export const isEffect = <E>(e: E): e is E & AnyEffect =>
   !!e && (e as any)._fxTypeId === EffectTypeId

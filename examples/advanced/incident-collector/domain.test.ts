@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { bounded, defaultAll, firstSuccess } from '@briancavalier/fx/concurrent'
-import { type Async, type Fx, type Interrupt, returnAll, runPromise } from '@briancavalier/fx'
+import { type Async, type Fx, type HandlerCapture, type Interrupt, returnAll, runPromise } from '@briancavalier/fx'
 
 import { collect } from '@briancavalier/fx/log'
 import { withScope } from '@briancavalier/fx/scope'
@@ -127,7 +127,7 @@ describe('incident collector example', () => {
       returnAll
     )
 
-    const runnable: Fx<Async | Interrupt, unknown> = handled
+    const runnable: Fx<Async | HandlerCapture<string> | Interrupt, unknown> = handled
     void runnable
   })
 })

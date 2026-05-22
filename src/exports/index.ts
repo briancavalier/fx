@@ -39,6 +39,7 @@ export {
   type HandleReturn,
   type HandleScoped
 } from '../Handler.js'
+export { HandlerCapture, type CapturedHandler } from '../HandlerCapture.js'
 export {
   assert,
   catchAll,

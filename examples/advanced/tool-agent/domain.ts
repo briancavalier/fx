@@ -1,5 +1,5 @@
 import { type All, all } from '@briancavalier/fx/concurrent'
-import { Effect, fail, type Fail, fx, type Fx, type Interrupt } from '@briancavalier/fx'
+import { Effect, fail, type Fail, fx, type Fx, type HandlerCapture, type Interrupt } from '@briancavalier/fx'
 
 import { scope, type Finally, type Managed, usingManaged, type YieldFrom, type Yielding } from '@briancavalier/fx/scope'
 import { info, type Log } from '@briancavalier/fx/log'
@@ -69,8 +69,9 @@ export type ToolAgentEffects =
   | StartAgentSession
   | Log
   | Time
-  | Finally<typeof AgentSessionScope, YieldFrom<typeof AgentEvents>>
   | Interrupt
+  | HandlerCapture<'fx/Concurrent/All'>
+  | Finally<typeof AgentSessionScope, YieldFrom<typeof AgentEvents>>
   | Fail<AgentError>
 
 /**

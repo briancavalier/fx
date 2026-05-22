@@ -127,12 +127,12 @@ type UnhandledEffectsError<Effects> = {
   readonly detail: Effects
 }
 
-type RunEffects<E, RuntimeEffects> =
+type RunBoundary<E, RuntimeEffects> =
   [IfAny<E, never>] extends [never]
-    ? E
+    ? unknown
     : [UnhandledEffects<E, RuntimeEffects>] extends [never]
-      ? E
-      : RuntimeEffects | UnhandledEffectsError<UnhandledEffects<E, RuntimeEffects>>
+      ? unknown
+      : UnhandledEffectsError<UnhandledEffects<E, RuntimeEffects>>
 
 /**
  * Execute a runtime-ready Fx and return a cancellable {@link Task}.
@@ -141,7 +141,7 @@ type RunEffects<E, RuntimeEffects> =
  * for cleanup. All non-runtime effects must be handled before calling it.
  */
 export const runTask = <const E, const R>(
-  f: Fx<RunEffects<E, Async | HandlerCapture<string> | Interrupt>, R>,
+  f: Fx<E, R> & RunBoundary<E, Async | HandlerCapture<string> | Interrupt>,
   options: RunForkOptions = {}
 ): Task<R, never> => {
   return runFork((f as Fx<Async | HandlerCapture<string> | Interrupt, R>).pipe(provideAll({})), {
@@ -157,7 +157,7 @@ export const runTask = <const E, const R>(
  * to cancel or wait for disposal.
  */
 export const runPromise = <const E, const R>(
-  f: Fx<RunEffects<E, Async | HandlerCapture<string> | Interrupt>, R>,
+  f: Fx<E, R> & RunBoundary<E, Async | HandlerCapture<string> | Interrupt>,
   options: RunForkOptions = {}
 ): Promise<R> => {
   return runTask(f as Fx<Async | HandlerCapture<string> | Interrupt, R>, {
@@ -173,7 +173,7 @@ export const runPromise = <const E, const R>(
  * {@link Interrupt}. Use {@link runPromise} or {@link runTask} for async
  * programs.
  */
-export const run = <const E, const R>(f: Fx<RunEffects<E, Interrupt>, R>): R => {
+export const run = <const E, const R>(f: Fx<E, R> & RunBoundary<E, Interrupt>): R => {
   return (f as Fx<Interrupt, R>).pipe(provideAll({}), f => {
     const i = f[Symbol.iterator]()
     const masks = new InterruptMaskState()

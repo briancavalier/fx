@@ -38,6 +38,7 @@ subpaths for optional feature areas and advanced trace tools.
 
 | Need | Import from |
 | --- | --- |
+| Encoding and decoding external data with branded codec keys | `@briancavalier/fx/codec` |
 | Scopes, abort, finalization, early return, scoped yielding | `@briancavalier/fx/scope` |
 | Sinks for receiving values | `@briancavalier/fx/sink` |
 | Scoped mutable state operations | `@briancavalier/fx/state` |

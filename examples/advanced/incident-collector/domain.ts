@@ -1,4 +1,4 @@
-import { all, race, type All, type Race } from '@briancavalier/fx/concurrent'
+import { all, mapAll, race, type All, type Race } from '@briancavalier/fx/concurrent'
 import { Effect, fail, type Fail, fx, type Fx, handle, type HandlerCapture, type Interrupt, ok } from '@briancavalier/fx'
 
 import { managed, scope, using, usingManaged, type Finally, type Managed } from '@briancavalier/fx/scope'
@@ -256,7 +256,7 @@ export const createIncidentCollectorFixture = (options: FixtureOptions = {}) => 
 }
 
 const collectServiceLogs = (bundle: Bundle, services: readonly ServiceName[]) => withCollector('logs', fx(function* () {
-  const logs = yield* all(services.map(service => collectOneServiceLog(bundle, service)))
+  const logs = yield* mapAll(services, service => collectOneServiceLog(bundle, service))
   return logs
 }))
 

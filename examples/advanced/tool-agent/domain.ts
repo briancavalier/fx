@@ -1,4 +1,4 @@
-import { type All, all } from '@briancavalier/fx/concurrent'
+import { type All, mapAll } from '@briancavalier/fx/concurrent'
 import { Effect, fail, type Fail, fx, type Fx, type HandlerCapture, type Interrupt } from '@briancavalier/fx'
 
 import { scope, type Finally, type Managed, usingManaged, type YieldFrom, type Yielding } from '@briancavalier/fx/scope'
@@ -107,7 +107,7 @@ export const runAgent = (
     return yield* fail({ tag: 'ModelError', reason: 'model returned a summary when a plan was requested' })
   }
 
-  const results = yield* all(plan.toolCalls.map(runTool))
+  const results = yield* mapAll(plan.toolCalls, runTool)
   const summary = yield* askModel({ type: 'summarize', task, results })
   if (summary.type !== 'summary') {
     return yield* fail({ tag: 'ModelError', reason: 'model returned a plan when a summary was requested' })

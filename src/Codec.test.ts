@@ -31,6 +31,8 @@ const OtherUserJson = codecKey<User, string>()(OtherUserJsonSymbol)
 const CountText = codecKey<number, string>()('CountText')
 
 class InvalidCodec extends Error { }
+class EncodeUnavailable extends Error { }
+class DecodeUnavailable extends Error { }
 
 type EffectsOf<T> =
   T extends Fx<infer E, any> ? E : never
@@ -143,6 +145,36 @@ describe('Codec', () => {
 
     assert.ok(actual instanceof Fail)
     assert.equal(actual.arg, expected)
+  })
+
+  it('withCodec keeps decode-only handler effects directional', () => {
+    const program = decode(UserJson, '{"id":"u1","name":"Ada"}').pipe(
+      withCodec(UserJson, {
+        encode: () => fail(new EncodeUnavailable()),
+        decode: json => fail(new DecodeUnavailable(json))
+      })
+    )
+
+    const typed: Fx<Fail<DecodeUnavailable>, User> = program
+    const actual = typed.pipe(returnFail, run)
+
+    assert.ok(actual instanceof Fail)
+    assert.ok(actual.arg instanceof DecodeUnavailable)
+  })
+
+  it('withCodec keeps encode-only handler effects directional', () => {
+    const program = encode(UserJson, { id: 'u1', name: 'Ada' }).pipe(
+      withCodec(UserJson, {
+        encode: user => fail(new EncodeUnavailable(user.name)),
+        decode: () => fail(new DecodeUnavailable())
+      })
+    )
+
+    const typed: Fx<Fail<EncodeUnavailable>, string> = program
+    const actual = typed.pipe(returnFail, run)
+
+    assert.ok(actual instanceof Fail)
+    assert.ok(actual.arg instanceof EncodeUnavailable)
   })
 
   it('supports string codec keys', () => {

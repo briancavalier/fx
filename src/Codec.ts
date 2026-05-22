@@ -86,9 +86,9 @@ export const decode = <const K extends AnyCodecKey>(
 ): Fx<Decode<K>, CodecValue<K>> =>
   withOrigin(new Decode({ codec, encoded }), at('fx/Codec/decode', decode))
 
-export type WithCodec<E, K extends AnyCodecKey, HandlerEffects = never> =
-  E extends Encode<infer EK> ? HandleKeyedCodecEffect<E, EK, K, HandlerEffects>
-  : E extends Decode<infer DK> ? HandleKeyedCodecEffect<E, DK, K, HandlerEffects>
+export type WithCodec<E, K extends AnyCodecKey, EncodeEffects = never, DecodeEffects = never> =
+  E extends Encode<infer EK> ? HandleKeyedCodecEffect<E, EK, K, EncodeEffects>
+  : E extends Decode<infer DK> ? HandleKeyedCodecEffect<E, DK, K, DecodeEffects>
   : E
 
 export type WithEncoder<E, K extends AnyCodecKey, HandlerEffects = never> =
@@ -136,11 +136,11 @@ export const withCodec = <const K extends AnyCodecKey, EncodeEffects = never, De
   codec: K,
   { encode, decode }: CodecImplementation<K, EncodeEffects, DecodeEffects>
 ) =>
-  <const E, const A>(fx: Fx<E, A>): Fx<WithCodec<E, K, EncodeEffects | DecodeEffects>, A> =>
+  <const E, const A>(fx: Fx<E, A>): Fx<WithCodec<E, K, EncodeEffects, DecodeEffects>, A> =>
     fx.pipe(
       withEncoder(codec, encode),
       withDecoder(codec, decode)
-    ) as Fx<WithCodec<E, K, EncodeEffects | DecodeEffects>, A>
+    ) as Fx<WithCodec<E, K, EncodeEffects, DecodeEffects>, A>
 
 type HandleKeyedCodecEffect<E, EffectKey extends AnyCodecKey, HandledKey extends AnyCodecKey, HandlerEffects> =
   IsExact<EffectKey, HandledKey> extends true ? HandlerEffects

@@ -47,6 +47,11 @@ Development guidance:
 - Document public effect declarations succinctly. Effect docs should describe the request represented by the effect, not the behavior of any particular handler.
 - Keep handler behavior docs on the handler that provides that behavior.
 - Add focused tests under `src/*.test.ts` for behavior and type-level expectations where relevant.
+- For diagnostic/runtime snapshot records, prefer simple plain-object DTOs with
+  explicit enumerable fields. Do not use symbol-keyed or non-enumerable metadata
+  just to hide fields from formatting when formatting code already controls
+  rendered output. Copy optional fields directly when `undefined` is an
+  acceptable value.
 - Do not edit `dist/` directly; build output is generated.
 - Keep examples practical and small.
 - When changing public exports, update the relevant `src/exports/*` entrypoint

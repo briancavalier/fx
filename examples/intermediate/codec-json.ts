@@ -1,5 +1,5 @@
-import { Fail, fail, flatMap, ok, returnFail, run, trySync } from '@briancavalier/fx'
-import { codecKey, CodecEncoded, CodecKey, decode, encode, withCodec } from '@briancavalier/fx/codec'
+import { Fail, flatMap, ok, returnFail, run } from '@briancavalier/fx'
+import { codecFail, codecKey, codecOk, CodecEncoded, CodecKey, decodeOrFail, encodeOrFail, withCodec } from '@briancavalier/fx/codec'
 
 type User = {
   readonly id: string
@@ -7,7 +7,7 @@ type User = {
   readonly createdAt: Date
 }
 
-const UserJson = codecKey<User, string>()('UserJson', {
+const UserJson = codecKey<User, string, InvalidUserJson>()('UserJson', {
   description: 'User encoded as JSON with createdAt as an ISO string'
 })
 
@@ -28,9 +28,9 @@ const invalidJson = JSON.stringify({
   createdAt: 'not-a-date'
 })
 
-const roundTrip = <K extends CodecKey<User, string>>(codec: K, input: CodecEncoded<K>) =>
-  decode(codec, input).pipe(
-    flatMap(user => encode(codec, { ...user, name: user.name.toUpperCase() }))
+const roundTrip = <K extends CodecKey<User, string, unknown, unknown>>(codec: K, input: CodecEncoded<K>) =>
+  decodeOrFail(codec, input).pipe(
+    flatMap(user => encodeOrFail(codec, { ...user, name: user.name.toUpperCase() }))
   )
 
 // The reusable program above only knows about the codec key. The concrete JSON
@@ -49,24 +49,32 @@ const decodeUser = (value: unknown) => {
     const createdAt = new Date(value.createdAt)
 
     return Number.isNaN(createdAt.getTime())
-      ? fail(new InvalidUserJson('createdAt must be an ISO date string'))
-      : ok({ id: value.id, name: value.name, createdAt })
+      ? codecFail(new InvalidUserJson('createdAt must be an ISO date string'))
+      : codecOk({ id: value.id, name: value.name, createdAt })
   }
 
-  return fail(new InvalidUserJson('expected User JSON object'))
+  return codecFail(new InvalidUserJson('expected User JSON object'))
 }
 
 const withUserJson = withCodec(UserJson, {
-  encode: user =>
-    trySync(() => JSON.stringify({
-      id: user.id,
-      name: user.name,
-      createdAt: user.createdAt.toISOString()
-    })),
-  decode: text =>
-    trySync(() => JSON.parse(text) as unknown).pipe(
-      flatMap(decodeUser)
-    )
+  encode: user => {
+    try {
+      return ok(codecOk(JSON.stringify({
+        id: user.id,
+        name: user.name,
+        createdAt: user.createdAt.toISOString()
+      })))
+    } catch {
+      return ok(codecFail(new InvalidUserJson('failed to encode user JSON')))
+    }
+  },
+  decode: text => {
+    try {
+      return ok(decodeUser(JSON.parse(text) as unknown))
+    } catch {
+      return ok(codecFail(new InvalidUserJson('failed to parse user JSON')))
+    }
+  }
 })
 
 const summarizeUserJson = (json: string) => {
@@ -85,7 +93,7 @@ const expectEncoded = (result: string | Fail<unknown>) => {
 }
 
 const encoded = roundTrip(UserJson, incomingJson).pipe(withUserJson, returnFail, run, expectEncoded)
-const invalid = decode(UserJson, invalidJson).pipe(withUserJson, returnFail, run)
+const invalid = decodeOrFail(UserJson, invalidJson).pipe(withUserJson, returnFail, run)
 
 console.log('codec ok', summarizeUserJson(encoded))
 console.log('codec invalid', summarizeFailure(invalid))

@@ -88,12 +88,13 @@ describe('bookmarks API client', () => {
     assert.equal(result.createdAt.toISOString(), bookmarkWire.createdAt)
     assert.equal(requests[0]?.method, 'POST')
     assert.equal(requests[0]?.url.href, 'http://localhost/api/bookmarks')
+    assert.deepEqual(requests[0]?.headers, [['content-type', 'application/json']])
     assert.deepEqual(requests[0]?.body, {
-      type: 'json',
-      value: {
+      type: 'text',
+      value: JSON.stringify({
         url: 'https://example.com',
         tags: ['typescript']
-      }
+      })
     })
   })
 

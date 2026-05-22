@@ -2,27 +2,28 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assert as assertNoFail, returnAll, run } from '@briancavalier/fx'
 
-import { decode, encode } from '@briancavalier/fx/codec'
-import { AddBookmarkInputJson, BookmarkJson, type AddBookmarkInputWire, InvalidBookmarkJson, withBookmarkCodecs } from './codec.js'
+import { decodeOrFail, encodeOrFail } from '@briancavalier/fx/codec'
+import { AddBookmarkInputJson, BookmarkJson, InvalidBookmarkJson, withBookmarkCodecs } from './codec.js'
 import type { Bookmark } from './domain.js'
 
 describe('bookmarks codecs', () => {
   it('encodes bookmark dates as ISO strings for JSON responses', () => {
-    const encoded = withBookmarkCodecs(encode(BookmarkJson, bookmark)).pipe(
+    const encoded = withBookmarkCodecs(encodeOrFail(BookmarkJson, bookmark)).pipe(
       assertNoFail,
       run
     )
 
-    assert.equal(encoded.createdAt, '2024-01-01T00:00:00.000Z')
-    assert.equal(encoded.updatedAt, '2024-01-02T00:00:00.000Z')
+    const parsed = JSON.parse(encoded) as Record<string, unknown>
+    assert.equal(parsed.createdAt, '2024-01-01T00:00:00.000Z')
+    assert.equal(parsed.updatedAt, '2024-01-02T00:00:00.000Z')
   })
 
   it('decodes bookmark ISO date strings into Dates', () => {
-    const decoded = withBookmarkCodecs(decode(BookmarkJson, {
+    const decoded = withBookmarkCodecs(decodeOrFail(BookmarkJson, JSON.stringify({
       ...bookmark,
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-02T00:00:00.000Z'
-    })).pipe(
+    }))).pipe(
       assertNoFail,
       run
     )
@@ -34,10 +35,10 @@ describe('bookmarks codecs', () => {
   })
 
   it('decodes valid add bookmark input JSON', () => {
-    const decoded = withBookmarkCodecs(decode(AddBookmarkInputJson, {
+    const decoded = withBookmarkCodecs(decodeOrFail(AddBookmarkInputJson, JSON.stringify({
       url: 'https://example.com',
       tags: ['typescript', 'effects']
-    })).pipe(
+    }))).pipe(
       assertNoFail,
       run
     )
@@ -49,10 +50,19 @@ describe('bookmarks codecs', () => {
   })
 
   it('rejects invalid add bookmark input tags', () => {
-    const decoded = withBookmarkCodecs(decode(AddBookmarkInputJson, {
+    const decoded = withBookmarkCodecs(decodeOrFail(AddBookmarkInputJson, JSON.stringify({
       url: 'https://example.com',
       tags: [1]
-    } as unknown as AddBookmarkInputWire)).pipe(
+    }))).pipe(
+      returnAll,
+      run
+    )
+
+    assert.ok(decoded instanceof InvalidBookmarkJson)
+  })
+
+  it('rejects malformed add bookmark JSON', () => {
+    const decoded = withBookmarkCodecs(decodeOrFail(AddBookmarkInputJson, '{"url":')).pipe(
       returnAll,
       run
     )

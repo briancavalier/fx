@@ -3,11 +3,11 @@ import { networkInterfaces } from 'node:os'
 import { dirname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { unbounded } from '@briancavalier/fx/concurrent'
-import { assert as assertNoFail, catchAll, Fail, flatMap, fx, type Fx, map, ok, provide, returnAll, trySync } from '@briancavalier/fx'
+import { assert as assertNoFail, catchAll, Fail, flatMap, fx, type Fx, map, ok, provide, returnAll } from '@briancavalier/fx'
 
-import { decode, encode } from '@briancavalier/fx/codec'
+import { decodeOrFail, encodeOrFail, type Decode, type Encode } from '@briancavalier/fx/codec'
 import { bytes as readBytes } from '@briancavalier/fx/http-client'
-import { mount, route, routes, serve, type RouteContext, type Routes, type ServerEvent, type ServerListening, type ServerRequest, type ServerResponse } from '@briancavalier/fx/http-server'
+import { mount, route, routes, serve, transformRoutes, type RouteContext, type Routes, type ServerEvent, type ServerListening, type ServerRequest, type ServerResponse } from '@briancavalier/fx/http-server'
 import { info, withConsoleLog, type Log } from '@briancavalier/fx/log'
 import { nodeHttp, runNodeMain } from '@briancavalier/fx/platform-node'
 import { defaultRandom } from '@briancavalier/fx/random'
@@ -29,17 +29,13 @@ import {
   type FetchPageMetadata,
   type NextBookmarkId
 } from './domain.js'
-import { AddBookmarkInputJson, BookmarkJson, BookmarksJson, type AddBookmarkInputWire, InvalidBookmarkJson, withBookmarkCodecs } from './codec.js'
+import { AddBookmarkInputJson, BookmarkJson, BookmarksJson, InvalidBookmarkJson, withBookmarkCodecs } from './codec.js'
 import { sqliteBookmarkStore } from './store-sqlite.js'
 
 type ServerConfig = {
   readonly host: string
   readonly port: number
 }
-
-type JsonBody =
-  | { readonly tag: 'valid'; readonly value: unknown }
-  | { readonly tag: 'invalid' }
 
 type BookmarkRouteEffects =
   | BookmarkStore
@@ -48,13 +44,16 @@ type BookmarkRouteEffects =
   | Time
   | Log
 
+type BookmarkApiCodecEffects =
+  | Decode<typeof AddBookmarkInputJson>
+  | Encode<typeof BookmarkJson>
+  | Encode<typeof BookmarksJson>
+
 const HttpServerEvents = scope<Yielding<ServerEvent>>()('examples/advanced/bookmarks/HttpServerEvents')
 
-const createBookmark = (request: ServerRequest): Fx<BookmarkRouteEffects, ServerResponse<never>> => fx(function* () {
-  const body = yield* readJson(request)
-  if (body.tag === 'invalid') return json({ error: 'InvalidJson' }, 400)
-
-  const input = yield* withBookmarkCodecs(decode(AddBookmarkInputJson, body.value as AddBookmarkInputWire)).pipe(
+const createBookmark = (request: ServerRequest): Fx<BookmarkRouteEffects | BookmarkApiCodecEffects | Fail<InvalidBookmarkJson>, ServerResponse<never>> => fx(function* () {
+  const body = yield* readText(request)
+  const input = yield* decodeOrFail(AddBookmarkInputJson, body).pipe(
     returnAll
   )
   if (input instanceof InvalidBookmarkJson) return json({ error: 'InvalidBookmarkInput' }, 400)
@@ -62,7 +61,13 @@ const createBookmark = (request: ServerRequest): Fx<BookmarkRouteEffects, Server
   return yield* respond(addBookmark(input), bookmark => bookmarkResponse(bookmark, 201))
 })
 
-const apiRoutes = routes(
+function withApiCodecs<E, A>(program: Fx<E, A>): Fx<Exclude<E, BookmarkApiCodecEffects | Fail<InvalidBookmarkJson>>, A> {
+  return withBookmarkCodecs(program).pipe(
+    assertNoFail
+  ) as Fx<Exclude<E, BookmarkApiCodecEffects | Fail<InvalidBookmarkJson>>, A>
+}
+
+const apiRoutes = transformRoutes(withApiCodecs)(routes(
   route('GET', '/health', fx(function* () {
     return text('ok')
   })),
@@ -88,7 +93,7 @@ const apiRoutes = routes(
   route('POST', '/bookmarks/:id/metadata/refresh', fx(function* ({ request }: RouteContext<{ readonly id: string }>) {
     return yield* respond(refreshMetadata(request.params.id), bookmarkResponse)
   }))
-)
+))
 
 const browserDir = join(dirname(fileURLToPath(import.meta.url)), 'browser')
 
@@ -117,16 +122,16 @@ const server = fx(function* ({ host, port }: ServerConfig) {
   })
 })
 
-const respond = <E, A>(
+const respond = <E, A, SE>(
   program: Fx<E, A>,
-  success: (value: A) => Fx<never, ServerResponse<never>>
-): Fx<Exclude<E, Fail<BookmarkError>>, ServerResponse<never>> =>
+  success: (value: A) => Fx<SE, ServerResponse<never>>
+): Fx<Exclude<E, Fail<BookmarkError>> | SE, ServerResponse<never>> =>
   program.pipe(
     returnAll,
     flatMap(result => isBookmarkError(result)
       ? ok(bookmarkErrorResponse(result))
       : success(result))
-  ) as Fx<Exclude<E, Fail<BookmarkError>>, ServerResponse<never>>
+  ) as Fx<Exclude<E, Fail<BookmarkError>> | SE, ServerResponse<never>>
 
 const bookmarkQuery = (query: URLSearchParams): BookmarkQuery | undefined => {
   const status = query.get('status') ?? undefined
@@ -204,27 +209,27 @@ const json = (value: unknown, status = 200): ServerResponse<never> => ({
   body: { type: 'json', value }
 })
 
-const bookmarkResponse = (bookmark: Bookmark, status = 200): Fx<never, ServerResponse<never>> =>
-  withBookmarkCodecs(encode(BookmarkJson, bookmark)).pipe(
-    assertNoFail,
-    map(value => json(value, status))
+const jsonText = (value: string, status = 200): ServerResponse<never> => ({
+  status,
+  headers: [['content-type', 'application/json']],
+  body: { type: 'text', value }
+})
+
+const bookmarkResponse = (bookmark: Bookmark, status = 200): Fx<Encode<typeof BookmarkJson> | Fail<InvalidBookmarkJson>, ServerResponse<never>> =>
+  encodeOrFail(BookmarkJson, bookmark).pipe(
+    map(value => jsonText(value, status))
   )
 
-const bookmarksResponse = (bookmarks: readonly Bookmark[]): Fx<never, ServerResponse<never>> =>
-  withBookmarkCodecs(encode(BookmarksJson, bookmarks)).pipe(
-    assertNoFail,
-    map(json)
+const bookmarksResponse = (bookmarks: readonly Bookmark[]): Fx<Encode<typeof BookmarksJson> | Fail<InvalidBookmarkJson>, ServerResponse<never>> =>
+  encodeOrFail(BookmarksJson, bookmarks).pipe(
+    map(jsonText)
   )
 
-const readJson = (request: ServerRequest): Fx<never, JsonBody> =>
+const readText = (request: ServerRequest): Fx<never, string> =>
   readBytes({ status: 200, headers: [], body: request.body }).pipe(
     map((bytes: Uint8Array) => new TextDecoder().decode(bytes)),
-    flatMap(parseJsonBody),
-    catchAll(() => ok({ tag: 'invalid' } as const))
-  ) as Fx<never, JsonBody>
-
-const parseJsonBody = (body: string): Fx<Fail<unknown>, JsonBody> =>
-  trySync(() => ({ tag: 'valid', value: JSON.parse(body) }))
+    catchAll(() => ok(''))
+  ) as Fx<never, string>
 
 const logHttpServerEvent = (event: ServerEvent) => {
   switch (event.type) {

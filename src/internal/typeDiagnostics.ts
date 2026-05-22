@@ -5,7 +5,7 @@ type UnhandledEffects<E, RuntimeEffects> = Exclude<E, RuntimeEffects>
 type EffectIdOf<E> = E extends { readonly _fxEffectId: infer Id extends string } ? Id : 'unknown effect'
 
 type UnhandledEffectsError<Effects> = {
-  readonly [K in `Cannot run Fx with unhandled effect (${EffectIdOf<Effects>}). Add a handler before running.`]: Effects
+  readonly [K in `Unhandled effect ${EffectIdOf<Effects>}. Add a handler for it.`]: Effects
 }
 
 export type RunBoundary<E, RuntimeEffects> =

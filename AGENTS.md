@@ -36,6 +36,18 @@ Low-value wrappers:
 - Prefer local readable duplication over extracting a generic helper from a single use.
 - If a wrapper is kept for a non-obvious reason, leave a short comment or add a focused test that makes the reason visible.
 
+Type assertions and inference:
+- Treat `as` assertions as a last resort. First write the direct expression and
+  run `corepack pnpm typecheck`.
+- Keep assertions only when TypeScript cannot express the intended type without
+  them. Prefer explicit return types, generic constraints, `satisfies`, or typed
+  local intermediates before asserting.
+- Do not use broad result assertions to paper over `E` unions, `Fail`,
+  handler-capture effects, or public inference issues.
+- If an assertion remains, make it local and narrow. For non-obvious assertions,
+  document the TypeScript limitation or runtime invariant that makes it sound.
+- Add focused type-level tests when an assertion protects public API inference.
+
 Development guidance:
 - Prefer existing patterns in `src/Fx.ts`, `src/Effect.ts`, and `src/Handler.ts`.
 - Implementation modules are not automatically public. Public package API is

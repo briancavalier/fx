@@ -102,6 +102,20 @@ describe('Codec', () => {
     assert.throws(() => run(residual as any), /Unhandled effect in run/)
   })
 
+  it('preserves effects when the handler codec key type is widened', () => {
+    const expected = new InvalidCodec('widened handler may fail')
+    const widen = (codec: typeof UserJson | typeof OtherUserJson): typeof UserJson | typeof OtherUserJson =>
+      codec
+    const widened = widen(UserJson)
+
+    const program = decode(OtherUserJson, '{"id":"u2","name":"Grace"}').pipe(
+      withDecoder(widened, () => fail(expected))
+    )
+
+    const residual: Fx<Decode<typeof OtherUserJson> | Fail<InvalidCodec>, User> = program
+    assert.throws(() => run(residual as any), /Unhandled effect in run/)
+  })
+
   it('matches different codec key objects with the same identity', () => {
     const SameCountText = codecKey<number, string>()('CountText', {
       description: 'Same codec identity with different metadata'

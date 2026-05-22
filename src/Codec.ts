@@ -144,13 +144,11 @@ export const withCodec = <const K extends AnyCodecKey, EncodeEffects = never, De
     ) as Fx<WithCodec<E, K, EncodeEffects | DecodeEffects>, A>
 
 type HandleKeyedCodecEffect<E, EffectKey extends AnyCodecKey, HandledKey extends AnyCodecKey, HandlerEffects> =
-  Extract<EffectKey, HandledKey> extends never
-  ? E
-  : HandlerEffects | ResidualKeyedCodecEffect<E, Exclude<EffectKey, HandledKey>>
+  IsExact<EffectKey, HandledKey> extends true ? HandlerEffects
+  : Extract<EffectKey, HandledKey> extends never ? E
+  : E | HandlerEffects
 
-type ResidualKeyedCodecEffect<E, ResidualKey> =
-  ResidualKey extends never
-  ? never
-  : E extends Encode<any> ? Encode<ResidualKey & AnyCodecKey>
-  : E extends Decode<any> ? Decode<ResidualKey & AnyCodecKey>
-  : never
+type IsExact<A, B> =
+  [A] extends [B]
+    ? [B] extends [A] ? true : false
+    : false

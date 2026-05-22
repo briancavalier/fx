@@ -9,14 +9,13 @@ export interface CodecKeyMetadata {
   readonly description?: string
 }
 
-export type CodecKey<A, Encoded, Id extends string | symbol = string | symbol> = {
+export type CodecKey<A, Encoded, Id extends string | symbol = string | symbol> =
+  CodecKeyMetadata & {
   readonly [CodecKeyTypeId]: {
     readonly value: A
     readonly encoded: Encoded
-    readonly id: Id
   }
   readonly id: Id
-  readonly description?: string
 }
 
 export type AnyCodecKey = CodecKey<any, any, any>
@@ -30,7 +29,7 @@ export const codecKey = <A, Encoded>() =>
       ...metadata,
       id
     }, CodecKeyTypeId, {
-      value: { id },
+      value: undefined,
       enumerable: false,
       writable: false,
       configurable: false

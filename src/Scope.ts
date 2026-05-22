@@ -49,10 +49,21 @@ export function scope(name?: string, metadata: ScopeMetadata = {}) {
 export const scopeLabel = (scope: AnyScope): string =>
   scope.label ?? scope.name
 
-const scopeDiagnostic = (scope: AnyScope): ActiveScopeDiagnostic => ({
-  label: scopeLabel(scope),
-  ...(scope.description === undefined ? {} : { description: scope.description })
-})
+const scopeDiagnostic = (scope: AnyScope): ActiveScopeDiagnostic => {
+  const diagnostic = {
+    label: scopeLabel(scope),
+    ...(scope.description === undefined ? {} : { description: scope.description })
+  }
+
+  Object.defineProperty(diagnostic, ScopeTypeId, {
+    value: scope[ScopeTypeId],
+    enumerable: false,
+    writable: false,
+    configurable: false
+  })
+
+  return diagnostic as ActiveScopeDiagnostic
+}
 
 export type Exit<
   Scope extends AnyScope = AnyScope,

@@ -222,6 +222,39 @@ describe('Trace', () => {
     )
   })
 
+  it('keeps distinct active scopes with the same diagnostic text', async () => {
+    const OuterRequest = scope('test/Trace/outer-request', {
+      label: 'request',
+      description: 'Shared request description'
+    })
+    const InnerRequest = scope('test/Trace/inner-request', {
+      label: 'request',
+      description: 'Shared request description'
+    })
+    const f = fx(function* () {
+      yield* fail(new Error('same diagnostic text'))
+    }).pipe(
+      withScope(InnerRequest),
+      withScope(OuterRequest)
+    )
+
+    await assert.rejects(
+      runPromise(f as never),
+      e => {
+        const activeScopes = snapshotError(e).trace?.activeScopes
+        assert.deepEqual(activeScopes, [
+          { label: 'request', description: 'Shared request description' },
+          { label: 'request', description: 'Shared request description' }
+        ])
+        assert.equal(activeScopes?.[0]?.[ScopeTypeId], 'test/Trace/outer-request')
+        assert.equal(activeScopes?.[1]?.[ScopeTypeId], 'test/Trace/inner-request')
+        assert.equal(Object.getOwnPropertyDescriptor(activeScopes?.[0], ScopeTypeId)?.enumerable, false)
+        assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: request > request/)
+        return true
+      }
+    )
+  })
+
   it('omits active scope diagnostics for unscoped traced errors', () => {
     const formatted = formatDiagnostic(tracedError('unscoped', 'plain trace'), { colors: 'never' })
 

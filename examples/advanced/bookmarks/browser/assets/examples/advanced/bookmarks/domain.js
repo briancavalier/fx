@@ -1,10 +1,7 @@
-import { fail } from '../../../src/Fail.js';
-import { fx, map, ok } from '../../../src/Fx.js';
-import { handle } from '../../../src/Handler.js';
-import { info } from '../../../src/Log.js';
-import { int } from '../../../src/Random.js';
-import { now } from '../../../src/Time.js';
-import { Effect } from '../../../src/index.js';
+import { Effect, fail, fx, handle, map, ok } from '@briancavalier/fx';
+import { info } from '@briancavalier/fx/log';
+import { int } from '@briancavalier/fx/random';
+import { now } from '@briancavalier/fx/time';
 /**
  * Request bookmark persistence without choosing a storage backend.
  */
@@ -159,7 +156,9 @@ const metadataStatus = (result) => result.tag === 'available'
 const pageMetadataFields = (result) => result.tag === 'available'
     ? result.metadata
     : {};
-const findByUrl = (bookmarks, url) => [...bookmarks.values()].find(bookmark => bookmark.url === url);
+const findByUrl = (bookmarks, url) => [...bookmarks.values()]
+    .filter(bookmark => bookmark.url === url)
+    .sort(compareDuplicateCandidates)[0];
 const filterBookmarks = (bookmarks, query) => {
     const normalized = normalizeQuery(query);
     const tag = normalized.tag;
@@ -173,4 +172,7 @@ const filterBookmarks = (bookmarks, query) => {
 const bookmarkMatchesText = (bookmark, text) => bookmark.url.toLocaleLowerCase().includes(text) ||
     bookmark.title?.toLocaleLowerCase().includes(text) === true ||
     bookmark.description?.toLocaleLowerCase().includes(text) === true;
+const compareDuplicateCandidates = (a, b) => Number(a.status === 'archived') - Number(b.status === 'archived') ||
+    a.createdAt.getTime() - b.createdAt.getTime() ||
+    a.id.localeCompare(b.id);
 const isMetadataResult = (value) => 'tag' in value && (value.tag === 'available' || value.tag === 'failed');

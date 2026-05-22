@@ -10,7 +10,27 @@
     "outDir": "assets",
     "declaration": false,
     "declarationMap": false,
-    "sourceMap": false
+    "sourceMap": false,
+    "paths": {
+      "@briancavalier/fx": [
+        "../../../../src/index.ts"
+      ],
+      "@briancavalier/fx/codec": [
+        "../../../../src/Codec.ts"
+      ],
+      "@briancavalier/fx/http-client": [
+        "../../../../src/HttpClient.ts"
+      ],
+      "@briancavalier/fx/log": [
+        "../../../../src/Log.ts"
+      ],
+      "@briancavalier/fx/random": [
+        "../../../../src/Random.ts"
+      ],
+      "@briancavalier/fx/time": [
+        "../../../../src/Time.ts"
+      ]
+    }
   },
   "include": [
     "app.ts"

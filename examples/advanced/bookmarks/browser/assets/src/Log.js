@@ -17,7 +17,7 @@ export var Level;
     Level[Level["ERROR"] = 4] = "ERROR";
     Level[Level["SILENT"] = 5] = "SILENT";
 })(Level || (Level = {}));
-export const console = handle(Log, ({ arg: { level, component, ...m } }) => fx(function* () {
+export const withConsoleLog = handle(Log, ({ arg: { level, component, ...m } }) => fx(function* () {
     const console = globalThis.console;
     const l = Level[level].padEnd(5, ' ');
     const t = new Date(yield* now).toISOString();

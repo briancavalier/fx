@@ -8,10 +8,19 @@ import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './inte
 import { runFork } from './internal/runFork.js';
 import { TrySync } from './internal/sync.js';
 /**
- * Construct an Fx from a generator that uses `yield*` to produce effects.
- * A generator with a declared runtime parameter receives contextual parameters
- * from {@link Get}; defaulted contextual parameters are not supported because
- * they have runtime arity 0.
+ * Construct an Fx from a generator that uses `yield*` to request effects.
+ *
+ * A generator with a declared runtime parameter receives contextual values from
+ * {@link Get}; defaulted contextual parameters are not supported because they
+ * have runtime arity 0.
+ *
+ * @example
+ * ```ts
+ * const greet = fx(function* () {
+ *   const name = yield* askName
+ *   return `Hello, ${name}`
+ * })
+ * ```
  */
 export const fx = function () {
     const self = arguments.length === 1 ? undefined : arguments[0];
@@ -62,7 +71,7 @@ export const andReturn = (b) => map(() => b);
  * Perform side effects and return the original value.
  * @example
  *  // Logs "Hello" and returns "Hello"
- *  ok("Hello").pipe(tap(Console.log))
+ *  ok("Hello").pipe(tap(consoleLog))
  */
 export const tap = (f) => (fa) => fa.pipe(flatMap(a => f(a).pipe(andReturn(a))));
 /**
@@ -70,7 +79,10 @@ export const tap = (f) => (fa) => fa.pipe(flatMap(a => f(a).pipe(andReturn(a))))
  */
 export const flatten = (x) => x.pipe(flatMap(x => x));
 /**
- * Execute all the effects of the provided Fx, and return a {@link Task} for its result.
+ * Execute a runtime-ready Fx and return a cancellable {@link Task}.
+ *
+ * Use `runTask` when the caller needs to dispose the running computation or wait
+ * for cleanup. All non-runtime effects must be handled before calling it.
  */
 export const runTask = (f, options = {}) => {
     return runFork(f.pipe(provideAll({})), {
@@ -79,8 +91,10 @@ export const runTask = (f, options = {}) => {
     });
 };
 /**
- * Execute all the effects of the provided Fx, and return a Promise for its result,
- * discarding the ability to cancel the computation.
+ * Execute a runtime-ready Fx and return a Promise for its result.
+ *
+ * This discards explicit cancellation. Use {@link runTask} when the caller needs
+ * to cancel or wait for disposal.
  */
 export const runPromise = (f, options = {}) => {
     return runTask(f, {
@@ -89,7 +103,11 @@ export const runPromise = (f, options = {}) => {
     }).promise;
 };
 /**
- * Execute all the effects of the provided Fx, and return its result.
+ * Execute a synchronous Fx and return its result.
+ *
+ * Use `run` only after handlers have eliminated all effects except
+ * {@link Interrupt}. Use {@link runPromise} or {@link runTask} for async
+ * programs.
  */
 export const run = (f) => f.pipe(provideAll({}), f => {
     const i = f[Symbol.iterator]();
@@ -127,10 +145,11 @@ export const run = (f) => f.pipe(provideAll({}), f => {
     return ir.value;
 });
 /**
- * Ensures that a resource is acquired, used, and then released,
- * even if an error occurs. Runs the `initially` effect to acquire a resource,
- * passes it to `f`, and guarantees that `andFinally` is run with the
- * resource after `f` returns or throws.
+ * Acquire a resource, use it, and release it even if use fails or is
+ * interrupted.
+ *
+ * `bracket` is useful for local acquire/use/release flows. For named resource
+ * scopes, prefer the helpers in `Finalization`.
  */
 export const bracket = (initially, andFinally, f) => uninterruptibleMask(restore => fx(function* () {
     const r = yield* initially;

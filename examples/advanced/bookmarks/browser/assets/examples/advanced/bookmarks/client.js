@@ -1,6 +1,7 @@
-import { fail, catchAll } from '../../../src/Fail.js';
-import { flatMap, ok } from '../../../src/Fx.js';
-import { expectSuccess, json, request } from '../../../src/HttpClient.js';
+import { catchAll, fail, flatMap } from '@briancavalier/fx';
+import { decode } from '@briancavalier/fx/codec';
+import { expectSuccess, json, request } from '@briancavalier/fx/http-client';
+import { BookmarkJson, BookmarksJson, withBookmarkCodecs } from './codec.js';
 export const createBookmark = (baseUrl, input) => requestJson(baseUrl, 'bookmarks', {
     method: 'POST',
     body: { type: 'json', value: input }
@@ -40,59 +41,6 @@ const bookmarkQueryParams = (query) => {
         params.set('text', query.text);
     return params;
 };
-const decodeBookmarks = (value) => Array.isArray(value)
-    ? decodeBookmarkArray(value)
-    : invalidResponse(value);
-const decodeBookmarkArray = (values) => {
-    const bookmarks = [];
-    for (const value of values) {
-        const bookmark = parseBookmark(value);
-        if (bookmark === undefined)
-            return invalidResponse(value);
-        bookmarks.push(bookmark);
-    }
-    return ok(bookmarks);
-};
-const decodeBookmark = (value) => {
-    const bookmark = parseBookmark(value);
-    return bookmark === undefined ? invalidResponse(value) : ok(bookmark);
-};
+const decodeBookmarks = (value) => withBookmarkCodecs(decode(BookmarksJson, value)).pipe(catchAll(() => invalidResponse(value)));
+const decodeBookmark = (value) => withBookmarkCodecs(decode(BookmarkJson, value)).pipe(catchAll(() => invalidResponse(value)));
 const invalidResponse = (value) => fail({ tag: 'InvalidBookmarkResponse', value });
-const parseBookmark = (value) => {
-    if (!isRecord(value))
-        return undefined;
-    const createdAt = parseDate(value.createdAt);
-    const updatedAt = parseDate(value.updatedAt);
-    return typeof value.id === 'string' &&
-        typeof value.url === 'string' &&
-        isStringArray(value.tags) &&
-        isBookmarkStatus(value.status) &&
-        isMetadataStatus(value.metadataStatus) &&
-        createdAt !== undefined &&
-        updatedAt !== undefined
-        ? {
-            id: value.id,
-            url: value.url,
-            title: typeof value.title === 'string' ? value.title : undefined,
-            description: typeof value.description === 'string' ? value.description : undefined,
-            tags: value.tags,
-            status: value.status,
-            metadataStatus: value.metadataStatus,
-            createdAt,
-            updatedAt
-        }
-        : undefined;
-};
-const parseDate = (value) => {
-    if (typeof value !== 'string')
-        return undefined;
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? undefined : date;
-};
-const isMetadataStatus = (value) => isRecord(value) &&
-    (value.tag === 'not-requested' ||
-        value.tag === 'available' ||
-        (value.tag === 'failed' && typeof value.reason === 'string'));
-const isBookmarkStatus = (value) => value === 'unread' || value === 'read' || value === 'archived';
-const isStringArray = (value) => Array.isArray(value) && value.every(item => typeof item === 'string');
-const isRecord = (value) => typeof value === 'object' && value !== null;

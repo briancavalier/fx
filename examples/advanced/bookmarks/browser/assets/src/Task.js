@@ -4,34 +4,30 @@ import { flatten, ok } from './Fx.js';
 import { withActiveRuntimeContext } from './internal/runtimeContext.js';
 export class Task {
     promise;
-    dispose;
+    interruptTask;
     _runtimeContext;
-    disposedPromise;
-    disposed = false;
+    interruptedPromise;
+    interrupted = false;
     handled = false;
     E;
-    constructor(promise, dispose, _runtimeContext, disposedPromise = Promise.resolve()) {
+    constructor(promise, interruptTask, _runtimeContext, interruptedPromise = Promise.resolve()) {
         this.promise = promise;
-        this.dispose = dispose;
+        this.interruptTask = interruptTask;
         this._runtimeContext = _runtimeContext;
-        this.disposedPromise = disposedPromise;
-        this.disposedPromise.catch(() => { });
+        this.interruptedPromise = interruptedPromise;
+        this.interruptedPromise.catch(() => { });
     }
-    [Symbol.dispose]() {
-        if (this.disposed)
-            return;
-        this.disposed = true;
-        this.promise.catch(() => { });
-        this.dispose[Symbol.dispose]();
-    }
-    /** @internal Runtime-owned disposal helper. */
-    async _disposeAndWait() {
-        this[Symbol.dispose]();
-        await this.disposedPromise;
+    async interrupt(reason) {
+        if (!this.interrupted) {
+            this.interrupted = true;
+            this.promise.catch(() => { });
+            this.interruptTask(reason);
+        }
+        await this.interruptedPromise;
     }
     /** @internal Runtime-owned unhandled fork diagnostic state. */
-    get _disposed() {
-        return this.disposed;
+    get _interrupted() {
+        return this.interrupted;
     }
     /** @internal Runtime-owned unhandled fork diagnostic state. */
     get _handled() {
@@ -42,12 +38,11 @@ export class Task {
         this.handled = true;
     }
 }
-export const dispose = (t) => t[Symbol.dispose]();
 export const wait = (t) => flatten(assertPromise(s => {
     t._markHandled();
-    const dispose = () => t[Symbol.dispose]();
-    s.addEventListener('abort', dispose);
-    const p = t.promise.finally(() => s.removeEventListener('abort', dispose));
+    const interrupt = () => { void t.interrupt(); };
+    s.addEventListener('abort', interrupt);
+    const p = t.promise.finally(() => s.removeEventListener('abort', interrupt));
     const context = t._runtimeContext;
     return context === undefined
         ? p.then(ok, fail)

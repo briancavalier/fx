@@ -39,7 +39,7 @@ export const recoverInterrupt = <const Scope extends AnyScope, const HandlerEffe
 ): Fx<RecoverInterrupt<E, Scope, HandlerEffects>, A | R> =>
     f.pipe(
       control(InterruptFrom, (_, interrupt): Fx<HandlerEffects | InterruptFrom<AnyScope, unknown>, R> =>
-        (interrupt.scope === scope
+        (interrupt.scope.name === scope.name
           ? handler(interrupt.arg)
           : interrupt as Fx<InterruptFrom<AnyScope, unknown>, never>) as Fx<HandlerEffects | InterruptFrom<AnyScope, unknown>, R>)
     ) as Fx<RecoverInterrupt<E, Scope, HandlerEffects>, A | R>

@@ -99,7 +99,7 @@ export const handleScoped = <T extends ScopedEffectType, const Scope extends Eff
   fx: Fx<E, A>
 ): Fx<HandleScoped<E, InstanceType<T>, Scope, HandlerEffects>, A> =>
     new Handler(fx, e._fxEffectId, effect => {
-      if (effect.scope === scope) {
+      if (effect.scope.name === scope.name) {
         return f(effect as MatchedScopedEffect<InstanceType<T>, Scope>)
       }
 

@@ -13,18 +13,15 @@ describe('Abort', () => {
   const TestScope = scope('test/Abort')
 
   describe('scope', () => {
-    it('does not handle Abort from a same-name different scope token', () => {
+    it('handles Abort from a same-name scope token', () => {
       const FirstScope = scope('test/Abort/same-name')
       const SecondScope = scope('test/Abort/same-name')
-      const f = fx(function* () {
+      const result = fx(function* () {
         yield* abort(SecondScope)
         return 'done'
-      }).pipe(withScope(FirstScope), orReturn(FirstScope, 'aborted'))
+      }).pipe(withScope(FirstScope), orReturn(FirstScope, 'aborted'), run)
 
-      const next = f[Symbol.iterator]().next()
-
-      assert.equal(Abort.is(next.value), true)
-      assert.equal((next.value as unknown as Abort<typeof SecondScope>).scope, SecondScope)
+      assert.equal(result, 'aborted')
     })
 
     it('given matching Abort with fallback, returns alternative', () => {

@@ -46,18 +46,14 @@ describe('Handler', () => {
       assert.deepEqual(effect.arg, { value: 2 })
     })
 
-    it('propagates same-type effects from a same-name different scope token', () => {
+    it('handles same-type effects from a same-name scope token', () => {
       const FirstScope = scope('test/Handler/same-name')
       const SecondScope = scope('test/Handler/same-name')
-      const f = fx(function* () {
-        yield* request(SecondScope, 1)
-        return 'done'
+      const result = fx(function* () {
+        return yield* request(SecondScope, 1)
       }).pipe(handleScoped(Request, FirstScope, () => ok('handled')))
 
-      const next = f[Symbol.iterator]().next()
-
-      assert.equal(Request.is(next.value), true)
-      assert.equal((next.value as unknown as Request<typeof SecondScope>).scope, SecondScope)
+      assert.equal(run(result), 'handled')
     })
 
     it('narrows only matching scoped effects', () => {

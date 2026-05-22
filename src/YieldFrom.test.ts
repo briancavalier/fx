@@ -60,18 +60,15 @@ describe('YieldFrom', () => {
     assert.deepEqual(result, ['done', [1, 2]])
   })
 
-  it('does not collect yields from a same-name different scope token', () => {
-    const FirstScope = scope<Yielding<'first'>>()('test/YieldFrom/same-name')
-    const SecondScope = scope<Yielding<'second'>>()('test/YieldFrom/same-name')
-    const f = fx(function* () {
-      yield* yieldFrom(SecondScope, 'second')
+  it('collects yields from a same-name scope token', () => {
+    const FirstScope = scope<Yielding<'item'>>()('test/YieldFrom/same-name')
+    const SecondScope = scope<Yielding<'item'>>()('test/YieldFrom/same-name')
+    const result = fx(function* () {
+      yield* yieldFrom(SecondScope, 'item')
       return 'done'
-    }).pipe(collectFrom(FirstScope))
+    }).pipe(collectFrom(FirstScope), run)
 
-    const next = f[Symbol.iterator]().next()
-
-    assert.equal(YieldFrom.is(next.value), true)
-    assert.equal((next.value as YieldFrom<typeof SecondScope>).scope, SecondScope)
+    assert.deepEqual(result, ['done', ['item']])
   })
 
   it('preserves yield order and final result when collecting', () => {

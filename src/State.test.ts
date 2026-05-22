@@ -61,15 +61,12 @@ describe('State', () => {
     assert.equal((next.value as GetState<typeof OtherState>).scope, OtherState)
   })
 
-  it('leaves same-name different state scope tokens unhandled', () => {
+  it('handles same-name state scope tokens', () => {
     const FirstScope = scope<Stateful<number>>()('test/State/SameName')
     const SecondScope = scope<Stateful<number>>()('test/State/SameName')
-    const program = getState(SecondScope).pipe(withState(FirstScope, 1))
-    const next = program[Symbol.iterator]().next()
+    const result = getState(SecondScope).pipe(withState(FirstScope, 1), run)
 
-    assert.equal(next.done, false)
-    assert.equal(GetState.is(next.value), true)
-    assert.equal((next.value as GetState<typeof SecondScope>).scope, SecondScope)
+    assert.equal(result, 1)
   })
 
   it('allocates state per execution', () => {

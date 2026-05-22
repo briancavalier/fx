@@ -49,6 +49,9 @@ export function scope(name?: string, metadata: ScopeMetadata = {}) {
 export const scopeLabel = (scope: AnyScope): string =>
   scope.label ?? scope.name
 
+export const sameScope = (a: AnyScope, b: AnyScope): boolean =>
+  a.name === b.name
+
 export type Exit<
   Scope extends AnyScope = AnyScope,
   A = unknown,
@@ -150,22 +153,22 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
       while (!ir.done) {
         if (isEffect(ir.value)) {
           const effect = ir.value
-          const sameScope = (effect as { readonly scope?: unknown }).scope === scope
+          const matchesScope = (effect as { readonly scope?: AnyScope }).scope?.name === scope.name
 
-          if (sameScope && Finally.is(effect)) {
+          if (matchesScope && Finally.is(effect)) {
             finalizers.push(effect.arg)
             ir = i.next(undefined)
-          } else if (sameScope && ReturnFrom.is(effect)) {
+          } else if (matchesScope && ReturnFrom.is(effect)) {
             const exit = { type: 'returnFrom', scope, value: effect.arg } satisfies Exit<Scope>
             const failures = yield* release(exit)
             if (failures.length > 0) return (yield* withActiveScope(activeScope, failCleanup(failures))) as A
             return effect.arg as A
-          } else if (sameScope && Abort.is(effect)) {
+          } else if (matchesScope && Abort.is(effect)) {
             const exit = { type: 'abort', scope } satisfies Exit<Scope>
             const failures = yield* release(exit)
             if (failures.length > 0) return (yield* withActiveScope(activeScope, failCleanup(failures))) as A
             return (yield effect) as A
-          } else if (sameScope && InterruptFrom.is(effect)) {
+          } else if (matchesScope && InterruptFrom.is(effect)) {
             const exit = interruptedExit(scope, effect.arg)
             const failures = yield* release(exit)
             if (failures.length > 0) return (yield* withActiveScope(activeScope, failCleanup(failures))) as A

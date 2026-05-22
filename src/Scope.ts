@@ -8,7 +8,7 @@ import { InterruptFrom } from './InterruptFrom.js'
 import { ReturnFrom } from './ReturnFrom.js'
 import { drainIteratorReturn, isInterpretingReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
-import { interruptionReason, withActiveScope } from './internal/runtimeContext.js'
+import { interruptionReason, withActiveScope, type ActiveScopeDiagnostic } from './internal/runtimeContext.js'
 import { ScopeTypeId, sameScope, type ScopeIdentity } from './internal/scopeIdentity.js'
 
 export { ScopeTypeId, sameScope }
@@ -48,6 +48,11 @@ export function scope(name?: string, metadata: ScopeMetadata = {}) {
 
 export const scopeLabel = (scope: AnyScope): string =>
   scope.label ?? scope.name
+
+const scopeDiagnostic = (scope: AnyScope): ActiveScopeDiagnostic => ({
+  label: scopeLabel(scope),
+  ...(scope.description === undefined ? {} : { description: scope.description })
+})
 
 export type Exit<
   Scope extends AnyScope = AnyScope,
@@ -135,7 +140,7 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
   *[Symbol.iterator](): Iterator<unknown, A> {
     const finalizers = [] as Finalizer<unknown>[]
     const { scope } = this
-    const activeScope = scopeLabel(scope)
+    const activeScope = scopeDiagnostic(scope)
     const i = withActiveScope(activeScope, this.fx)[Symbol.iterator]()
     const captured: CapturedHandler = {
       wrap: fx => new ScopeBoundary(fx, scope)

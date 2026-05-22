@@ -153,7 +153,10 @@ describe('Trace', () => {
     await assert.rejects(
       runPromise(f as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request', 'db/transaction'])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [
+          { label: 'http/request' },
+          { label: 'db/transaction' }
+        ])
         return true
       }
     )
@@ -187,8 +190,33 @@ describe('Trace', () => {
     await assert.rejects(
       runPromise(f as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['request'])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{ label: 'request' }])
         assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: request/)
+        return true
+      }
+    )
+  })
+
+  it('uses scope descriptions in diagnostic active-scope details', async () => {
+    const RequestScope = scope('test/Trace/request-description', {
+      label: 'request',
+      description: 'Handles one HTTP request from accept through response write'
+    })
+    const f = fx(function* () {
+      yield* fail(new Error('described scope'))
+    }).pipe(withScope(RequestScope))
+
+    await assert.rejects(
+      runPromise(f as never),
+      e => {
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          label: 'request',
+          description: 'Handles one HTTP request from accept through response write'
+        }])
+        const diagnostic = formatDiagnostic(e, { colors: 'never' })
+        assert.match(diagnostic, /Active scopes: request/)
+        assert.match(diagnostic, /Active scope details:\n  request: Handles one HTTP request from accept through response write/)
+        assert.doesNotMatch(formatError(e), /Active scope details:/)
         return true
       }
     )
@@ -215,6 +243,31 @@ describe('Trace', () => {
       e => {
         assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: http\/request > db\/transaction/)
         assert.match(formatError(e), /Active scopes: http\/request > db\/transaction/)
+        assert.doesNotMatch(formatDiagnostic(e, { colors: 'never' }), /Active scope details:/)
+        return true
+      }
+    )
+  })
+
+  it('formats active-scope details for described visible scopes only', async () => {
+    const DbTransaction = scope('db/transaction', {
+      description: 'Owns transaction commit and rollback finalization'
+    })
+    const HttpRequest = scope('http/request')
+    const f = fx(function* () {
+      yield* fail(new Error('mixed scope descriptions'))
+    }).pipe(
+      withScope(DbTransaction),
+      withScope(HttpRequest)
+    )
+
+    await assert.rejects(
+      runPromise(f as never),
+      e => {
+        const diagnostic = formatDiagnostic(e, { colors: 'never' })
+        assert.match(diagnostic, /Active scopes: http\/request > db\/transaction/)
+        assert.match(diagnostic, /Active scope details:\n  db\/transaction: Owns transaction commit and rollback finalization/)
+        assert.doesNotMatch(diagnostic, /http\/request:/)
         return true
       }
     )
@@ -232,6 +285,32 @@ describe('Trace', () => {
       runPromise(scoped as never),
       e => {
         assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: a > \.\.\. > c > d > e/)
+        return true
+      }
+    )
+  })
+
+  it('compacts deep active-scope details with the active-scope line', async () => {
+    const scoped = [
+      scope('a', { description: 'visible first scope' }),
+      scope('b', { description: 'hidden middle scope' }),
+      scope('c'),
+      scope('d', { description: 'visible second-to-last scope' }),
+      scope('e', { description: 'visible last scope' })
+    ].reduceRight(
+      (f, name) => f.pipe(withScope(name)),
+      fx(function* () {
+        yield* fail(new Error('deep scope descriptions'))
+      })
+    )
+
+    await assert.rejects(
+      runPromise(scoped as never),
+      e => {
+        const diagnostic = formatDiagnostic(e, { colors: 'never' })
+        assert.match(diagnostic, /Active scopes: a > \.\.\. > c > d > e/)
+        assert.match(diagnostic, /Active scope details:\n  a: visible first scope\n  \.\.\.\n  d: visible second-to-last scope\n  e: visible last scope/)
+        assert.doesNotMatch(diagnostic, /hidden middle scope/)
         return true
       }
     )
@@ -316,7 +395,7 @@ describe('Trace', () => {
     await assert.rejects(
       runPromise(f.pipe(unbounded) as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request'])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{ label: 'http/request' }])
         return true
       }
     )
@@ -334,14 +413,14 @@ describe('Trace', () => {
     await assert.rejects(
       runPromise(allProgram.pipe(unbounded) as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request'])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{ label: 'http/request' }])
         return true
       }
     )
     await assert.rejects(
       runPromise(raceProgram.pipe(unbounded) as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request'])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{ label: 'http/request' }])
         return true
       }
     )
@@ -356,7 +435,7 @@ describe('Trace', () => {
     await assert.rejects(
       runPromise(f as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['http/request'])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{ label: 'http/request' }])
         return true
       }
     )
@@ -372,7 +451,7 @@ describe('Trace', () => {
       runPromise(f as never),
       e => {
         const formatted = formatDiagnostic(e, { colors: 'never' })
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, ['db/transaction'])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{ label: 'db/transaction' }])
         assert.match(formatted, /AggregateError: Resource release failed/)
         assert.match(formatted, /Active scopes: db\/transaction/)
         return true

@@ -122,8 +122,10 @@ export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E
 
 type UnhandledEffects<E, RuntimeEffects> = Exclude<E, RuntimeEffects>
 
+type EffectIdOf<E> = E extends { readonly _fxEffectId: infer Id extends string } ? Id : 'unknown effect'
+
 type UnhandledEffectsError<Effects> = {
-  readonly 'Cannot run Fx with unhandled effects. Add handlers before run/runPromise/runTask.': Effects
+  readonly [K in `Cannot run Fx with unhandled effects (${EffectIdOf<Effects>}). Add handlers before run/runPromise/runTask.`]: Effects
 }
 
 type RunBoundary<E, RuntimeEffects> =

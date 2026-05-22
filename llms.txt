@@ -16,7 +16,7 @@ Use these files when helping someone write or modify code that uses `fx`.
 - Use `@briancavalier/fx` for core program construction, effects, handlers,
   failure, async boundaries, env, task, interrupt, simple console output, and
   basic diagnostics.
-- Use named feature subpaths for optional areas: `scope`, `concurrent`,
+- Use named feature subpaths for optional areas: `codec`, `scope`, `concurrent`,
   `stream`, `trace`, `time`, `random`, `log`, `retry`, `timeout`, `http-client`,
   `http-server`, `platform-node`, and `ref`.
 - Do not use PascalCase implementation-file subpaths in application docs.
@@ -27,6 +27,7 @@ Use these files when helping someone write or modify code that uses `fx`.
 - Write a handler: `docs/recipes/write-a-handler.md`.
 - Model recoverable errors: `docs/recipes/recover-with-fail.md`.
 - Wrap platform promises: `docs/recipes/wrap-a-promise.md`.
+- Encode and decode external data: `docs/recipes/use-codecs.md`.
 - Test with pure handlers: `docs/recipes/test-with-pure-handlers.md`.
 - Run a Node program: `docs/recipes/run-a-node-program.md`.
 - Use structured concurrency: `docs/recipes/use-structured-concurrency.md`.

@@ -135,7 +135,7 @@ export const mapAll = <const A, const E, const B>(
   options?: TraceOptions
 ): Fx<Exclude<E, Async | Fail<any>> | All<readonly Fx<E, B>[]> | HandlerCapture<'fx/Concurrent/All'>, readonly B[]> => {
   const trace = traceOrigin(options, 'fx/Concurrent/mapAll', mapAll, 'all')
-  return all(Array.from(items, f) as readonly Fx<E, B>[], trace) as Fx<Exclude<E, Async | Fail<any>> | All<readonly Fx<E, B>[]> | HandlerCapture<'fx/Concurrent/All'>, readonly B[]>
+  return all(Array.from(items, f), trace)
 }
 
 /**

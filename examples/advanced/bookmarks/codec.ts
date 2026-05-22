@@ -1,6 +1,6 @@
-import { fail, type Fail, type Fx, ok } from '@briancavalier/fx'
+import { type Fx, ok } from '@briancavalier/fx'
 
-import { codecKey, type Decode, type Encode, withCodec } from '@briancavalier/fx/codec'
+import { codecFail, codecKey, codecOk, type CodecResult, type Decode, type Encode, withCodec } from '@briancavalier/fx/codec'
 import type { AddBookmarkInput, Bookmark, BookmarkStatus, MetadataStatus } from './domain.js'
 
 export type BookmarkWire = {
@@ -22,15 +22,15 @@ export type AddBookmarkInputWire = {
 
 export class InvalidBookmarkJson extends Error { }
 
-export const BookmarkJson = codecKey<Bookmark, BookmarkWire>()(Symbol('examples/advanced/bookmarks/BookmarkJson'), {
+export const BookmarkJson = codecKey<Bookmark, string, InvalidBookmarkJson>()('examples/advanced/bookmarks/BookmarkJson', {
   description: 'Bookmark JSON with Date fields encoded as ISO strings'
 })
 
-export const BookmarksJson = codecKey<readonly Bookmark[], readonly BookmarkWire[]>()(Symbol('examples/advanced/bookmarks/BookmarksJson'), {
+export const BookmarksJson = codecKey<readonly Bookmark[], string, InvalidBookmarkJson>()('examples/advanced/bookmarks/BookmarksJson', {
   description: 'Bookmark array JSON with Date fields encoded as ISO strings'
 })
 
-export const AddBookmarkInputJson = codecKey<AddBookmarkInput, AddBookmarkInputWire>()(Symbol('examples/advanced/bookmarks/AddBookmarkInputJson'), {
+export const AddBookmarkInputJson = codecKey<AddBookmarkInput, string, InvalidBookmarkJson>()('examples/advanced/bookmarks/AddBookmarkInputJson', {
   description: 'Add bookmark request JSON'
 })
 
@@ -42,22 +42,26 @@ type BookmarkCodecEffects =
   | Encode<typeof AddBookmarkInputJson>
   | Decode<typeof AddBookmarkInputJson>
 
-export const withBookmarkCodecs = <E extends BookmarkCodecEffects, A>(program: Fx<E, A>): Fx<Fail<InvalidBookmarkJson>, A> => program.pipe(
+// This example uses a small hand-rolled JSON codec so the data boundary is easy
+// to inspect without adding dependencies. A real application could keep the same
+// codec keys and delegate these handlers to Zod, Valibot, Arktype, Effect
+// Schema, a Standard Schema adapter, or a project-local parser/serializer.
+export const withBookmarkCodecs = <E, A>(program: Fx<E, A>): Fx<Exclude<E, BookmarkCodecEffects>, A> => program.pipe(
   withCodec(BookmarkJson, {
-    encode: bookmark => ok(bookmarkToWire(bookmark)),
-    decode: decodeBookmarkWire
+    encode: bookmark => ok(encodeJson(bookmarkToWire(bookmark))),
+    decode: text => ok(flatMapCodecResult(parseJson(text), decodeBookmarkWire))
   }),
   withCodec(BookmarksJson, {
-    encode: bookmarks => ok(bookmarks.map(bookmarkToWire)),
-    decode: decodeBookmarkWireArray
+    encode: bookmarks => ok(encodeJson(bookmarks.map(bookmarkToWire))),
+    decode: text => ok(flatMapCodecResult(parseJson(text), decodeBookmarkWireArray))
   }),
   withCodec(AddBookmarkInputJson, {
-    encode: input => ok(input),
-    decode: decodeAddBookmarkInputWire
+    encode: input => ok(encodeJson(input)),
+    decode: text => ok(flatMapCodecResult(parseJson(text), decodeAddBookmarkInputWire))
   })
-) as Fx<Fail<InvalidBookmarkJson>, A>
+) as Fx<Exclude<E, BookmarkCodecEffects>, A>
 
-const decodeBookmarkWireArray = (values: readonly BookmarkWire[]): Fx<Fail<InvalidBookmarkJson>, readonly Bookmark[]> => {
+const decodeBookmarkWireArray = (values: unknown): CodecResult<InvalidBookmarkJson, readonly Bookmark[]> => {
   if (!Array.isArray(values)) return invalidBookmarkJson('expected bookmark array')
 
   const bookmarks: Bookmark[] = []
@@ -66,7 +70,7 @@ const decodeBookmarkWireArray = (values: readonly BookmarkWire[]): Fx<Fail<Inval
     if (bookmark === undefined) return invalidBookmarkJson('invalid bookmark JSON')
     bookmarks.push(bookmark)
   }
-  return ok(bookmarks)
+  return codecOk(bookmarks)
 }
 
 const bookmarkToWire = (bookmark: Bookmark): BookmarkWire => ({
@@ -81,9 +85,9 @@ const bookmarkToWire = (bookmark: Bookmark): BookmarkWire => ({
   updatedAt: bookmark.updatedAt.toISOString()
 })
 
-const decodeBookmarkWire = (value: BookmarkWire): Fx<Fail<InvalidBookmarkJson>, Bookmark> => {
+const decodeBookmarkWire = (value: unknown): CodecResult<InvalidBookmarkJson, Bookmark> => {
   const bookmark = parseBookmarkWire(value)
-  return bookmark === undefined ? invalidBookmarkJson('invalid bookmark JSON') : ok(bookmark)
+  return bookmark === undefined ? invalidBookmarkJson('invalid bookmark JSON') : codecOk(bookmark)
 }
 
 const parseBookmarkWire = (value: unknown): Bookmark | undefined => {
@@ -115,13 +119,13 @@ const parseBookmarkWire = (value: unknown): Bookmark | undefined => {
     : undefined
 }
 
-const decodeAddBookmarkInputWire = (value: AddBookmarkInputWire) => {
+const decodeAddBookmarkInputWire = (value: unknown) => {
   if (!isRecord(value) || typeof value.url !== 'string') return invalidBookmarkJson('invalid add bookmark input JSON')
 
-  if (value.tags === undefined) return ok({ url: value.url })
+  if (value.tags === undefined) return codecOk({ url: value.url })
 
   return isStringArray(value.tags)
-    ? ok({ url: value.url, tags: value.tags })
+    ? codecOk({ url: value.url, tags: value.tags })
     : invalidBookmarkJson('invalid add bookmark input JSON')
 }
 
@@ -132,7 +136,29 @@ const parseDate = (value: unknown): Date | undefined => {
 }
 
 const invalidBookmarkJson = (message: string) =>
-  fail(new InvalidBookmarkJson(message))
+  codecFail(new InvalidBookmarkJson(message))
+
+const encodeJson = (value: unknown): CodecResult<InvalidBookmarkJson, string> => {
+  try {
+    return codecOk(JSON.stringify(value))
+  } catch {
+    return invalidBookmarkJson('invalid bookmark JSON')
+  }
+}
+
+const parseJson = (text: string): CodecResult<InvalidBookmarkJson, unknown> => {
+  try {
+    return codecOk(JSON.parse(text) as unknown)
+  } catch {
+    return invalidBookmarkJson('invalid bookmark JSON')
+  }
+}
+
+const flatMapCodecResult = <E, A, B>(
+  result: CodecResult<E, A>,
+  f: (value: A) => CodecResult<E, B>
+): CodecResult<E, B> =>
+  result.tag === 'ok' ? f(result.value) : result
 
 const isMetadataStatus = (value: unknown): value is MetadataStatus =>
   isRecord(value) &&

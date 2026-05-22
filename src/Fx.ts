@@ -12,7 +12,7 @@ import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './inte
 import { Pipeable } from './internal/pipe.js'
 import { RunForkOptions, runFork } from './internal/runFork.js'
 import { TrySync } from './internal/sync.js'
-import type { IfAny } from './internal/type.js'
+import type { RunBoundary } from './internal/typeDiagnostics.js'
 
 /**
  * A computation that returns a value of type `A` and may request effects `E`.
@@ -119,21 +119,6 @@ export const tap = <const A, const E2>(f: (a: A) => Fx<E2, void>) =>
  */
 export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E1 | E2, A> =>
   x.pipe(flatMap(x => x))
-
-type UnhandledEffects<E, RuntimeEffects> = Exclude<E, RuntimeEffects>
-
-type EffectIdOf<E> = E extends { readonly _fxEffectId: infer Id extends string } ? Id : 'unknown effect'
-
-type UnhandledEffectsError<Effects> = {
-  readonly [K in `Cannot run Fx with unhandled effect (${EffectIdOf<Effects>}). Add a handler before running.`]: Effects
-}
-
-type RunBoundary<E, RuntimeEffects> =
-  [IfAny<E, never>] extends [never]
-    ? unknown
-    : [UnhandledEffects<E, RuntimeEffects>] extends [never]
-      ? unknown
-      : UnhandledEffectsError<UnhandledEffects<E, RuntimeEffects>>
 
 /**
  * Execute a runtime-ready Fx and return a cancellable {@link Task}.

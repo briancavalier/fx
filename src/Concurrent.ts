@@ -133,8 +133,10 @@ export const mapAll = <const A, const E, const B>(
   items: Iterable<A>,
   f: (item: A, index: number) => Fx<E, B>,
   options?: TraceOptions
-): Fx<Exclude<E, Async | Fail<any>> | All<readonly Fx<E, B>[]> | HandlerCapture<'fx/Concurrent/All'>, readonly B[]> =>
-  all(Array.from(items, f) as readonly Fx<E, B>[], options) as Fx<Exclude<E, Async | Fail<any>> | All<readonly Fx<E, B>[]> | HandlerCapture<'fx/Concurrent/All'>, readonly B[]>
+): Fx<Exclude<E, Async | Fail<any>> | All<readonly Fx<E, B>[]> | HandlerCapture<'fx/Concurrent/All'>, readonly B[]> => {
+  const trace = traceOrigin(options, 'fx/Concurrent/mapAll', mapAll, 'all')
+  return all(Array.from(items, f) as readonly Fx<E, B>[], trace) as Fx<Exclude<E, Async | Fail<any>> | All<readonly Fx<E, B>[]> | HandlerCapture<'fx/Concurrent/All'>, readonly B[]>
+}
 
 /**
  * Request that a tuple of Fx computations race in a structured scope.

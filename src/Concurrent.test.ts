@@ -524,6 +524,25 @@ describe('Fork', () => {
       assert.deepEqual(result, ['handled'])
     })
 
+    it('preserves the mapAll call site in indexed child task failure traces', async () => {
+      const cause = new Error('mapAll traced failure')
+
+      const result = await mapAll([cause], error => fx(function* () {
+        yield* fail(error)
+      })).pipe(
+        defaultAll,
+        returnFail,
+        unbounded,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.match(firstLine(result.arg), /fx\/Fail\/fail/)
+      assert.match(result.arg.stack ?? '', /Concurrent\.test\.ts/)
+      assert.deepEqual(traceMessages(result.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/mapAll[0]', 'fx/Concurrent/mapAll'])
+      assert.equal((result.arg as Error).cause, cause)
+    })
+
     it('types mapAll as a value array and preserves child Fail errors', async () => {
       const cause = new Error('mapAll typed failure')
       const result = await fx(function* () {

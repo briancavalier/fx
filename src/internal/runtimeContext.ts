@@ -3,7 +3,6 @@ import { isEffect } from '../Effect.js'
 import type { TraceCapturePolicy } from './tracePolicy.js'
 import { getTraceCapturePolicy } from './tracePolicy.js'
 import { Pipeable, pipeThis } from './pipe.js'
-import { ScopeTypeId } from './scopeIdentity.js'
 
 /**
  * Internal diagnostic runtime context. This currently carries trace capture
@@ -17,7 +16,7 @@ export interface RuntimeContext {
 }
 
 export interface ActiveScopeDiagnostic {
-  readonly [ScopeTypeId]: string
+  readonly id: string
   readonly label: string
   readonly description?: string
 }
@@ -92,7 +91,7 @@ export const withInterruptionReason = (
 export const withActiveScope = <E, A>(scope: ActiveScopeDiagnostic, fx: Fx<E, A>): Fx<E, A> => {
   const scopes = activeScopes()
   const previousScope = scopes.at(-1)
-  const nextScopes = previousScope?.[ScopeTypeId] === scope[ScopeTypeId]
+  const nextScopes = previousScope?.id === scope.id
     ? scopes
     : [...scopes, scope]
   return withRuntimeContext({ activeScopes: nextScopes }, fx)

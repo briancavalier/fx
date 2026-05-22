@@ -50,19 +50,11 @@ export const scopeLabel = (scope: AnyScope): string =>
   scope.label ?? scope.name
 
 const scopeDiagnostic = (scope: AnyScope): ActiveScopeDiagnostic => {
-  const diagnostic = {
+  return {
+    id: scope[ScopeTypeId],
     label: scopeLabel(scope),
-    ...(scope.description === undefined ? {} : { description: scope.description })
+    description: scope.description
   }
-
-  Object.defineProperty(diagnostic, ScopeTypeId, {
-    value: scope[ScopeTypeId],
-    enumerable: false,
-    writable: false,
-    configurable: false
-  })
-
-  return diagnostic as ActiveScopeDiagnostic
 }
 
 export type Exit<

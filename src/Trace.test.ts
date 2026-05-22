@@ -154,8 +154,8 @@ describe('Trace', () => {
       runPromise(f as never),
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [
-          { label: 'http/request' },
-          { label: 'db/transaction' }
+          { id: 'http/request', label: 'http/request', description: undefined },
+          { id: 'db/transaction', label: 'db/transaction', description: undefined }
         ])
         return true
       }
@@ -190,7 +190,11 @@ describe('Trace', () => {
     await assert.rejects(
       runPromise(f as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{ label: 'request' }])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'test/Trace/request',
+          label: 'request',
+          description: undefined
+        }])
         assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: request/)
         return true
       }
@@ -210,6 +214,7 @@ describe('Trace', () => {
       runPromise(f as never),
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'test/Trace/request-description',
           label: 'request',
           description: 'Handles one HTTP request from accept through response write'
         }])
@@ -243,12 +248,9 @@ describe('Trace', () => {
       e => {
         const activeScopes = snapshotError(e).trace?.activeScopes
         assert.deepEqual(activeScopes, [
-          { label: 'request', description: 'Shared request description' },
-          { label: 'request', description: 'Shared request description' }
+          { id: 'test/Trace/outer-request', label: 'request', description: 'Shared request description' },
+          { id: 'test/Trace/inner-request', label: 'request', description: 'Shared request description' }
         ])
-        assert.equal(activeScopes?.[0]?.[ScopeTypeId], 'test/Trace/outer-request')
-        assert.equal(activeScopes?.[1]?.[ScopeTypeId], 'test/Trace/inner-request')
-        assert.equal(Object.getOwnPropertyDescriptor(activeScopes?.[0], ScopeTypeId)?.enumerable, false)
         assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: request > request/)
         return true
       }
@@ -428,7 +430,11 @@ describe('Trace', () => {
     await assert.rejects(
       runPromise(f.pipe(unbounded) as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{ label: 'http/request' }])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'http/request',
+          label: 'http/request',
+          description: undefined
+        }])
         return true
       }
     )
@@ -446,14 +452,22 @@ describe('Trace', () => {
     await assert.rejects(
       runPromise(allProgram.pipe(unbounded) as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{ label: 'http/request' }])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'http/request',
+          label: 'http/request',
+          description: undefined
+        }])
         return true
       }
     )
     await assert.rejects(
       runPromise(raceProgram.pipe(unbounded) as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{ label: 'http/request' }])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'http/request',
+          label: 'http/request',
+          description: undefined
+        }])
         return true
       }
     )
@@ -468,7 +482,11 @@ describe('Trace', () => {
     await assert.rejects(
       runPromise(f as never),
       e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{ label: 'http/request' }])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'http/request',
+          label: 'http/request',
+          description: undefined
+        }])
         return true
       }
     )
@@ -484,7 +502,11 @@ describe('Trace', () => {
       runPromise(f as never),
       e => {
         const formatted = formatDiagnostic(e, { colors: 'never' })
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{ label: 'db/transaction' }])
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'db/transaction',
+          label: 'db/transaction',
+          description: undefined
+        }])
         assert.match(formatted, /AggregateError: Resource release failed/)
         assert.match(formatted, /Active scopes: db\/transaction/)
         return true

@@ -6,7 +6,6 @@ import {
 import type { TraceCapturePolicy } from './internal/tracePolicy.js'
 import type { Fx } from './Fx.js'
 import { activeScopes, capturesTrace, withRuntimeContext } from './internal/runtimeContext.js'
-import { ScopeTypeId } from './internal/scopeIdentity.js'
 
 export type { TraceCapturePolicy }
 export { getTraceCapturePolicy, setTraceCapturePolicy }
@@ -34,7 +33,7 @@ export interface TraceFrame {
 }
 
 export interface ActiveScopeDiagnostic {
-  readonly [ScopeTypeId]: string
+  readonly id: string
   readonly label: string
   readonly description?: string
 }

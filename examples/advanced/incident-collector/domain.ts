@@ -1,5 +1,5 @@
 import { all, race, type All, type Race } from '@briancavalier/fx/concurrent'
-import { Effect, fail, type Fail, fx, type Fx, handle, type Interrupt, ok } from '@briancavalier/fx'
+import { Effect, fail, type Fail, fx, type Fx, handle, type HandlerCapture, type Interrupt, ok } from '@briancavalier/fx'
 
 import { managed, scope, using, usingManaged, type Finally, type Managed } from '@briancavalier/fx/scope'
 
@@ -71,6 +71,8 @@ export type IncidentCollectorEffects =
   | Finally<typeof BundleScope>
   | Finally<typeof CollectorScope, Log>
   | Interrupt
+  | HandlerCapture<'fx/Concurrent/All'>
+  | HandlerCapture<'fx/Concurrent/Race'>
   | Fail<IncidentCollectorError>
 
 /**

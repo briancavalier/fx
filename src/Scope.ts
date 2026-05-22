@@ -9,16 +9,16 @@ import { ReturnFrom } from './ReturnFrom.js'
 import { drainIteratorReturn, isInterpretingReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { interruptionReason, withActiveScope } from './internal/runtimeContext.js'
+import { ScopeTypeId, sameScope, type ScopeIdentity } from './internal/scopeIdentity.js'
 
-export const ScopeTypeId = Symbol('fx/Scope')
+export { ScopeTypeId, sameScope }
 
 export interface ScopeMetadata {
   readonly label?: string
   readonly description?: string
 }
 
-export interface Scope<Name extends string = string> {
-  readonly [ScopeTypeId]: Name
+export interface Scope<Name extends string = string> extends ScopeIdentity<Name> {
   readonly name: Name
   readonly label?: string
   readonly description?: string
@@ -32,8 +32,8 @@ export function scope(name?: string, metadata: ScopeMetadata = {}) {
   if (name === undefined) return scope
 
   const token = {
-    name,
-    ...metadata
+    ...metadata,
+    name
   }
 
   Object.defineProperty(token, ScopeTypeId, {
@@ -48,9 +48,6 @@ export function scope(name?: string, metadata: ScopeMetadata = {}) {
 
 export const scopeLabel = (scope: AnyScope): string =>
   scope.label ?? scope.name
-
-export const sameScope = (a: AnyScope, b: AnyScope): boolean =>
-  a.name === b.name
 
 export type Exit<
   Scope extends AnyScope = AnyScope,
@@ -153,7 +150,8 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
       while (!ir.done) {
         if (isEffect(ir.value)) {
           const effect = ir.value
-          const matchesScope = (effect as { readonly scope?: AnyScope }).scope?.name === scope.name
+          const effectScope = (effect as { readonly scope?: AnyScope }).scope
+          const matchesScope = effectScope !== undefined && sameScope(effectScope, scope)
 
           if (matchesScope && Finally.is(effect)) {
             finalizers.push(effect.arg)

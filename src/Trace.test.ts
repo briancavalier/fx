@@ -163,7 +163,19 @@ describe('Trace', () => {
     const TestScope = scope('test/Trace/non-enumerable', { label: 'non-enumerable' })
 
     assert.equal(Object.getOwnPropertyDescriptor(TestScope, ScopeTypeId)?.enumerable, false)
-    assert.deepEqual(Object.keys(TestScope), ['name', 'label'])
+    assert.deepEqual(Object.keys(TestScope), ['label', 'name'])
+  })
+
+  it('preserves the explicit scope identity when metadata contains a name', () => {
+    const metadata: { readonly name: string, readonly label: string } = {
+      name: 'test/Trace/metadata-name',
+      label: 'metadata name'
+    }
+    const TestScope = scope('test/Trace/explicit-name', metadata)
+
+    assert.equal(TestScope.name, 'test/Trace/explicit-name')
+    assert.equal(TestScope[ScopeTypeId], 'test/Trace/explicit-name')
+    assert.equal(TestScope.label, 'metadata name')
   })
 
   it('uses scope labels in active-scope diagnostics', async () => {

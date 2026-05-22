@@ -2,6 +2,7 @@ import { EffectType } from './Effect.js'
 import { Fx } from './Fx.js'
 import type { AnyScope } from './Scope.js'
 import { Answer, Arg, Control, Handler } from './internal/Handler.js'
+import { sameScope } from './internal/scopeIdentity.js'
 export type { Arg }
 
 /**
@@ -99,7 +100,7 @@ export const handleScoped = <T extends ScopedEffectType, const Scope extends Eff
   fx: Fx<E, A>
 ): Fx<HandleScoped<E, InstanceType<T>, Scope, HandlerEffects>, A> =>
     new Handler(fx, e._fxEffectId, effect => {
-      if (effect.scope.name === scope.name) {
+      if (sameScope(effect.scope, scope)) {
         return f(effect as MatchedScopedEffect<InstanceType<T>, Scope>)
       }
 

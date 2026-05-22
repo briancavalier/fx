@@ -3,6 +3,7 @@ import { ScopedEffect, withOrigin } from './Effect.js'
 import { Fx } from './Fx.js'
 import { control } from './Handler.js'
 import type { AnyScope } from './Scope.js'
+import { sameScope } from './internal/scopeIdentity.js'
 
 /**
  * Interrupt the named scope.
@@ -39,7 +40,7 @@ export const recoverInterrupt = <const Scope extends AnyScope, const HandlerEffe
 ): Fx<RecoverInterrupt<E, Scope, HandlerEffects>, A | R> =>
     f.pipe(
       control(InterruptFrom, (_, interrupt): Fx<HandlerEffects | InterruptFrom<AnyScope, unknown>, R> =>
-        (interrupt.scope.name === scope.name
+        (sameScope(interrupt.scope, scope)
           ? handler(interrupt.arg)
           : interrupt as Fx<InterruptFrom<AnyScope, unknown>, never>) as Fx<HandlerEffects | InterruptFrom<AnyScope, unknown>, R>)
     ) as Fx<RecoverInterrupt<E, Scope, HandlerEffects>, A | R>

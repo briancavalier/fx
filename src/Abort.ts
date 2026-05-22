@@ -3,6 +3,7 @@ import { ScopedEffect, withOrigin } from './Effect.js'
 import { Fx, fx, ok } from './Fx.js'
 import { control } from './Handler.js'
 import { withScope, type AnyScope, type ReturnValue, type ScopeEffects } from './Scope.js'
+import { sameScope } from './internal/scopeIdentity.js'
 
 /**
  * Abort the named scope without returning a result.
@@ -23,7 +24,7 @@ export const orReturn = <const Scope extends AnyScope, const R>(
 ): Fx<Exclude<E, Abort<Scope>>, A | R> =>
     f.pipe(
       control(Abort, (_, abort) =>
-        (abort.scope.name === scope.name ? ok(value) : abort) as Fx<Exclude<E, Abort<Scope>>, A | R>)
+        (sameScope(abort.scope, scope) ? ok(value) : abort) as Fx<Exclude<E, Abort<Scope>>, A | R>)
     ) as Fx<Exclude<E, Abort<Scope>>, A | R>
 
 export interface RestartOnAbortOptions {
@@ -50,7 +51,7 @@ export const restartOnAbort = <const Scope extends AnyScope>(
     const attempt = f.pipe(
       withScope(scope),
       control(Abort, (_, abort) => {
-        if (abort.scope.name !== scope.name) return abort
+        if (!sameScope(abort.scope, scope)) return abort
 
         aborted = abort as Abort<Scope>
         return ok(Restart)

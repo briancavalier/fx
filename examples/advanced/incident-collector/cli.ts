@@ -2,7 +2,7 @@ import { bounded, defaultAll, firstSuccess } from '@briancavalier/fx/concurrent'
 import { consoleError, consoleLog, defaultConsole, fx, returnAll, runPromise } from '@briancavalier/fx'
 
 import { withConsoleLog } from '@briancavalier/fx/log'
-import { scope } from '@briancavalier/fx/scope'
+import { withScope } from '@briancavalier/fx/scope'
 import { defaultTime } from '@briancavalier/fx/time'
 import {
   BundleScope,
@@ -22,13 +22,13 @@ const runSnapshot = (label: string, failDeploy: boolean) => fx(function* () {
     services: ['api', 'worker', 'billing']
   }).pipe(
     fixture.handle,
-    scope(CollectorScope),
+    withScope(CollectorScope),
     withConsoleLog,
     defaultTime,
     firstSuccess,
     defaultAll,
     bounded(6),
-    scope(BundleScope),
+    withScope(BundleScope),
     returnAll,
   )
 

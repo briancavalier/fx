@@ -1,7 +1,7 @@
 import { assert as assertNoFail, consoleLog, defaultConsole, fx, runPromise } from '@briancavalier/fx'
 import { firstSettled, race, unbounded } from '@briancavalier/fx/concurrent'
 
-import { scope, using } from '@briancavalier/fx/scope'
+import { scope, withScope, using } from '@briancavalier/fx/scope'
 
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 
@@ -16,7 +16,7 @@ import { defaultTime, sleep } from '@briancavalier/fx/time'
  * with `scope`, and structured race cancellation.
  */
 
-const RequestScope = 'examples/intermediate/interrupt-safe-finalization' as const
+const RequestScope = scope('examples/intermediate/interrupt-safe-finalization')
 
 const openConnection = fx(function* () {
   yield* consoleLog('database: open connection')
@@ -58,7 +58,7 @@ const main = fx(function* () {
 
 await main.pipe(
   firstSettled,
-  scope(RequestScope),
+  withScope(RequestScope),
   defaultTime,
   unbounded,
   defaultConsole,

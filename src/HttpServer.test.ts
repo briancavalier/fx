@@ -27,10 +27,10 @@ import {
 import { NodeHttpError, nodeHttp, type NodeHttpServerFactory } from './HttpServerNode.js'
 import { HandlerCapture } from './HandlerCapture.js'
 import type { Interrupt } from './Interrupt.js'
-import { brand } from './Scope.js'
+import { scope } from './Scope.js'
 import { YieldFrom, yieldFrom, type Yielding } from './YieldFrom.js'
 
-const HttpServerEvents = brand<Yielding<ServerEvent>>()('test/HttpServer/events')
+const HttpServerEvents = scope<Yielding<ServerEvent>>()('test/HttpServer/events')
 
 describe('HttpServer', () => {
   describe('route AST', () => {

@@ -1,5 +1,5 @@
 import { consoleLog, defaultConsole, fx, runPromise, trySync } from '@briancavalier/fx'
-import { brand, scope } from '@briancavalier/fx/scope'
+import { scope, withScope } from '@briancavalier/fx/scope'
 import { getState, modifyState, type Stateful, withStateInit } from '@briancavalier/fx/state'
 
 type Session = {
@@ -7,7 +7,7 @@ type Session = {
   readonly lastRoute: string
 }
 
-const SessionState = brand<Stateful<Session>>()('example/SessionState')
+const SessionState = scope<Stateful<Session>>()('example/SessionState')
 
 const recordRequest = (route: string) =>
   modifyState(SessionState, session => [
@@ -25,7 +25,7 @@ const program = fx(function* () {
 })
 
 await program.pipe(
-  scope(SessionState),
+  withScope(SessionState),
   withStateInit(SessionState, trySync(() => ({ requests: 0, lastRoute: 'none' }))),
   defaultConsole,
   runPromise

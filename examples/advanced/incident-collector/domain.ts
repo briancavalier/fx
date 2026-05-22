@@ -1,13 +1,13 @@
 import { all, race, type All, type Race } from '@briancavalier/fx/concurrent'
 import { Effect, fail, type Fail, fx, type Fx, handle, type Interrupt, ok } from '@briancavalier/fx'
 
-import { using, usingManaged, managed, type Finally, type Managed } from '@briancavalier/fx/scope'
+import { managed, scope, using, usingManaged, type Finally, type Managed } from '@briancavalier/fx/scope'
 
 import { info, type Log } from '@briancavalier/fx/log'
 import { sleep, type Time } from '@briancavalier/fx/time'
 
-export const BundleScope = 'examples/advanced/incident-collector/Bundle' as const
-export const CollectorScope = 'examples/advanced/incident-collector/Collector' as const
+export const BundleScope = scope('examples/advanced/incident-collector/Bundle')
+export const CollectorScope = scope('examples/advanced/incident-collector/Collector')
 
 export type IncidentId = string
 export type ServiceName = 'api' | 'worker' | 'billing'

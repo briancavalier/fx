@@ -4,6 +4,7 @@ import { Fork, firstSettled, fork, race } from './Concurrent.js'
 import { Fail, catchAll, fail } from './Fail.js'
 import { Fx, fx, map, ok } from './Fx.js'
 import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
+import { scopeLabel, type AnyScope } from './Scope.js'
 import { Sleep, sleep } from './Time.js'
 import { attachTrace, captureTrace } from './Trace.js'
 import type { TraceOrigin } from './Trace.js'
@@ -15,19 +16,19 @@ import type { TraceOrigin } from './Trace.js'
  * reason, then re-yields the matching {@link InterruptFrom} so callers choose
  * how to recover or report the timeout.
  */
-export function timeout<const Scope extends string>(
+export function timeout<const Scope extends AnyScope>(
   scope: Scope,
   options: DefaultTimeoutInterruptOptions
 ): <const E, const A>(f: Fx<E, A>) => Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<Scope, TimeoutInterrupt>, A>
-export function timeout<const Scope extends string, const Reason>(
+export function timeout<const Scope extends AnyScope, const Reason>(
   scope: Scope,
   options: TimeoutInterruptOptions<Reason>
 ): <const E, const A>(f: Fx<E, A>) => Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<Scope, Reason>, A>
-export function timeout<const Scope extends string, const Reason>(
+export function timeout<const Scope extends AnyScope, const Reason>(
   scope: Scope,
   { ms, reason }: DefaultTimeoutInterruptOptions | TimeoutInterruptOptions<Reason>
 ) {
-  const origin = at(`Timeout interrupted ${scope} after ${ms}ms`, timeout)
+  const origin = at(`Timeout interrupted ${scopeLabel(scope)} after ${ms}ms`, timeout)
   const trace = captureTrace(origin, undefined, { kind: 'timeout' })
   return <const E, const A>(f: Fx<E, A>): Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<Scope, Reason | TimeoutInterrupt>, A> =>
     fx(function* () {

@@ -4,13 +4,13 @@ import { describe, it } from 'node:test'
 import { Fail, fail, returnFail } from './Fail.js'
 import { andFinally } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
-import { brand, scope } from './Scope.js'
+import { scope, withScope } from './Scope.js'
 import { GetState, getState, modifyState, type ModifyState, type Stateful, withState, withStateInit } from './State.js'
 
 describe('State', () => {
-  const CounterState = brand<Stateful<number>>()('test/State/Counter')
-  const OtherState = brand<Stateful<string>>()('test/State/Other')
-  const ObjectState = brand<Stateful<{ readonly count: number }>>()('test/State/Object')
+  const CounterState = scope<Stateful<number>>()('test/State/Counter')
+  const OtherState = scope<Stateful<string>>()('test/State/Other')
+  const ObjectState = scope<Stateful<{ readonly count: number }>>()('test/State/Object')
 
   it('gets the initial state', () => {
     const program = getState(CounterState).pipe(withState(CounterState, 1), run)
@@ -59,6 +59,14 @@ describe('State', () => {
     assert.equal(next.done, false)
     assert.equal(GetState.is(next.value), true)
     assert.equal((next.value as GetState<typeof OtherState>).scope, OtherState)
+  })
+
+  it('handles same-name state scope tokens', () => {
+    const FirstScope = scope<Stateful<number>>()('test/State/SameName')
+    const SecondScope = scope<Stateful<number>>()('test/State/SameName')
+    const result = getState(SecondScope).pipe(withState(FirstScope, 1), run)
+
+    assert.equal(result, 1)
   })
 
   it('allocates state per execution', () => {
@@ -114,7 +122,7 @@ describe('State', () => {
       }))
 
       return yield* getState(CounterState)
-    }).pipe(scope(CounterState), withState(CounterState, 1), returnFail, run)
+    }).pipe(withScope(CounterState), withState(CounterState, 1), returnFail, run)
 
     assert.equal(program, 2)
     assert.equal(finalizerState, 2)
@@ -125,8 +133,8 @@ describe('State', () => {
       yield* andFinally(CounterState, modifyState(CounterState, count => [count + 1, undefined]))
       return 'done'
     })
-    const wrongOrder = program.pipe(withState(CounterState, 1), scope(CounterState))
-    const rightOrder = program.pipe(scope(CounterState), withState(CounterState, 1))
+    const wrongOrder = program.pipe(withState(CounterState, 1), withScope(CounterState))
+    const rightOrder = program.pipe(withScope(CounterState), withState(CounterState, 1))
 
     type WrongEffects = typeof wrongOrder extends Fx<infer E, 'done'> ? E : never
     type RightEffects = typeof rightOrder extends Fx<infer E, 'done'> ? E : never

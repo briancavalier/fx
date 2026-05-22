@@ -1,12 +1,13 @@
 import { ScopedEffect } from './Effect.js'
 import { Fx } from './Fx.js'
+import type { AnyScope } from './Scope.js'
 
 /**
  * Return early from the named scope with a value.
  */
-export class ReturnFrom<const Scope extends string, const A> extends ScopedEffect('fx/ReturnFrom')<Scope, A, never> { }
+export class ReturnFrom<const Scope extends AnyScope, const A> extends ScopedEffect('fx/ReturnFrom')<Scope, A, never> { }
 
-export const returnFrom = <const Scope extends string, const A>(
+export const returnFrom = <const Scope extends AnyScope, const A>(
   scope: Scope,
   value: A
 ): Fx<ReturnFrom<Scope, A>, never> =>

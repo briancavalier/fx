@@ -2,6 +2,7 @@ import type { Async } from './Async.js'
 import { type Fx, runTask } from './Fx.js'
 import type { HandlerCapture } from './HandlerCapture.js'
 import type { Interrupt } from './Interrupt.js'
+import type { RunBoundary } from './internal/typeDiagnostics.js'
 import type { ProcessSignalName } from './Process.js'
 
 export type NodeSignalName = ProcessSignalName
@@ -21,14 +22,14 @@ export type NodeRuntimeEffects =
   | Interrupt
   | HandlerCapture<string>
 
-export const runNodeMain = <const E extends NodeRuntimeEffects>(
-  program: Fx<E, void>,
+export const runNodeMain = <const E>(
+  program: Fx<E, void> & RunBoundary<E, NodeRuntimeEffects>,
   options?: RunNodeOptions
 ): Promise<void> =>
   runNodePromise(program, options)
 
-export const runNodePromise = <const E extends NodeRuntimeEffects>(
-  program: Fx<E, void>,
+export const runNodePromise = <const E>(
+  program: Fx<E, void> & RunBoundary<E, NodeRuntimeEffects>,
   {
     process: nodeProcess = globalNodeProcess(),
     signals = ['SIGINT', 'SIGTERM']

@@ -179,6 +179,7 @@ export function run<const E extends Interrupt | Get<Record<PropertyKey, unknown>
   return f.pipe(f => {
     const i = f[Symbol.iterator]()
     const masks = new InterruptMaskState()
+    const defaultEnv = {}
     let ir = i.next()
     const step = (ir: IteratorResult<Interrupt | Get<Record<PropertyKey, unknown>>, R>) => {
       while (!ir.done) {
@@ -189,7 +190,7 @@ export function run<const E extends Interrupt | Get<Record<PropertyKey, unknown>
           masks.unmask(ir.value.arg)
           ir = i.next()
         } else if (Get.is(ir.value)) {
-          ir = i.next({})
+          ir = i.next(defaultEnv)
         } else if (isEffect(ir.value)) {
           throw new Error('Unhandled effect in run')
         } else {

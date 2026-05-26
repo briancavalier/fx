@@ -2,7 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
-import { provideAll } from './Env.js'
+import { get, provideAll } from './Env.js'
 import { Fail, returnFail } from './Fail.js'
 import { assertSync, flatMap, fx, ok, run, runPromise, runTask, trySync } from './Fx.js'
 import { control, handle } from './Handler.js'
@@ -197,6 +197,17 @@ describe('Fx', () => {
       assert.equal(await runTask(optional).promise, 'anonymous')
       assert.equal(await runTask(required.pipe(provideAll({ name: 'Brian' }))).promise, 'Brian')
     })
+
+    it('reuses one default environment object across gets', async () => {
+      const actual = await runTask(fx(function* () {
+        const a = yield* get<{ count?: number }>()
+        a.count = (a.count ?? 0) + 1
+        const b = yield* get<{ count?: number }>()
+        return { same: a === b, count: b.count }
+      })).promise
+
+      assert.deepEqual(actual, { same: true, count: 1 })
+    })
   })
 
   describe('runPromise', () => {
@@ -273,6 +284,17 @@ describe('Fx', () => {
 
       assert.equal(run(optional), 'anonymous')
       assert.equal(run(required.pipe(provideAll({ name: 'Brian' }))), 'Brian')
+    })
+
+    it('reuses one default environment object across gets', () => {
+      const actual = run(fx(function* () {
+        const a = yield* get<{ count?: number }>()
+        a.count = (a.count ?? 0) + 1
+        const b = yield* get<{ count?: number }>()
+        return { same: a === b, count: b.count }
+      }))
+
+      assert.deepEqual(actual, { same: true, count: 1 })
     })
   })
 })

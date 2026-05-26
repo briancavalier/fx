@@ -86,6 +86,7 @@ const runForkLoop = async <const E, const A>(
   runtimeContext?: RuntimeContext
 ): Promise<A> => {
   let interrupting: Promise<void> | undefined
+  const defaultEnv = {}
 
   try {
     const i = iteratorWithRuntimeContext(f, runtimeContext)
@@ -94,14 +95,14 @@ const runForkLoop = async <const E, const A>(
       reason: unknown = disposables.interruptionReason
     ): Promise<A> => {
       if (interrupting === undefined) {
-        interrupting = closeInterruptedIterator(i, context, semaphore, origin, trace, unhandled, rejectUnhandled, runtimeContext, disposed, cleanupMasks, reason)
+        interrupting = closeInterruptedIterator(i, context, semaphore, origin, trace, unhandled, rejectUnhandled, runtimeContext, disposed, defaultEnv, cleanupMasks, reason)
         interrupting.catch(() => { })
       }
       await interrupting
       return await never()
     }
     disposables.setInterrupt(interrupt)
-    return await runIterator(nextWithRuntimeContext(i, runtimeContext), i, context, semaphore, disposables, origin, trace, unhandled, rejectUnhandled, runtimeContext, interrupt)
+    return await runIterator(nextWithRuntimeContext(i, runtimeContext), i, context, semaphore, disposables, origin, trace, unhandled, rejectUnhandled, runtimeContext, defaultEnv, interrupt)
   } catch (e) {
     if (e instanceof ForkError) {
       if (disposables.interruptRequested) disposed.reject(e)
@@ -124,6 +125,7 @@ const closeInterruptedIterator = async <const E, const A>(
   rejectUnhandled: (e: unknown) => void,
   runtimeContext: RuntimeContext | undefined,
   disposed: PromiseWithResolvers<void>,
+  defaultEnv: Record<PropertyKey, unknown>,
   cleanupMasks: readonly InterruptMaskBegin['arg'][],
   reason: unknown
 ): Promise<void> => {
@@ -131,7 +133,7 @@ const closeInterruptedIterator = async <const E, const A>(
   const cleanupContext = withInterruptionReason(runtimeContext, reason)
   try {
     const ir = returnWithRuntimeContext(i, cleanupContext)
-    await runIterator(ir, i, context, semaphore, cleanup, origin, trace, unhandled, rejectUnhandled, cleanupContext)
+    await runIterator(ir, i, context, semaphore, cleanup, origin, trace, unhandled, rejectUnhandled, cleanupContext, defaultEnv)
     disposed.resolve()
   } catch (e) {
     disposed.reject(e)
@@ -152,6 +154,7 @@ const runIterator = async <const E, const A>(
   unhandled: Promise<never>,
   rejectUnhandled: (e: unknown) => void,
   runtimeContext: RuntimeContext | undefined,
+  defaultEnv: Record<PropertyKey, unknown>,
   interrupt?: (masks?: readonly InterruptMaskBegin['arg'][], reason?: unknown) => Promise<A>
 ): Promise<A> => {
   while (!ir.done) {
@@ -201,7 +204,7 @@ const runIterator = async <const E, const A>(
       if (disposables.canInterrupt && interrupt !== undefined) return await disposables.interruptNow(interrupt, masksAtInterruptDelivery)
       ir = resumeWithRuntimeContext(i, runtimeContext, undefined)
     } else if (isEffect(ir.value) && ir.value._fxEffectId === EnvEffectId) {
-      ir = resumeWithRuntimeContext(i, runtimeContext, {})
+      ir = resumeWithRuntimeContext(i, runtimeContext, defaultEnv)
     } else if (Fail.is(ir.value)) {
       const causeTrace = getTrace(ir.value.arg)
       const effectContext = runtimeContextOfEffect(ir.value, runtimeContext)

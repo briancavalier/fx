@@ -1,5 +1,7 @@
 import { Async } from '../Async.js'
 import { Breadcrumb, at } from '../Breadcrumb.js'
+import type { Get } from '../Env.js'
+import { isEffect } from '../Effect.js'
 import { Fail } from '../Fail.js'
 import { Fork, ForkContext } from '../Concurrent.js'
 import { Fx } from '../Fx.js'
@@ -19,7 +21,9 @@ export type RunForkOptions = TraceOptions & {
   readonly maxConcurrency?: number
 }
 
-export const runFork = <const E extends Async | Fork | Fail<unknown> | HandlerCapture<string> | Interrupt, const A>(f: Fx<E, A>, options: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
+const EnvEffectId = 'fx/Env'
+
+export const runFork = <const E extends Async | Fork | Fail<unknown> | HandlerCapture<string> | Interrupt | Get<Record<PropertyKey, unknown>>, const A>(f: Fx<E, A>, options: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new InterruptState()
   const disposed = Promise.withResolvers<void>()
   const runtimeContext = currentRuntimeContext()
@@ -196,6 +200,8 @@ const runIterator = async <const E, const A>(
       disposables.unmask(ir.value.arg)
       if (disposables.canInterrupt && interrupt !== undefined) return await disposables.interruptNow(interrupt, masksAtInterruptDelivery)
       ir = resumeWithRuntimeContext(i, runtimeContext, undefined)
+    } else if (isEffect(ir.value) && ir.value._fxEffectId === EnvEffectId) {
+      ir = resumeWithRuntimeContext(i, runtimeContext, {})
     } else if (Fail.is(ir.value)) {
       const causeTrace = getTrace(ir.value.arg)
       const effectContext = runtimeContextOfEffect(ir.value, runtimeContext)

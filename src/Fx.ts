@@ -1,6 +1,6 @@
 import { Async } from './Async.js'
 import { at } from './Breadcrumb.js'
-import { Get, get, provideAll } from './Env.js'
+import { Get, get } from './Env.js'
 import { Fail, assert } from './Fail.js'
 import { HandlerCapture } from './HandlerCapture.js'
 import { uninterruptibleMask } from './Interrupt.js'
@@ -125,8 +125,8 @@ export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E
  * Use `runTask` when the caller needs to dispose the running computation or wait
  * for cleanup. All non-runtime effects must be handled before calling it.
  */
-export const runTask = <const R>(f: Fx<Async | HandlerCapture<string> | Interrupt, R>, options: RunForkOptions = {}): Task<R, never> => {
-  return runFork(f.pipe(provideAll({})), {
+export const runTask = <const R>(f: Fx<Async | HandlerCapture<string> | Interrupt | Get<Record<PropertyKey, unknown>>, R>, options: RunForkOptions = {}): Task<R, never> => {
+  return runFork(f, {
     ...options,
     origin: options.origin ?? at('fx/runTask', runTask)
   })
@@ -138,7 +138,7 @@ export const runTask = <const R>(f: Fx<Async | HandlerCapture<string> | Interrup
  * This discards explicit cancellation. Use {@link runTask} when the caller needs
  * to cancel or wait for disposal.
  */
-export const runPromise = <const R>(f: Fx<Async | HandlerCapture<string> | Interrupt, R>, options: RunForkOptions = {}): Promise<R> => {
+export const runPromise = <const R>(f: Fx<Async | HandlerCapture<string> | Interrupt | Get<Record<PropertyKey, unknown>>, R>, options: RunForkOptions = {}): Promise<R> => {
   return runTask(f, {
     ...options,
     origin: options.origin ?? at('fx/runPromise', runPromise)
@@ -152,12 +152,12 @@ export const runPromise = <const R>(f: Fx<Async | HandlerCapture<string> | Inter
  * {@link Interrupt}. Use {@link runPromise} or {@link runTask} for async
  * programs.
  */
-export const run = <const R>(f: Fx<Interrupt, R>): R =>
-  f.pipe(provideAll({}), f => {
+export const run = <const R>(f: Fx<Interrupt | Get<Record<PropertyKey, unknown>>, R>): R =>
+  f.pipe(f => {
     const i = f[Symbol.iterator]()
     const masks = new InterruptMaskState()
     let ir = i.next()
-    const step = (ir: IteratorResult<Interrupt, R>) => {
+    const step = (ir: IteratorResult<Interrupt | Get<Record<PropertyKey, unknown>>, R>) => {
       while (!ir.done) {
         if (InterruptMaskBegin.is(ir.value)) {
           masks.mask(ir.value.arg)
@@ -165,6 +165,8 @@ export const run = <const R>(f: Fx<Interrupt, R>): R =>
         } else if (InterruptMaskEnd.is(ir.value)) {
           masks.unmask(ir.value.arg)
           ir = i.next()
+        } else if (Get.is(ir.value)) {
+          ir = i.next({})
         } else if (isEffect(ir.value)) {
           throw new Error('Unhandled effect in run')
         } else {

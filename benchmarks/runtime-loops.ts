@@ -10,7 +10,7 @@ import { fx, ok, run, runPromise, runTask } from '../src/Fx.js'
 import { control, handle } from '../src/Handler.js'
 import { captureHandlers, closeHandlerCapture, mapCapturedHandlers, withHandlerContext } from '../src/HandlerCapture.js'
 import { uninterruptible } from '../src/Interrupt.js'
-import { scope } from '../src/Scope.js'
+import { scope, withScope } from '../src/Scope.js'
 import { wait } from '../src/Task.js'
 import { setTraceCapturePolicy } from '../src/Trace.js'
 import { Handler as InternalHandler } from '../src/internal/Handler.js'
@@ -66,10 +66,12 @@ const forkFanout16 = forkFanout(16)
 const allFanout16 = all(fanoutValues(16))
 const raceFanout16 = race(fanoutValues(16))
 const blocked = assertPromise<void>(() => new Promise(() => { }))
+const InterruptScope = scope('benchmark/runtime-loops/Interrupt')
+const ScopeFinalizer = scope('benchmark/runtime-loops/ScopeFinalizer')
 const blockedWithFinalizer = fx(function* () {
-  yield* andFinally('benchmark/runtime-loops/Interrupt', ok(undefined))
+  yield* andFinally(InterruptScope, ok(undefined))
   return yield* blocked
-}).pipe(scope('benchmark/runtime-loops/Interrupt'))
+}).pipe(withScope(InterruptScope))
 
 const handlerContextDepths = [0, 1, 4, 8, 16] as const
 const captureFanouts = [1, 4, 16, 64] as const
@@ -172,7 +174,7 @@ const cases: readonly BenchmarkCase[] = [
   ),
   ...handlerContextDepths.map(depth =>
     benchmark(`scope finalizer registration depth ${depth}`, 'scope', CaptureIterations, 500, () => {
-      finalizerProgram(depth).pipe(scope('benchmark/runtime-loops/ScopeFinalizer'), run)
+      finalizerProgram(depth).pipe(withScope(ScopeFinalizer), run)
     })
   ),
   ...handlerContextDepths.map(depth =>
@@ -230,8 +232,7 @@ const cases: readonly BenchmarkCase[] = [
   benchmark('dispose blocked fork', 'interrupt', InterruptIterations, 100, async () => {
     await fx(function* () {
       const task = yield* fork(blocked)
-      task[Symbol.dispose]()
-      yield* assertPromise(() => task._disposeAndWait())
+      yield* assertPromise(() => task.interrupt())
     }).pipe(unbounded, runPromise)
   })
 ]
@@ -359,14 +360,14 @@ function directHandlerStack(depth: number) {
 
 function applyScopes(f: Fx<unknown, unknown>, depth: number) {
   let current = f as Fx<any, any>
-  for (let i = 0; i < depth; i++) current = current.pipe(scope(`benchmark/runtime-loops/Scope/${i}`))
+  for (let i = 0; i < depth; i++) current = current.pipe(withScope(scope(`benchmark/runtime-loops/Scope/${i}`)))
   return current as Fx<any, any>
 }
 
 function finalizerProgram(count: number) {
   return fx(function* () {
     for (let i = 0; i < count; i++) {
-      yield* andFinally('benchmark/runtime-loops/ScopeFinalizer', ok(undefined))
+      yield* andFinally(ScopeFinalizer, ok(undefined))
     }
   })
 }
@@ -414,8 +415,7 @@ function applyHandlers(f: Fx<unknown, unknown>, handlers: readonly ((fx: Fx<any,
 
 async function disposeTask(f: Fx<any, unknown>) {
   const task = runTask(f)
-  task[Symbol.dispose]()
-  await task._disposeAndWait()
+  await task.interrupt()
 }
 
 function gitSha(): string {

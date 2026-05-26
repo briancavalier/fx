@@ -6,8 +6,8 @@ import { Pipeable, pipeThis } from './pipe.js'
 
 /**
  * Internal diagnostic runtime context. This currently carries trace capture
- * policy across interpreter/runtime boundaries; it is not a general service
- * or capability container.
+ * policy across runtime boundaries; it is not a general service or capability
+ * container.
  */
 export interface RuntimeContext {
   readonly traceCapturePolicy?: TraceCapturePolicy

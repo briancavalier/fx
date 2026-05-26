@@ -9,6 +9,7 @@ import { Task, wait as waitTask } from './Task.js'
 import type { TraceFrameKind, TraceOptions, TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
 import { Semaphore } from './internal/Semaphore.js'
+import { currentForkRuntime, createForkRuntime } from './internal/forkRuntime.js'
 import { acquireAndRunFork } from './internal/runFork.js'
 import { currentRuntimeContext } from './internal/runtimeContext.js'
 
@@ -255,7 +256,7 @@ export const unbounded = bounded(Infinity)
 
 const runForkWith = (s: Semaphore) =>
   (fork: Fork): Fx<never, Task<unknown, unknown>> =>
-    ok(acquireAndRunFork(fork.arg, s))
+    ok(acquireAndRunFork(fork.arg, s, currentForkRuntime() ?? createForkRuntime()))
 
 const childFrameKind = (trace: Trace | undefined) =>
   trace?.frame.kind === 'all' || trace?.frame.kind === 'race' ? trace.frame.kind : 'fork'

@@ -6,14 +6,13 @@ import { Pipeable, pipeThis } from './pipe.js'
 
 /**
  * Internal diagnostic runtime context. This currently carries trace capture
- * policy and other interpreter-owned execution evidence across runtime
- * boundaries; it is not a general service or capability container.
+ * policy across runtime boundaries; it is not a general service or capability
+ * container.
  */
 export interface RuntimeContext {
   readonly traceCapturePolicy?: TraceCapturePolicy
   readonly activeScopes?: readonly ActiveScopeDiagnostic[]
   readonly interruptionReason?: unknown
-  readonly defaultEnv?: Record<PropertyKey, unknown>
 }
 
 export interface ActiveScopeDiagnostic {
@@ -88,14 +87,6 @@ export const withInterruptionReason = (
   reason: unknown
 ): RuntimeContext | undefined =>
   reason === undefined ? context : { ...context, interruptionReason: reason }
-
-export const withDefaultEnv = (
-  context: RuntimeContext | undefined,
-  defaultEnv: Record<PropertyKey, unknown>
-): RuntimeContext =>
-  context?.defaultEnv === defaultEnv
-    ? context
-    : { ...context, defaultEnv }
 
 export const withActiveScope = <E, A>(scope: ActiveScopeDiagnostic, fx: Fx<E, A>): Fx<E, A> => {
   const scopes = activeScopes()

@@ -237,6 +237,25 @@ describe('Fx', () => {
         count: 2
       })
     })
+
+    it('isolates default environments across nested runtime entrypoints', async () => {
+      const inner = fx(function* () {
+        const env = yield* get<{ count?: number }>()
+        env.count = (env.count ?? 0) + 1
+        return env.count
+      })
+
+      const actual = await runTask(fx(function* () {
+        const env = yield* get<{ count?: number }>()
+        env.count = 1
+
+        const innerCount = yield* assertPromise(() => runTask(inner).promise)
+        const after = yield* get<{ count?: number }>()
+        return { innerCount, outerCount: after.count }
+      })).promise
+
+      assert.deepEqual(actual, { innerCount: 1, outerCount: 1 })
+    })
   })
 
   describe('runPromise', () => {

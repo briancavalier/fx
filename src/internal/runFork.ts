@@ -6,14 +6,15 @@ import { Fx } from '../Fx.js'
 import { CapturedHandler, HandlerCapture, withHandlerContext } from '../HandlerCapture.js'
 import type { Interrupt } from '../Interrupt.js'
 import { Task } from '../Task.js'
-import { attachTrace, captureAppendTrace, capturePrependTrace, captureTrace, getTrace } from '../Trace.js'
-import type { Trace, TraceFrameMetadata, TraceOptions } from '../Trace.js'
+import { getTrace } from '../Trace.js'
+import type { Trace, TraceOptions } from '../Trace.js'
 import { Semaphore } from './Semaphore.js'
 import { DisposableSet } from './disposable.js'
+import { ForkError, capturePrependTraceWithContext, captureTraceWithContext, forkFrameMetadata, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from './forkDiagnostics.js'
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './interrupt.js'
 import { withInterpretedReturn } from './iteratorClose.js'
 import type { RuntimeContext } from './runtimeContext.js'
-import { currentRuntimeContext, getRuntimeContext, traceCapturePolicy, withActiveRuntimeContext, withInterruptionReason } from './runtimeContext.js'
+import { currentRuntimeContext, getRuntimeContext, withActiveRuntimeContext, withInterruptionReason } from './runtimeContext.js'
 
 export type RunForkOptions = TraceOptions & {
   readonly maxConcurrency?: number
@@ -104,7 +105,7 @@ const runForkLoop = async <const E, const A>(
       throw e
     }
     const errorContext = getRuntimeContext(e) ?? runtimeContext
-    const error = new ForkError('FX_UNHANDLED_EXCEPTION', `Unhandled exception in forked task`, origin, traceWithCause(trace, e, errorContext), errorContext, { cause: e })
+    const error = new ForkError('FX_UNHANDLED_EXCEPTION', `Unhandled exception in forked task`, origin, traceWithCause(trace, e, errorContext, getTrace(e)), errorContext, { cause: e })
     if (disposables.interruptRequested) disposed.reject(error)
     throw error
   }
@@ -164,7 +165,7 @@ const runIterator = async <const E, const A>(
         if (e instanceof UnhandledForkError) throw e.error
         if (disposables.canInterrupt && interrupt !== undefined) return await disposables.interruptNow(interrupt)
         const asyncTrace = capturePrependTraceWithContext(effectContext, origin, trace, { kind: 'async' })
-        throw new ForkError('FX_AWAITED_ASYNC_FAILED', `Awaited Async task failed`, origin, traceWithCause(asyncTrace, e, effectContext), effectContext, { cause: e })
+        throw new ForkError('FX_AWAITED_ASYNC_FAILED', `Awaited Async task failed`, origin, traceWithCause(asyncTrace, e, effectContext, getTrace(e)), effectContext, { cause: e })
       }
       // stop if the scope was interrupted while we were waiting
       if (disposables.canInterrupt && interrupt !== undefined) return await disposables.interruptNow(interrupt)
@@ -181,7 +182,7 @@ const runIterator = async <const E, const A>(
           queueMicrotask(() => {
             if (t._handled || t._interrupted || disposables.interruptRequested) return
             rejectUnhandled(
-              new ForkError('FX_UNHANDLED_FORK_FAILURE', `Unhandled failure in forked task`, forkOrigin, traceWithCause(forkTrace, e, effectContext), effectContext, { cause: e })
+              new ForkError('FX_UNHANDLED_FORK_FAILURE', `Unhandled failure in forked task`, forkOrigin, traceWithCause(forkTrace, e, effectContext, getTrace(e)), effectContext, { cause: e })
             )
           })
         })
@@ -204,7 +205,7 @@ const runIterator = async <const E, const A>(
       throw new ForkError('FX_UNHANDLED_FAILURE', `Unhandled failure in forked task`, failOrigin, failTrace, effectContext, { cause: ir.value.arg })
     } else {
       const effectContext = runtimeContextOfEffect(ir.value, runtimeContext)
-      throw new ForkError('FX_UNHANDLED_FAILURE', `Unhandled failure in forked task`, origin, traceWithCause(trace, ir.value, effectContext), effectContext, { cause: ir.value })
+      throw new ForkError('FX_UNHANDLED_FAILURE', `Unhandled failure in forked task`, origin, traceWithCause(trace, ir.value, effectContext, getTrace(ir.value)), effectContext, { cause: ir.value })
     }
   }
   return ir.value as A
@@ -294,22 +295,6 @@ class InterruptState {
     for (const task of this.tasks) void task.interrupt(this.reason).catch(() => { })
   }
 }
-
-class ForkError extends Error {
-  constructor(readonly code: ForkErrorCode, message: string, origin: Breadcrumb, trace: Trace | undefined, runtimeContext?: RuntimeContext, options?: ErrorOptions) {
-    super(message, options)
-    if (traceCapturePolicy(runtimeContext) === 'full' && 'stack' in origin) Object.defineProperty(this, 'stack', { get: () => origin.stack })
-    Object.defineProperty(this, 'code', {
-      value: code,
-      enumerable: false,
-      writable: false,
-      configurable: true
-    })
-    if (trace !== undefined) attachTrace(this, trace)
-  }
-}
-
-type ForkErrorCode = 'FX_AWAITED_ASYNC_FAILED' | 'FX_UNHANDLED_FORK_FAILURE' | 'FX_UNHANDLED_FAILURE' | 'FX_UNHANDLED_EXCEPTION'
 
 class UnhandledForkError extends Error {
   constructor(readonly error: unknown) {
@@ -419,71 +404,6 @@ const returnWithRuntimeContext = <E, A>(
       withInterpretedReturn(() => iterator.return?.() ?? { done: true, value: undefined as A }))
 
 const never = <A>(): Promise<A> => new Promise(() => { })
-
-const traceWithCause = (trace: Trace | undefined, cause: unknown, runtimeContext?: RuntimeContext): Trace | undefined => {
-  const causeTrace = getTrace(cause)
-  return captureAppendTraceWithContext(runtimeContext, causeTrace ?? trace, causeTrace === undefined ? undefined : trace)
-}
-
-const runtimeContextOfEffect = (effect: unknown, fallback?: RuntimeContext): RuntimeContext | undefined =>
-  getRuntimeContext(effect) ?? fallback
-
-const traceUnhandledFail = (
-  fail: Fail<unknown>,
-  causeTrace: Trace | undefined,
-  parentTrace: Trace | undefined,
-  runtimeContext?: RuntimeContext
-): Trace | undefined => {
-  if (causeTrace !== undefined) return captureAppendTraceWithContext(runtimeContext, causeTrace, parentTrace)
-  if (fail.trace === undefined) return captureAppendTraceWithContext(runtimeContext, undefined, parentTrace)
-  return parentTrace === undefined
-    ? fail.trace
-    : captureAppendTraceWithContext(runtimeContext, fail.trace, parentTrace) ?? fail.trace
-}
-
-const originOfUnhandledFail = (fail: Fail<unknown>, causeTrace: Trace | undefined): Breadcrumb =>
-  causeTrace === undefined ? fail.origin : originFromTrace(causeTrace)
-
-const forkFrameMetadata = (trace: Trace | undefined): TraceFrameMetadata => ({
-  kind: trace?.frame.kind ?? 'fork',
-  index: trace?.frame.index
-})
-
-const captureTraceWithContext = (
-  context: RuntimeContext | undefined,
-  origin: Breadcrumb,
-  parent?: Trace,
-  metadata?: TraceFrameMetadata
-): Trace | undefined =>
-  context === undefined
-    ? captureTrace(origin, parent, metadata)
-    : withActiveRuntimeContext(context, () => captureTrace(origin, parent, metadata))
-
-const capturePrependTraceWithContext = (
-  context: RuntimeContext | undefined,
-  origin: Breadcrumb,
-  parent?: Trace,
-  metadata?: TraceFrameMetadata
-): Trace | undefined =>
-  context === undefined
-    ? capturePrependTrace(origin, parent, metadata)
-    : withActiveRuntimeContext(context, () => capturePrependTrace(origin, parent, metadata))
-
-const captureAppendTraceWithContext = (
-  context: RuntimeContext | undefined,
-  trace: Trace | undefined,
-  parent?: Trace
-): Trace | undefined =>
-  context === undefined
-    ? captureAppendTrace(trace, parent)
-    : withActiveRuntimeContext(context, () => captureAppendTrace(trace, parent))
-
-const originFromTrace = (trace: Trace): Breadcrumb => ({
-  message: trace.frame.message,
-  get stack() {
-    return trace.frame.stackSource?.stack
-  }
-})
 
 class DisposableAbortController extends AbortController {
   [Symbol.dispose]() { this.abort() }

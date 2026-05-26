@@ -119,17 +119,17 @@ export const tap = <const A, const E2>(f: (a: A) => Fx<E2, void>) =>
 export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E1 | E2, A> =>
   x.pipe(flatMap(x => x))
 
-type RuntimeEnv<E> =
-  Extract<E, Get<Record<PropertyKey, unknown>>> extends Get<infer A>
-    ? A
+type RequiredRuntimeEnv<E> =
+  Extract<E, Get<Record<PropertyKey, unknown>>> extends infer G
+    ? G extends Get<infer A>
+      ? {} extends A ? never : A
+      : never
     : never
 
 type MissingRuntimeEnvArgs<E> =
-  [RuntimeEnv<E>] extends [never]
+  [RequiredRuntimeEnv<E>] extends [never]
     ? []
-    : {} extends RuntimeEnv<E>
-      ? []
-      : ['runtime entrypoint missing required environment']
+    : ['runtime entrypoint missing required environment']
 
 /**
  * Execute a runtime-ready Fx and return a cancellable {@link Task}.

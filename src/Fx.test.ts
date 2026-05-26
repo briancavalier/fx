@@ -1,11 +1,13 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
+import { fork, unbounded } from './Concurrent.js'
 import { Effect } from './Effect.js'
 import { get, provideAll } from './Env.js'
 import { Fail, returnFail } from './Fail.js'
 import { assertSync, flatMap, fx, ok, run, runPromise, runTask, trySync } from './Fx.js'
 import { control, handle } from './Handler.js'
+import { wait } from './Task.js'
 import { getTrace } from './Trace.js'
 
 describe('Fx', () => {
@@ -190,12 +192,16 @@ describe('Fx', () => {
       const optional = fx(function* ({ name }: { readonly name?: string }) {
         return name ?? 'anonymous'
       })
+      const mixed = required.pipe(flatMap(() => optional))
 
       // @ts-expect-error required env remains unhandled at the runtime boundary
       runTask(required)
+      // @ts-expect-error mixed env still includes a required branch
+      runTask(mixed)
 
       assert.equal(await runTask(optional).promise, 'anonymous')
       assert.equal(await runTask(required.pipe(provideAll({ name: 'Brian' }))).promise, 'Brian')
+      assert.equal(await runTask(mixed.pipe(provideAll({ name: 'Brian' }))).promise, 'Brian')
     })
 
     it('reuses one default environment object across gets', async () => {
@@ -207,6 +213,29 @@ describe('Fx', () => {
       })).promise
 
       assert.deepEqual(actual, { same: true, count: 1 })
+    })
+
+    it('shares one default environment object across forked tasks', async () => {
+      const actual = await runTask(fx(function* () {
+        const parent = yield* get<{ count?: number }>()
+        parent.count = 1
+
+        const child = yield* fork(fx(function* () {
+          const env = yield* get<{ count?: number }>()
+          env.count = (env.count ?? 0) + 1
+          return { sameAsParent: env === parent, count: env.count }
+        }))
+
+        const childResult = yield* wait(child)
+        const after = yield* get<{ count?: number }>()
+        return { childResult, sameAfterWait: after === parent, count: after.count }
+      }).pipe(unbounded)).promise
+
+      assert.deepEqual(actual, {
+        childResult: { sameAsParent: true, count: 2 },
+        sameAfterWait: true,
+        count: 2
+      })
     })
   })
 
@@ -261,12 +290,16 @@ describe('Fx', () => {
       const optional = fx(function* ({ name }: { readonly name?: string }) {
         return name ?? 'anonymous'
       })
+      const mixed = required.pipe(flatMap(() => optional))
 
       // @ts-expect-error required env remains unhandled at the runtime boundary
       await runPromise(required)
+      // @ts-expect-error mixed env still includes a required branch
+      await runPromise(mixed)
 
       assert.equal(await runPromise(optional), 'anonymous')
       assert.equal(await runPromise(required.pipe(provideAll({ name: 'Brian' }))), 'Brian')
+      assert.equal(await runPromise(mixed.pipe(provideAll({ name: 'Brian' }))), 'Brian')
     })
   })
 
@@ -278,12 +311,16 @@ describe('Fx', () => {
       const optional = fx(function* ({ name }: { readonly name?: string }) {
         return name ?? 'anonymous'
       })
+      const mixed = required.pipe(flatMap(() => optional))
 
       // @ts-expect-error required env remains unhandled at the runtime boundary
       run(required)
+      // @ts-expect-error mixed env still includes a required branch
+      run(mixed)
 
       assert.equal(run(optional), 'anonymous')
       assert.equal(run(required.pipe(provideAll({ name: 'Brian' }))), 'Brian')
+      assert.equal(run(mixed.pipe(provideAll({ name: 'Brian' }))), 'Brian')
     })
 
     it('reuses one default environment object across gets', () => {

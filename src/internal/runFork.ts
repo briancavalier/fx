@@ -15,7 +15,7 @@ import { DisposableSet } from './disposable.js'
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './interrupt.js'
 import { withInterpretedReturn } from './iteratorClose.js'
 import type { RuntimeContext } from './runtimeContext.js'
-import { currentRuntimeContext, getRuntimeContext, traceCapturePolicy, withActiveRuntimeContext, withInterruptionReason } from './runtimeContext.js'
+import { currentRuntimeContext, getRuntimeContext, traceCapturePolicy, withActiveRuntimeContext, withDefaultEnv, withInterruptionReason } from './runtimeContext.js'
 
 export type RunForkOptions = TraceOptions & {
   readonly maxConcurrency?: number
@@ -26,12 +26,14 @@ const EnvEffectId = 'fx/Env'
 export const runFork = <const E extends Async | Fork | Fail<unknown> | HandlerCapture<string> | Interrupt | Get<Record<PropertyKey, unknown>>, const A>(f: Fx<E, A>, options: RunForkOptions = {}): Task<A, Extract<E, Fail<any>>> => {
   const disposables = new InterruptState()
   const disposed = Promise.withResolvers<void>()
-  const runtimeContext = currentRuntimeContext()
+  const parentRuntimeContext = currentRuntimeContext()
+  const defaultEnv = parentRuntimeContext?.defaultEnv ?? {}
+  const runtimeContext = withDefaultEnv(parentRuntimeContext, defaultEnv)
   const origin = options.origin ?? at('fx/runFork', runFork)
   const trace = options.trace ?? captureTraceWithContext(runtimeContext, origin, undefined, { kind: 'run' })
   const maxConcurrency = options.maxConcurrency ?? Infinity
 
-  const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, disposed, origin, trace, runtimeContext)
+  const promise = runForkInternal(f, [], new Semaphore(maxConcurrency), disposables, disposed, origin, trace, runtimeContext, defaultEnv)
     .finally(() => {
       disposables.interruptActive()
       disposed.resolve()
@@ -40,18 +42,25 @@ export const runFork = <const E extends Async | Fork | Fail<unknown> | HandlerCa
   return taskWithRuntimeContext(promise, reason => disposables.interrupt(reason), runtimeContext, disposed.promise)
 }
 
-export const acquireAndRunFork = (f: ForkContext, s: Semaphore, context: readonly CapturedHandler[] = [], runtimeContext: RuntimeContext | undefined = currentRuntimeContext()): Task<unknown, unknown> => {
+export const acquireAndRunFork = (
+  f: ForkContext,
+  s: Semaphore,
+  context: readonly CapturedHandler[] = [],
+  runtimeContext: RuntimeContext | undefined = currentRuntimeContext(),
+  defaultEnv: Record<PropertyKey, unknown> = runtimeContext?.defaultEnv ?? {}
+): Task<unknown, unknown> => {
   const disposables = new InterruptState()
   const disposed = Promise.withResolvers<void>()
+  const forkRuntimeContext = withDefaultEnv(runtimeContext, defaultEnv)
 
   const promise = acquire(s, disposables, disposed,
-    () => runForkInternal(withHandlerContext(context, f.fx), context, s, disposables, disposed, f.origin, f.trace, runtimeContext)
+    () => runForkInternal(withHandlerContext(context, f.fx), context, s, disposables, disposed, f.origin, f.trace, forkRuntimeContext, defaultEnv)
       .finally(() => {
         disposables.interruptActive()
         disposed.resolve()
       }))
 
-  return taskWithRuntimeContext(promise, reason => disposables.interrupt(reason), runtimeContext, disposed.promise)
+  return taskWithRuntimeContext(promise, reason => disposables.interrupt(reason), forkRuntimeContext, disposed.promise)
 }
 
 const runForkInternal = <const E, const A>(
@@ -62,7 +71,8 @@ const runForkInternal = <const E, const A>(
   disposed: PromiseWithResolvers<void>,
   origin: Breadcrumb,
   trace: Trace | undefined,
-  runtimeContext?: RuntimeContext
+  runtimeContext: RuntimeContext | undefined,
+  defaultEnv: Record<PropertyKey, unknown>
 ): Promise<A> => {
   let rejectUnhandled: (e: UnhandledForkError) => void = () => { }
   const unhandled = new Promise<never>((_, reject) => {
@@ -70,7 +80,7 @@ const runForkInternal = <const E, const A>(
   })
   unhandled.catch(() => { })
 
-  return runForkLoop(f, context, semaphore, disposables, disposed, origin, trace, unhandled, e => rejectUnhandled(new UnhandledForkError(e)), runtimeContext)
+  return runForkLoop(f, context, semaphore, disposables, disposed, origin, trace, unhandled, e => rejectUnhandled(new UnhandledForkError(e)), runtimeContext, defaultEnv)
 }
 
 const runForkLoop = async <const E, const A>(
@@ -83,10 +93,10 @@ const runForkLoop = async <const E, const A>(
   trace: Trace | undefined,
   unhandled: Promise<never>,
   rejectUnhandled: (e: unknown) => void,
-  runtimeContext?: RuntimeContext
+  runtimeContext: RuntimeContext | undefined,
+  defaultEnv: Record<PropertyKey, unknown>
 ): Promise<A> => {
   let interrupting: Promise<void> | undefined
-  const defaultEnv = {}
 
   try {
     const i = iteratorWithRuntimeContext(f, runtimeContext)
@@ -180,7 +190,7 @@ const runIterator = async <const E, const A>(
       const effectContext = runtimeContextOfEffect(ir.value, runtimeContext)
       const forkOrigin = ir.value.arg.origin
       const forkTrace = capturePrependTraceWithContext(effectContext, forkOrigin, trace, forkFrameMetadata(ir.value.arg.trace))
-      const t = acquireAndRunFork({ ...ir.value.arg, trace: forkTrace }, semaphore, context, effectContext)
+      const t = acquireAndRunFork({ ...ir.value.arg, trace: forkTrace }, semaphore, context, effectContext, defaultEnv)
       disposables.addTask(t)
       t.promise
         .finally(() => disposables.removeTask(t))

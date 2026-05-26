@@ -21,14 +21,14 @@ export type NodeRuntimeEffects =
   | Interrupt
   | HandlerCapture<string>
 
-export const runNodeMain = <const E extends NodeRuntimeEffects>(
-  program: Fx<E, void>,
+export const runNodeMain = (
+  program: Fx<NodeRuntimeEffects, void>,
   options?: RunNodeOptions
 ): Promise<void> =>
   runNodePromise(program, options)
 
-export const runNodePromise = <const E extends NodeRuntimeEffects>(
-  program: Fx<E, void>,
+export const runNodePromise = (
+  program: Fx<NodeRuntimeEffects, void>,
   {
     process: nodeProcess = globalNodeProcess(),
     signals = ['SIGINT', 'SIGTERM']

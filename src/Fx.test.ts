@@ -182,6 +182,21 @@ describe('Fx', () => {
           && e.cause === cause
       )
     })
+
+    it('requires required environment to be provided before running', async () => {
+      const required = fx(function* ({ name }: { readonly name: string }) {
+        return name
+      })
+      const optional = fx(function* ({ name }: { readonly name?: string }) {
+        return name ?? 'anonymous'
+      })
+
+      // @ts-expect-error required env remains unhandled at the runtime boundary
+      runTask(required)
+
+      assert.equal(await runTask(optional).promise, 'anonymous')
+      assert.equal(await runTask(required.pipe(provideAll({ name: 'Brian' }))).promise, 'Brian')
+    })
   })
 
   describe('runPromise', () => {
@@ -226,6 +241,38 @@ describe('Fx', () => {
         && firstLine(e).includes('fx/runPromise')
         && e.message === 'Unhandled exception in forked task'
         && e.cause === cause)
+    })
+
+    it('requires required environment to be provided before running', async () => {
+      const required = fx(function* ({ name }: { readonly name: string }) {
+        return name
+      })
+      const optional = fx(function* ({ name }: { readonly name?: string }) {
+        return name ?? 'anonymous'
+      })
+
+      // @ts-expect-error required env remains unhandled at the runtime boundary
+      await runPromise(required)
+
+      assert.equal(await runPromise(optional), 'anonymous')
+      assert.equal(await runPromise(required.pipe(provideAll({ name: 'Brian' }))), 'Brian')
+    })
+  })
+
+  describe('run', () => {
+    it('requires required environment to be provided before running', () => {
+      const required = fx(function* ({ name }: { readonly name: string }) {
+        return name
+      })
+      const optional = fx(function* ({ name }: { readonly name?: string }) {
+        return name ?? 'anonymous'
+      })
+
+      // @ts-expect-error required env remains unhandled at the runtime boundary
+      run(required)
+
+      assert.equal(run(optional), 'anonymous')
+      assert.equal(run(required.pipe(provideAll({ name: 'Brian' }))), 'Brian')
     })
   })
 })

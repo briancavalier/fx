@@ -119,13 +119,29 @@ export const tap = <const A, const E2>(f: (a: A) => Fx<E2, void>) =>
 export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E1 | E2, A> =>
   x.pipe(flatMap(x => x))
 
+type RuntimeEnv<E> =
+  Extract<E, Get<Record<PropertyKey, unknown>>> extends Get<infer A>
+    ? A
+    : never
+
+type MissingRuntimeEnvArgs<E> =
+  [RuntimeEnv<E>] extends [never]
+    ? []
+    : {} extends RuntimeEnv<E>
+      ? []
+      : ['runtime entrypoint missing required environment']
+
 /**
  * Execute a runtime-ready Fx and return a cancellable {@link Task}.
  *
  * Use `runTask` when the caller needs to dispose the running computation or wait
  * for cleanup. All non-runtime effects must be handled before calling it.
  */
-export const runTask = <const R>(f: Fx<Async | HandlerCapture<string> | Interrupt | Get<Record<PropertyKey, unknown>>, R>, options: RunForkOptions = {}): Task<R, never> => {
+export function runTask<const E extends Async | HandlerCapture<string> | Interrupt | Get<Record<PropertyKey, unknown>>, const R>(
+  f: Fx<E, R>,
+  options: RunForkOptions = {},
+  ..._missingEnv: MissingRuntimeEnvArgs<E>
+): Task<R, never> {
   return runFork(f, {
     ...options,
     origin: options.origin ?? at('fx/runTask', runTask)
@@ -138,11 +154,15 @@ export const runTask = <const R>(f: Fx<Async | HandlerCapture<string> | Interrup
  * This discards explicit cancellation. Use {@link runTask} when the caller needs
  * to cancel or wait for disposal.
  */
-export const runPromise = <const R>(f: Fx<Async | HandlerCapture<string> | Interrupt | Get<Record<PropertyKey, unknown>>, R>, options: RunForkOptions = {}): Promise<R> => {
+export function runPromise<const E extends Async | HandlerCapture<string> | Interrupt | Get<Record<PropertyKey, unknown>>, const R>(
+  f: Fx<E, R>,
+  options: RunForkOptions = {},
+  ..._missingEnv: MissingRuntimeEnvArgs<E>
+): Promise<R> {
   return runTask(f, {
     ...options,
     origin: options.origin ?? at('fx/runPromise', runPromise)
-  }).promise
+  }, ..._missingEnv).promise
 }
 
 /**
@@ -152,8 +172,11 @@ export const runPromise = <const R>(f: Fx<Async | HandlerCapture<string> | Inter
  * {@link Interrupt}. Use {@link runPromise} or {@link runTask} for async
  * programs.
  */
-export const run = <const R>(f: Fx<Interrupt | Get<Record<PropertyKey, unknown>>, R>): R =>
-  f.pipe(f => {
+export function run<const E extends Interrupt | Get<Record<PropertyKey, unknown>>, const R>(
+  f: Fx<E, R>,
+  ..._missingEnv: MissingRuntimeEnvArgs<E>
+): R {
+  return f.pipe(f => {
     const i = f[Symbol.iterator]()
     const masks = new InterruptMaskState()
     let ir = i.next()
@@ -185,6 +208,7 @@ export const run = <const R>(f: Fx<Interrupt | Get<Record<PropertyKey, unknown>>
     if (!isEffect(ir.value)) masks.assertBalanced()
     return ir.value as R
   })
+}
 
 /**
  * Acquire a resource, use it, and release it even if use fails or is

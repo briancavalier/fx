@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": ".benchmarks",
+    "sourceMap": false
+  },
+  "include": [
+    "src/**/*.ts",
+    "benchmarks/cooperative-all.ts"
+  ],
+  "exclude": [
+    "src/**/*.test.ts"
+  ]
+}

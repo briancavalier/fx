@@ -286,7 +286,7 @@ function mixedAsyncAndYielding() {
   ])
 }
 
-function explicitForkFanout(children: readonly Fx<unknown, unknown>[]) {
+function explicitForkFanout(children: readonly Fx<any, unknown>[]) {
   return fx(function* () {
     const tasks = []
     for (const child of children) tasks.push(yield* fork(child))
@@ -388,7 +388,7 @@ function formatMarkdown(fairness: readonly FairnessSummary[], results: readonly 
     `- Worktree: ${worktreeState()}`,
     `- Node: ${process.version}`,
     `- Platform: ${platform()} ${release()} ${arch()}`,
-    '- Command: `pnpm benchmark:cooperative-all`',
+    `- Command: \`${benchmarkCommand()}\``,
     '',
     '## Semantic Checks',
     '',
@@ -429,6 +429,12 @@ function gitSha(): string {
   } catch {
     return 'unknown'
   }
+}
+
+function benchmarkCommand(): string {
+  return process.env.npm_lifecycle_event === undefined
+    ? 'node benchmarks/cooperative-all'
+    : `pnpm ${process.env.npm_lifecycle_event}`
 }
 
 function worktreeState(): string {

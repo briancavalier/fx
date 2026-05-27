@@ -164,23 +164,23 @@ named boundary is real and useful for the application.
 
 ## Concurrency and resources
 
-Use `all` and `race` to describe structured concurrency, then choose semantics
-with handlers such as `defaultAll`, `firstSettled`, `firstSuccess`, `bounded`,
-and `unbounded`.
+Use `all` and `race` to describe structured concurrency. Use `firstSettled` or
+`firstSuccess` to choose race result policy, then choose an execution strategy
+with `withBoundedConcurrency`, `withUnboundedConcurrency`, or
+`withCoopConcurrency`.
 
 Use named scopes and finalization helpers when resources need cleanup. Keep
 acquire/register critical sections small and explicit.
 
 ```ts
 import { fx, runPromise } from "@briancavalier/fx"
-import { all, bounded, defaultAll } from "@briancavalier/fx/concurrent"
+import { all, withBoundedConcurrency } from "@briancavalier/fx/concurrent"
 
 const program = fx(function* () {
   const [user, posts] = yield* all([fetchUser, fetchPosts])
   return { user, posts }
 }).pipe(
-  defaultAll,
-  bounded(4),
+  withBoundedConcurrency(4),
   runPromise
 )
 ```

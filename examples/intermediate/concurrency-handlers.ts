@@ -1,15 +1,24 @@
-import { fail, Fail, fx, returnFail, runPromise } from '@briancavalier/fx'
-import { RaceAllFailed, firstSettled, firstSuccess, race, withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
+import { fail, Fail, fx, returnFail, runPromise, wait } from '@briancavalier/fx'
+import {
+  RaceAllFailed,
+  all,
+  firstSettled,
+  firstSuccess,
+  fork,
+  race,
+  withBoundedConcurrency,
+  withCoopConcurrency,
+  withUnboundedConcurrency
+} from '@briancavalier/fx/concurrent'
 
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 import { formatDiagnostic, formatError, snapshotError } from '@briancavalier/fx/trace'
 import { nodeSourceLookup } from '@briancavalier/fx/platform-node'
- 
-// This example builds one Race request and interprets it with two different
-// handlers. `firstSettled` is first-settled, like Promise.race: the fast failure
-// wins. `firstSuccess` is first-successful, like Promise.any: the fast failure
-// is ignored while another child can still succeed. This shows how fx can keep
-// one structured concurrency effect while choosing execution policy by handler.
+
+// This example shows two kinds of concurrency handler swaps:
+// - `firstSettled` and `firstSuccess` choose the result policy for one `race`.
+// - `withBoundedConcurrency` and `withCoopConcurrency` choose the execution
+//   strategy for one program that uses both `all` and explicit `fork`.
 
 const fastFailure = fx(function* () {
   yield* sleep(10)
@@ -21,10 +30,10 @@ const slowSuccess = fx(function* () {
   return 'replica succeeded'
 })
 
-// Construct a Race effect once. The handler applied later determines how this
-// same request is interpreted.
 const request = race([fastFailure, slowSuccess])
 const sourceLookup = nodeSourceLookup()
+
+console.log('\nresult policy handlers')
 
 const firstSettledResult = await request.pipe(
   // First-settled semantics: the fast failure wins and cancels the slow success.
@@ -73,6 +82,47 @@ if (Fail.is(allFailed) && allFailed.arg instanceof RaceAllFailed) {
   console.log('firstSuccess all failed:')
   printFailure(allFailed.arg)
 }
+
+const loadUser = fx(function* () {
+  yield* sleep(20)
+  return { id: 'user-123', name: 'Ada' }
+})
+
+const loadPosts = fx(function* () {
+  yield* sleep(30)
+  return ['effects as data', 'handlers as interpreters']
+})
+
+const refreshCache = fx(function* () {
+  yield* sleep(15)
+  return 'cache refreshed'
+})
+
+const loadDashboard = fx(function* () {
+  const cacheRefresh = yield* fork(refreshCache)
+  const [user, posts] = yield* all([loadUser, loadPosts])
+  const cache = yield* wait(cacheRefresh)
+
+  return { user, posts, cache }
+})
+
+console.log('\nexecution strategy handlers')
+
+const forkBackedDashboard = await loadDashboard.pipe(
+  withBoundedConcurrency(2),
+  defaultTime,
+  runPromise
+)
+
+console.log('withBoundedConcurrency:', forkBackedDashboard)
+
+const cooperativeDashboard = await loadDashboard.pipe(
+  withCoopConcurrency({ concurrency: 2, yieldBudget: 64 }),
+  defaultTime,
+  runPromise
+)
+
+console.log('withCoopConcurrency:', cooperativeDashboard)
 
 function printFailure(failure: unknown): void {
   console.log([

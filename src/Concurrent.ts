@@ -3,13 +3,13 @@ import { at, indexed } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
 import { Fail } from './Fail.js'
 import { Fx, flatMap, flatten, fx, ok } from './Fx.js'
-import { Handle } from './Handler.js'
+import { Handle, handle } from './Handler.js'
 import { HandlerCapture, handleCaptured, mapCapturedHandlers, withCapturedHandlers } from './HandlerCapture.js'
 import { Task, wait as waitTask } from './Task.js'
 import type { TraceFrameKind, TraceOptions, TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
 import { Semaphore } from './internal/Semaphore.js'
-import { runCooperativeAll, runCooperativeRace, type CooperativeConfig } from './internal/cooperativeStructured.js'
+import { runCooperativeConcurrently, type CooperativeConfig } from './internal/withCoopConcurrency.js'
 import { acquireAndRunFork } from './internal/runFork.js'
 import { currentRuntimeContext } from './internal/runtimeContext.js'
 
@@ -17,7 +17,7 @@ import { currentRuntimeContext } from './internal/runtimeContext.js'
  * Request that a computation be started concurrently.
  *
  * A `Fork` request returns a {@link Task} handle. The scheduling policy is
- * supplied by handlers such as {@link bounded} or {@link unbounded}.
+ * supplied by handlers such as {@link withBoundedConcurrency} or {@link withUnboundedConcurrency}.
  */
 export class Fork extends Effect('fx/Concurrent/Fork')<ForkContext, Task<unknown, unknown>> { }
 
@@ -25,30 +25,31 @@ export interface ForkContext extends TraceOrigin {
   readonly fx: Fx<unknown, unknown>
 }
 
-/**
- * Request that a group of computations be run concurrently in a structured
- * scope, returning all results directly.
- *
- * The request describes structured concurrency. A handler decides how the
- * children are scheduled and how failures cancel siblings.
- */
-export class All<const Fxs extends readonly Fx<unknown, unknown>[]> extends Effect('fx/Concurrent/All')<ConcurrentContext<Fxs>, {
-  readonly [K in keyof Fxs]: ResultOf<Fxs[K]>
-}> { }
+export const allPolicy = { tag: 'all' } as const
+export const firstSettledPolicy = { tag: 'firstSettled' } as const
+export const firstSuccessPolicy = { tag: 'firstSuccess' } as const
+export type ConcurrentPolicy =
+  | typeof allPolicy
+  | typeof firstSettledPolicy
+  | typeof firstSuccessPolicy
 
 /**
- * Request that a group of computations be raced in a structured scope,
- * returning the first settled result directly.
- *
- * The request describes structured concurrency. A handler decides how the
- * children are scheduled and how losing children are cancelled.
+ * Request that a group of computations run concurrently with a structured
+ * settlement policy.
  */
-export class Race<const Fxs extends readonly Fx<unknown, unknown>[]> extends Effect('fx/Concurrent/Race')<ConcurrentContext<Fxs>, ResultOf<Fxs[number]>> { }
+export class Concurrently<
+  const Policy extends ConcurrentPolicy,
+  const Fxs extends readonly Fx<unknown, unknown>[]
+> extends Effect('fx/Concurrent/Concurrently')<ConcurrentContext<Policy, Fxs>, ConcurrentResult<Policy, Fxs>> { }
 
 /**
  * Context shared by structured concurrency requests.
  */
-export interface ConcurrentContext<Fxs extends readonly Fx<unknown, unknown>[]> extends TraceOrigin {
+export interface ConcurrentContext<
+  Policy extends ConcurrentPolicy,
+  Fxs extends readonly Fx<unknown, unknown>[]
+> extends TraceOrigin {
+  readonly policy: Policy
   readonly fxs: Fxs
 }
 
@@ -99,33 +100,17 @@ export const forkEach = <const Fxs extends readonly Fx<unknown, unknown>[]>(
  * Request that a tuple of Fx computations run concurrently in a structured
  * scope, returning the tuple of child results directly.
  *
- * Pair `all` with {@link defaultAll} and a fork scheduler such as
- * {@link bounded} or {@link unbounded}.
- *
  * @example
  * const [user, posts] = yield* all([fetchUser, fetchPosts])
  */
 export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   fxs: Fxs,
   options?: TraceOptions
-) => {
-  const trace = traceOrigin(options, 'fx/Concurrent/all', all, 'all')
-  return mapCapturedHandlers('fx/Concurrent/All', fxs).pipe(
-    flatMap(fxs => new All({
-      fxs: fxs as unknown as Fxs,
-      ...trace
-    }))
-  ) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | All<Fxs> | HandlerCapture<'fx/Concurrent/All'>, {
-    readonly [K in keyof Fxs]: ResultOf<Fxs[K]>
-  }>
-}
+) => concurrently(allPolicy, fxs, traceOrigin(options, 'fx/Concurrent/all', all, 'all'))
 
 /**
  * Map an iterable to child computations and run them concurrently in input
  * order.
- *
- * Pair `mapAll` with {@link defaultAll} and a fork scheduler such as
- * {@link bounded} or {@link unbounded}.
  *
  * @example
  * const users = yield* mapAll(userIds, id => fetchUser(id))
@@ -134,7 +119,7 @@ export const mapAll = <const A, const E, const B>(
   items: Iterable<A>,
   f: (item: A, index: number) => Fx<E, B>,
   options?: TraceOptions
-): Fx<Exclude<E, Async | Fail<any>> | All<readonly Fx<E, B>[]> | HandlerCapture<'fx/Concurrent/All'>, readonly B[]> => {
+): Fx<Exclude<E, Async | Fail<any>> | Concurrently<typeof allPolicy, readonly Fx<E, B>[]> | HandlerCapture<'fx/Concurrent/Concurrently'>, readonly B[]> => {
   const trace = traceOrigin(options, 'fx/Concurrent/mapAll', mapAll, 'all')
   return all(Array.from(items, f), trace)
 }
@@ -142,116 +127,63 @@ export const mapAll = <const A, const E, const B>(
 /**
  * Request that a tuple of Fx computations race in a structured scope.
  *
- * Pair `race` with {@link firstSettled} for first-settled semantics or
- * {@link firstSuccess} when failed children should be ignored until all fail.
- *
  * @example
  * const value = yield* race([primary, fallback])
  */
 export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   fxs: Fxs,
   options?: TraceOptions
+) => concurrently(firstSettledPolicy, fxs, traceOrigin(options, 'fx/Concurrent/race', race, 'race'))
+
+/**
+ * Request that a group of computations run concurrently with the supplied
+ * built-in policy.
+ */
+export const concurrently = <
+  const Policy extends ConcurrentPolicy,
+  const Fxs extends readonly Fx<unknown, unknown>[]
+>(
+  policy: Policy,
+  fxs: Fxs,
+  options?: TraceOptions
 ) => {
-  const trace = traceOrigin(options, 'fx/Concurrent/race', race, 'race')
-  return mapCapturedHandlers('fx/Concurrent/Race', fxs).pipe(
-    flatMap(fxs => new Race({
+  const trace = traceOrigin(options, 'fx/Concurrent/concurrently', concurrently, policyFrameKind(policy))
+  return mapCapturedHandlers('fx/Concurrent/Concurrently', fxs).pipe(
+    flatMap(fxs => new Concurrently({
+      policy,
       fxs: fxs as unknown as Fxs,
       ...trace
     }))
-  ) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | Race<Fxs> | HandlerCapture<'fx/Concurrent/Race'>, ResultOf<Fxs[number]>>
+  ) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | Concurrently<Policy, Fxs> | HandlerCapture<'fx/Concurrent/Concurrently'>, ConcurrentResult<Policy, Fxs>>
 }
 
-/**
- * Handle All by running all child computations concurrently in a structured
- * scope. The first child failure fails the parent and cancels siblings.
- *
- * @example
- * await all([fetchUser, fetchPosts]).pipe(
- *   defaultAll,
- *   unbounded,
- *   runPromise
- * )
- */
-export const defaultAll = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyAll, DefaultAllEffects<E>>, HandlerCapture<'fx/Concurrent/All'>>, A> =>
-  f.pipe(handleCaptured('fx/Concurrent/All', All, runAll)) as Fx<Handle<Handle<E, AnyAll, DefaultAllEffects<E>>, HandlerCapture<'fx/Concurrent/All'>>, A>
-
-export interface CooperativeAllOptions {
+export interface CoopConcurrencyOptions {
   readonly concurrency?: number
   readonly yieldBudget?: number
 }
 
-export interface CooperativeStructuredOptions extends CooperativeAllOptions {
-  readonly racePolicy?: 'firstSettled' | 'firstSuccess'
-}
-
-export interface CooperativeStructuredFirstSettledOptions extends CooperativeAllOptions {
-  readonly racePolicy?: 'firstSettled'
-}
-
-export interface CooperativeStructuredFirstSuccessOptions extends CooperativeAllOptions {
-  readonly racePolicy: 'firstSuccess'
-}
-
 /**
- * Handle All with a cooperative FIFO scheduler.
- *
- * This prototype handles structured All directly instead of elaborating to
- * Fork. Child computations are stepped up to `yieldBudget` yielded operations
- * per turn, and children waiting on Async are parked until their async
- * operation settles.
+ * Provide cooperative concurrency for built-in structured concurrency policies.
  */
-export const cooperativeAll = (options: CooperativeAllOptions = {}) => {
-  const normalized = normalizeCooperativeAllOptions(options)
-  return <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyAll, CooperativeAllEffects<E>>, HandlerCapture<'fx/Concurrent/All'>>, A> =>
-    f.pipe(handleCaptured('fx/Concurrent/All', All, runCooperativeAll(normalized))) as Fx<Handle<Handle<E, AnyAll, CooperativeAllEffects<E>>, HandlerCapture<'fx/Concurrent/All'>>, A>
-}
-
-/**
- * Handle structured All and Race effects with one cooperative FIFO scheduler.
- *
- * Race effects use first-settled semantics by default. Set `racePolicy` to
- * `firstSuccess` to evaluate Race with first-success semantics.
- */
-export function cooperativeStructured(options?: CooperativeStructuredFirstSettledOptions): <const E, const A>(f: Fx<E, A>) => Fx<CooperativeStructuredFirstSettledHandledEffects<E>, A>
-export function cooperativeStructured(options: CooperativeStructuredFirstSuccessOptions): <const E, const A>(f: Fx<E, A>) => Fx<CooperativeStructuredFirstSuccessHandledEffects<E>, A>
-export function cooperativeStructured(options: CooperativeStructuredOptions = {}): <const E, const A>(f: Fx<E, A>) => Fx<any, A> {
-  const normalized = normalizeCooperativeAllOptions(options)
-  const racePolicy = options.racePolicy ?? 'firstSettled'
-  return <const E, const A>(f: Fx<E, A>) =>
+export const withCoopConcurrency = (options: CoopConcurrencyOptions = {}) => {
+  const normalized = normalizeCoopOptions(options, 'withCoopConcurrency')
+  return <const E, const A>(f: Fx<E, A>): Fx<CoopConcurrencyHandledEffects<E>, A> =>
     f.pipe(
-      handleCaptured('fx/Concurrent/All', All, runCooperativeAll(normalized)),
-      handleCaptured('fx/Concurrent/Race', Race, runCooperativeRace(normalized, racePolicy))
-    )
+      handleCaptured('fx/Concurrent/Concurrently', Concurrently, runCooperativeConcurrently(normalized))
+    ) as Fx<CoopConcurrencyHandledEffects<E>, A>
 }
 
 /**
- * Handle Race by running child computations concurrently in a structured scope.
- * The first child to settle wins and all losers are cancelled.
- *
- * @example
- * await race([primary, fallback]).pipe(
- *   firstSettled,
- *   unbounded,
- *   runPromise
- * )
+ * Retag a structured concurrency request for first-settled race semantics.
  */
-export const firstSettled = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyRace, DefaultRaceEffects<E>>, HandlerCapture<'fx/Concurrent/Race'>>, A> =>
-  f.pipe(handleCaptured('fx/Concurrent/Race', Race, runRace)) as Fx<Handle<Handle<E, AnyRace, DefaultRaceEffects<E>>, HandlerCapture<'fx/Concurrent/Race'>>, A>
+export const firstSettled = <const E, const A>(f: Fx<E, A>): Fx<Handle<E, AnyConcurrently, RetagConcurrently<typeof firstSettledPolicy, E> | HandlerCapture<'fx/Concurrent/Concurrently'>>, A> =>
+  f.pipe(handle(Concurrently, retagConcurrently(firstSettledPolicy))) as Fx<Handle<E, AnyConcurrently, RetagConcurrently<typeof firstSettledPolicy, E> | HandlerCapture<'fx/Concurrent/Concurrently'>>, A>
 
 /**
- * Handle Race by running child computations concurrently and returning the
- * first successful result. Child failures are ignored until every child has
- * failed, at which point the parent fails with {@link RaceAllFailed}.
- *
- * @example
- * await race([primary, replica, cache]).pipe(
- *   firstSuccess,
- *   unbounded,
- *   runPromise
- * )
+ * Retag a structured concurrency request for first-success race semantics.
  */
-export const firstSuccess = <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyRace, FirstSuccessRaceEffects<E>>, HandlerCapture<'fx/Concurrent/Race'>>, A> =>
-  f.pipe(handleCaptured('fx/Concurrent/Race', Race, runFirstSuccessRace)) as Fx<Handle<Handle<E, AnyRace, FirstSuccessRaceEffects<E>>, HandlerCapture<'fx/Concurrent/Race'>>, A>
+export const firstSuccess = <const E, const A>(f: Fx<E, A>): Fx<Handle<E, AnyConcurrently, RetagConcurrently<typeof firstSuccessPolicy, E> | HandlerCapture<'fx/Concurrent/Concurrently'>>, A> =>
+  f.pipe(handle(Concurrently, retagConcurrently(firstSuccessPolicy))) as Fx<Handle<E, AnyConcurrently, RetagConcurrently<typeof firstSuccessPolicy, E> | HandlerCapture<'fx/Concurrent/Concurrently'>>, A>
 
 /**
  * Failure returned by {@link firstSuccess} when every raced child fails.
@@ -281,27 +213,28 @@ export class RaceAllFailed<Errors extends readonly unknown[]> extends Error {
 /**
  * Handle Fork by running at most `maxConcurrency` forked computations at once.
  *
- * Structured handlers such as {@link defaultAll} and {@link firstSettled}
- * elaborate into Fork requests, so `bounded` also limits their child
- * concurrency.
- *
- * @example
- * ```ts
- * program.pipe(defaultAll, bounded(4), runPromise)
- * ```
+ * Structured concurrency policies are interpreted by forking child tasks, so
+ * `withBoundedConcurrency` also limits structured child concurrency.
  */
-export const bounded = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, Fork>, HandlerCapture<'fx/Concurrent/Fork'>> | HandlerCapture<'fx/Concurrent/Fork'>, A> =>
+export const withBoundedConcurrency = (maxConcurrency: number) => <const E, const A>(f: Fx<E, A>): Fx<WithConcurrencyHandledEffects<E>, A> => {
+  const semaphore = new Semaphore(maxConcurrency)
+  return (
   withCapturedHandlers('fx/Concurrent/Fork', f).pipe(
     flatMap(fx =>
-      ok(fx.pipe(handleCaptured('fx/Concurrent/Fork', Fork, runForkWith(new Semaphore(maxConcurrency)))))
+      ok(fx.pipe(
+        handleCaptured('fx/Concurrent/Concurrently', Concurrently, runConcurrently),
+        handleCaptured('fx/Concurrent/Fork', Fork, runForkWith(semaphore))
+      ))
     ),
     flatten
-  ) as Fx<Handle<Handle<E, Fork>, HandlerCapture<'fx/Concurrent/Fork'>> | HandlerCapture<'fx/Concurrent/Fork'>, A>
+  ) as Fx<WithConcurrencyHandledEffects<E>, A>
+  )
+}
 
 /**
  * Handle Fork by running forked computations without a concurrency limit.
  */
-export const unbounded = bounded(Infinity)
+export const withUnboundedConcurrency = withBoundedConcurrency(Infinity)
 
 const runForkWith = (s: Semaphore) =>
   (fork: Fork): Fx<never, Task<unknown, unknown>> =>
@@ -309,6 +242,9 @@ const runForkWith = (s: Semaphore) =>
 
 const childFrameKind = (trace: Trace | undefined) =>
   trace?.frame.kind === 'all' || trace?.frame.kind === 'race' ? trace.frame.kind : 'fork'
+
+const policyFrameKind = (policy: ConcurrentPolicy): TraceFrameKind =>
+  policy.tag === 'all' ? 'all' : 'race'
 
 const traceOrigin = (
   options: TraceOptions | undefined,
@@ -326,50 +262,57 @@ const childTraceOrigin = (parent: TraceOrigin, index: number, kind: TraceFrameKi
   return { origin, trace: captureTrace(origin, parent.trace, { kind, index }) }
 }
 
-const runAll = <const Fxs extends readonly Fx<unknown, unknown>[]>(
-  all: All<Fxs>
-): Fx<Fork | Async | ErrorsOf<EffectsOf<Fxs[number]>>, {
-  readonly [K in keyof Fxs]: ResultOf<Fxs[K]>
-}> =>
-  forkEach(all.arg.fxs, all.arg).pipe(
-    flatMap(tasks => waitTask(taskAll(tasks)))
-  ) as Fx<Fork | Async | ErrorsOf<EffectsOf<Fxs[number]>>, {
-  readonly [K in keyof Fxs]: ResultOf<Fxs[K]>
-}>
+const runConcurrently = <const Policy extends ConcurrentPolicy, const Fxs extends readonly Fx<unknown, unknown>[]>(
+  group: Concurrently<Policy, Fxs>
+): Fx<Fork | Async | ConcurrentPolicyEffects<Policy, Fxs>, ConcurrentResult<Policy, Fxs>> =>
+  forkEach(group.arg.fxs, group.arg).pipe(
+    flatMap(tasks => waitTask(taskForPolicy(group.arg.policy, tasks)))
+  ) as Fx<Fork | Async | ConcurrentPolicyEffects<Policy, Fxs>, ConcurrentResult<Policy, Fxs>>
 
-const runRace = <const Fxs extends readonly Fx<unknown, unknown>[]>(
-  race: Race<Fxs>
-): Fx<Fork | Async | ErrorsOf<EffectsOf<Fxs[number]>>, ResultOf<Fxs[number]>> =>
-  forkEach(race.arg.fxs, race.arg).pipe(
-    flatMap(tasks => waitTask(taskRace(tasks)))
-  ) as Fx<Fork | Async | ErrorsOf<EffectsOf<Fxs[number]>>, ResultOf<Fxs[number]>>
+const retagConcurrently = <const Policy extends ConcurrentPolicy>(policy: Policy) =>
+  <const CurrentPolicy extends ConcurrentPolicy, const Fxs extends readonly Fx<unknown, unknown>[]>(
+    group: Concurrently<CurrentPolicy, Fxs>
+  ): Fx<Concurrently<Policy, Fxs> | HandlerCapture<'fx/Concurrent/Concurrently'>, ConcurrentResult<Policy, Fxs>> =>
+    mapCapturedHandlers('fx/Concurrent/Concurrently', group.arg.fxs).pipe(
+      flatMap(fxs => new Concurrently({
+        ...group.arg,
+        policy,
+        fxs: fxs as unknown as Fxs
+      }))
+    ) as Fx<Concurrently<Policy, Fxs> | HandlerCapture<'fx/Concurrent/Concurrently'>, ConcurrentResult<Policy, Fxs>>
 
-const runFirstSuccessRace = <const Fxs extends readonly Fx<unknown, unknown>[]>(
-  race: Race<Fxs>
-): Fx<Fork | Async | FirstSuccessRaceFailure<Race<Fxs>>, ResultOf<Fxs[number]>> =>
-  forkEach(race.arg.fxs, race.arg).pipe(
-    flatMap(tasks => waitTask(taskFirstSuccess(tasks)))
-  ) as Fx<Fork | Async | FirstSuccessRaceFailure<Race<Fxs>>, ResultOf<Fxs[number]>>
+const taskForPolicy = <const Policy extends ConcurrentPolicy, Tasks extends readonly Task<unknown, unknown>[]>(
+  policy: Policy,
+  tasks: Tasks
+): Task<ConcurrentTaskResult<Policy, Tasks>, ConcurrentTaskErrors<Policy, Tasks>> => {
+  switch (policy.tag) {
+    case 'all': return taskAll(tasks) as Task<ConcurrentTaskResult<Policy, Tasks>, ConcurrentTaskErrors<Policy, Tasks>>
+    case 'firstSettled': return taskRace(tasks) as Task<ConcurrentTaskResult<Policy, Tasks>, ConcurrentTaskErrors<Policy, Tasks>>
+    case 'firstSuccess': return taskFirstSuccess(tasks) as Task<ConcurrentTaskResult<Policy, Tasks>, ConcurrentTaskErrors<Policy, Tasks>>
+  }
+}
 
 export type EffectsOf<F> = F extends Fx<infer E, unknown> ? E : never
 export type ResultOf<F> = F extends Fx<unknown, infer A> ? A : never
 export type ErrorsOf<E> = Extract<E, Fail<any>>
 
-type AnyAll = All<any>
-type AnyRace = Race<any>
-type EffectsOfAll<E> = E extends All<infer Fxs> ? EffectsOf<Fxs[number]> : never
-type EffectsOfRace<E> = E extends Race<infer Fxs> ? EffectsOf<Fxs[number]> : never
-type DefaultAllEffects<E> = Fork | Async | ErrorsOf<EffectsOfAll<E>>
-type CooperativeAllEffects<E> = Async | ErrorsOf<EffectsOfAll<E>>
-type DefaultRaceEffects<E> = Fork | Async | ErrorsOf<EffectsOfRace<E>>
-type FirstSuccessRaceEffects<E> = Fork | Async | FirstSuccessRaceFailure<E>
-type CooperativeStructuredFirstSettledHandledEffects<E> =
-  Handle<Handle<Handle<Handle<E, AnyAll, CooperativeAllEffects<E>>, AnyRace, Async | ErrorsOf<EffectsOfRace<E>>>, HandlerCapture<'fx/Concurrent/All'>>, HandlerCapture<'fx/Concurrent/Race'>>
-type CooperativeStructuredFirstSuccessHandledEffects<E> =
-  Handle<Handle<Handle<Handle<E, AnyAll, CooperativeAllEffects<E>>, AnyRace, Async | FirstSuccessRaceFailure<E>>, HandlerCapture<'fx/Concurrent/All'>>, HandlerCapture<'fx/Concurrent/Race'>>
-type FirstSuccessRaceFailure<E> = E extends Race<infer Fxs>
-  ? EveryFxCanFail<Fxs> extends true ? Fail<RaceAllFailed<FailuresOfFxs<Fxs>>> : never
-  : never
+type AnyConcurrently = Concurrently<any, any>
+type RetagConcurrently<Policy extends ConcurrentPolicy, E> = E extends Concurrently<any, infer Fxs> ? Concurrently<Policy, Fxs> : never
+type ConcurrentPolicyEffects<Policy extends ConcurrentPolicy, Fxs extends readonly Fx<unknown, unknown>[]> =
+  Policy['tag'] extends 'firstSuccess'
+  ? FirstSuccessFailure<Fxs>
+  : ErrorsOf<EffectsOf<Fxs[number]>>
+export type ConcurrentResult<Policy extends ConcurrentPolicy, Fxs extends readonly Fx<unknown, unknown>[]> =
+  Policy['tag'] extends 'all'
+  ? { readonly [K in keyof Fxs]: ResultOf<Fxs[K]> }
+  : ResultOf<Fxs[number]>
+type ConcurrentEffects<E> = E extends Concurrently<infer Policy, infer Fxs> ? Async | ConcurrentPolicyEffects<Policy, Fxs> : never
+type WithConcurrencyHandledEffects<E> =
+  Handle<Handle<Handle<E, AnyConcurrently, Fork | Async | ConcurrentEffects<E>>, Fork>, HandlerCapture<'fx/Concurrent/Fork'> | HandlerCapture<'fx/Concurrent/Concurrently'>>
+type CoopConcurrencyHandledEffects<E> =
+  Handle<Handle<E, AnyConcurrently, ConcurrentEffects<E>>, HandlerCapture<'fx/Concurrent/Concurrently'>>
+type FirstSuccessFailure<Fxs extends readonly Fx<unknown, unknown>[]> =
+  EveryFxCanFail<Fxs> extends true ? Fail<RaceAllFailed<FailuresOfFxs<Fxs>>> : never
 type EveryFxCanFail<Fxs extends readonly Fx<unknown, unknown>[]> = Fxs extends readonly []
   ? true
   : number extends Fxs['length']
@@ -391,6 +334,14 @@ type TaskErrors<P> = P extends Task<unknown, infer E> ? E : never
 type TaskErrorsOf<Tasks extends readonly Task<unknown, unknown>[]> = {
   readonly [K in keyof Tasks]: TaskErrors<Tasks[K]>
 }
+type ConcurrentTaskResult<Policy extends ConcurrentPolicy, Tasks extends readonly Task<unknown, unknown>[]> =
+  Policy['tag'] extends 'all'
+  ? { readonly [K in keyof Tasks]: TaskResult<Tasks[K]> }
+  : TaskResult<Tasks[number]>
+type ConcurrentTaskErrors<Policy extends ConcurrentPolicy, Tasks extends readonly Task<unknown, unknown>[]> =
+  Policy['tag'] extends 'firstSuccess'
+  ? RaceAllFailed<TaskErrorsOf<Tasks>>
+  : TaskErrors<Tasks[number]>
 
 const taskAll = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) => {
   tasks.forEach(t => t._markHandled())
@@ -410,11 +361,11 @@ const taskAll = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) 
   return new Task(p, reason => { void d.interrupt(reason) }, currentRuntimeContext(), d.interrupted) as Task<{ readonly [K in keyof Tasks]: TaskResult<Tasks[K]> }, TaskErrors<Tasks[number]>>
 }
 
-const normalizeCooperativeAllOptions = (options: CooperativeAllOptions): CooperativeConfig => {
+const normalizeCoopOptions = (options: CoopConcurrencyOptions, handlerName: string): CooperativeConfig => {
   const concurrency = options.concurrency ?? Infinity
   const yieldBudget = options.yieldBudget ?? 64
-  if (concurrency <= 0) throw new RangeError(`cooperativeAll concurrency must be > 0, got ${concurrency}`)
-  if (yieldBudget <= 0) throw new RangeError(`cooperativeAll yieldBudget must be > 0, got ${yieldBudget}`)
+  if (concurrency <= 0) throw new RangeError(`${handlerName} concurrency must be > 0, got ${concurrency}`)
+  if (yieldBudget <= 0) throw new RangeError(`${handlerName} yieldBudget must be > 0, got ${yieldBudget}`)
   return {
     concurrency: Math.floor(concurrency),
     yieldBudget: Math.floor(yieldBudget)

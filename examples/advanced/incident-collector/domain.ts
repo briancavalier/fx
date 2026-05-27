@@ -1,4 +1,4 @@
-import { all, mapAll, race, type All, type Race } from '@briancavalier/fx/concurrent'
+import { all, firstSuccess, mapAll, race, type Concurrently } from '@briancavalier/fx/concurrent'
 import { Effect, fail, type Fail, fx, type Fx, handle, type HandlerCapture, type Interrupt, ok } from '@briancavalier/fx'
 
 import { managed, scope, using, usingManaged, type Finally, type Managed } from '@briancavalier/fx/scope'
@@ -71,8 +71,7 @@ export type IncidentCollectorEffects =
   | Finally<typeof BundleScope>
   | Finally<typeof CollectorScope, Log>
   | Interrupt
-  | HandlerCapture<'fx/Concurrent/All'>
-  | HandlerCapture<'fx/Concurrent/Race'>
+  | HandlerCapture<'fx/Concurrent/Concurrently'>
   | Fail<IncidentCollectorError>
 
 /**
@@ -123,7 +122,7 @@ export const fetchRuntimeStatus = (source: string) => new FetchRuntimeStatus(sou
 
 export const collectIncidentSnapshot = (
   request: SnapshotRequest
-): Fx<IncidentCollectorEffects | All<any> | Race<any> | Interrupt, SnapshotSummary> => fx(function* () {
+): Fx<IncidentCollectorEffects | Concurrently<any, any> | Interrupt, SnapshotSummary> => fx(function* () {
   const bundle = yield* usingManaged(BundleScope, openBundle(request.incidentId))
   yield* info('snapshot started', { incidentId: request.incidentId, bundle: bundle.id })
 
@@ -293,7 +292,7 @@ const collectRuntime = (bundle: Bundle) => withCollector('runtime', fx(function*
   const runtime = yield* race([
     fetchRuntimeStatus('primary'),
     fetchRuntimeStatus('replica')
-  ])
+  ]).pipe(firstSuccess)
   yield* writeBundleEntry(bundle, {
     type: 'runtime',
     source: runtime.source,

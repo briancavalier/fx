@@ -1,5 +1,5 @@
 import { assert as assertNoFail, fx, provide, runPromise } from '@briancavalier/fx'
-import { unbounded } from '@briancavalier/fx/concurrent'
+import { withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 
 import { serve, type ServerEvent, type ServerListening } from '@briancavalier/fx/http-server'
 import { nodeHttp } from '@briancavalier/fx/platform-node'
@@ -30,7 +30,7 @@ await server.pipe(
   defaultTime,
   assertNoFail,
   provide({ port: Number(process.env.PORT ?? 3000) }),
-  unbounded,
+  withUnboundedConcurrency,
   runPromise
 )
 

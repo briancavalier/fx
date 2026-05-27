@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
-import { RaceAllFailed, all, bounded, cooperativeAll, cooperativeStructured, defaultAll, firstSettled, firstSuccess, fork, forkEach, mapAll, race, unbounded } from './Concurrent.js'
+import { RaceAllFailed, all, allPolicy, concurrently, firstSettledPolicy, firstSuccessPolicy, withBoundedConcurrency, withCoopConcurrency, firstSettled, firstSuccess, fork, forkEach, mapAll, race, withUnboundedConcurrency } from './Concurrent.js'
 import { andFinally, andFinallyExit } from './Finalization.js'
 import { bracket, flatMap, fx, ok, runPromise, runTask } from './Fx.js'
 import { handle } from './Handler.js'
@@ -19,17 +19,53 @@ const noPublicMarkHandled: typeof import('./Task.js').markHandled = undefined
 void noPublicMarkHandled
 
 describe('Fork', () => {
-  describe('unbounded', () => {
+  describe('concurrently', () => {
+    it('runs public policy primitive with fork-backed interpreter', async () => {
+      const allResult = await concurrently(allPolicy, [ok(1), ok('two')]).pipe(withUnboundedConcurrency, runPromise)
+      const raceResult = await concurrently(firstSettledPolicy, [ok('winner'), asyncValue('slow')]).pipe(withUnboundedConcurrency, runPromise)
+      const firstSuccessResult = await concurrently(firstSuccessPolicy, [
+        fx(function* () { yield* fail(new Error('failed')) }),
+        ok('success')
+      ]).pipe(withUnboundedConcurrency, runPromise)
+
+      assert.deepEqual(allResult, [1, 'two'])
+      assert.equal(raceResult, 'winner')
+      assert.equal(firstSuccessResult, 'success')
+    })
+
+    it('retags race policy without scheduling', () => {
+      const assertPolicyEffectsVisible = () => {
+        const program = race([ok(1)]).pipe(firstSuccess)
+        // @ts-expect-error firstSuccess only retags; a concurrency interpreter is still required.
+        program.pipe(runPromise)
+      }
+      void assertPolicyEffectsVisible
+    })
+
+    it('withCoopConcurrency leaves explicit Fork visible without a fork interpreter', () => {
+      const assertForkVisible = () => {
+        const program = fx(function* () {
+          const task = yield* fork(ok(1))
+          return yield* wait(task)
+        }).pipe(withCoopConcurrency())
+        // @ts-expect-error withCoopConcurrency handles structured concurrency, not explicit Fork.
+        program.pipe(runPromise)
+      }
+      void assertForkVisible
+    })
+  })
+
+  describe('withUnboundedConcurrency', () => {
     it('given Fork, returns task', async () => {
       const x = Math.random()
-      const t = await asyncValue(x).pipe(fork, unbounded, runPromise)
+      const t = await asyncValue(x).pipe(fork, withUnboundedConcurrency, runPromise)
       const r = await t.promise
       assert.equal(r, x)
     })
 
     it('given nested Fork, returns task', async () => {
       const x = Math.random()
-      const f = unbounded(fx(function* () {
+      const f = withUnboundedConcurrency(fx(function* () {
         const t = yield* fork(asyncValue(x))
         return t
       }))
@@ -42,7 +78,7 @@ describe('Fork', () => {
     it('given multiple Forks, returns task', async () => {
       const x1 = Math.random()
       const x2 = Math.random()
-      const f = unbounded(fx(function* () {
+      const f = withUnboundedConcurrency(fx(function* () {
         const t1 = yield* fork(asyncValue(x1))
         const t2 = yield* fork(asyncValue(x2))
         return [t1, t2]
@@ -60,13 +96,13 @@ describe('Fork', () => {
         return yield* wait(t1)
       })
 
-      const t = await f.pipe(fork, unbounded, runPromise)
+      const t = await f.pipe(fork, withUnboundedConcurrency, runPromise)
       const r = await t.promise
       assert.deepEqual(r, x)
     })
 
     it('does not mark tasks handled until wait is run', async () => {
-      const task = await asyncValue('done').pipe(fork, unbounded, runPromise)
+      const task = await asyncValue('done').pipe(fork, withUnboundedConcurrency, runPromise)
 
       const constructed = wait(task)
       assert.equal(task._handled, false)
@@ -86,7 +122,7 @@ describe('Fork', () => {
       })
 
       const r = await f.pipe(
-        unbounded,
+        withUnboundedConcurrency,
         handle(CurrentValue, () => ok('handled')),
         runPromise
       )
@@ -104,7 +140,7 @@ describe('Fork', () => {
         handle(CurrentValue, () => ok('handled'))
       )
 
-      const r = await f.pipe(unbounded, runPromise)
+      const r = await f.pipe(withUnboundedConcurrency, runPromise)
 
       assert.equal(r, 'handled')
     })
@@ -116,9 +152,8 @@ describe('Fork', () => {
       })
 
       const result = await all([bad]).pipe(
-        defaultAll,
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -137,8 +172,8 @@ describe('Fork', () => {
 
       const result = await forkEach([bad]).pipe(
         flatMap(([task]) => wait(task)),
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -157,8 +192,8 @@ describe('Fork', () => {
 
       const result = await race([bad]).pipe(
         firstSettled,
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -177,8 +212,8 @@ describe('Fork', () => {
 
       const result = await race([bad]).pipe(
         firstSettled,
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -205,11 +240,10 @@ describe('Fork', () => {
     })
   })
 
-  describe('defaultAll', () => {
+  describe('withUnboundedConcurrency', () => {
     it('returns child values directly without wait', async () => {
       const result = await all([ok(1), ok('two')]).pipe(
-        defaultAll,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -226,8 +260,7 @@ describe('Fork', () => {
       })
 
       const result = await all([child(1), child(2), child(3)]).pipe(
-        defaultAll,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -248,11 +281,10 @@ describe('Fork', () => {
       })
 
       const promise = all([slow, fast]).pipe(
-        defaultAll,
         handle(Step, step => fx(function* () {
           events.push(step.arg)
         })),
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -277,9 +309,8 @@ describe('Fork', () => {
       })
 
       const result = await all([slow, bad]).pipe(
-        defaultAll,
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -292,9 +323,8 @@ describe('Fork', () => {
       const cause = new Error('all async rejected')
 
       const result = await all([assertPromise(() => Promise.reject(cause))]).pipe(
-        defaultAll,
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -316,8 +346,7 @@ describe('Fork', () => {
       }))
 
       const task = all([parked]).pipe(
-        defaultAll,
-        unbounded,
+        withUnboundedConcurrency,
         runTask
       )
 
@@ -345,9 +374,8 @@ describe('Fork', () => {
       })
 
       const promise = all([masked, bad]).pipe(
-        defaultAll,
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -363,20 +391,19 @@ describe('Fork', () => {
       assert.deepEqual(events, ['masked start', 'masked released'])
     })
 
-    it('runs children with handlers between all and defaultAll', async () => {
+    it('runs children with handlers between all and withUnboundedConcurrency', async () => {
       class CurrentValue extends Effect('test/Fork/AllCurrentValue')<void, string> { }
 
       const result = await all([new CurrentValue()]).pipe(
         handle(CurrentValue, () => ok('handled')),
-        defaultAll,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
       assert.deepEqual(result, ['handled'])
     })
 
-    it('runs children with scopes between all and defaultAll', async () => {
+    it('runs children with scopes between all and withUnboundedConcurrency', async () => {
       const TestScope = scope('test/Fork/AllScope')
       const released = [] as string[]
       const cause = new Error('all scope failed')
@@ -388,9 +415,8 @@ describe('Fork', () => {
         yield* fail(cause)
       })]).pipe(
         withScope(TestScope),
-        defaultAll,
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -416,10 +442,9 @@ describe('Fork', () => {
       })
 
       const result = await all([slow, bad]).pipe(
-        defaultAll,
         withScope(TestScope),
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -443,10 +468,9 @@ describe('Fork', () => {
       })
 
       const result = await all([slow, bad]).pipe(
-        defaultAll,
         withScope(TestScope),
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -474,10 +498,9 @@ describe('Fork', () => {
       })
 
       const result = await all([slow(firstReleaseFailure), bad, slow(secondReleaseFailure)]).pipe(
-        defaultAll,
         withScope(TestScope),
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -498,8 +521,7 @@ describe('Fork', () => {
         void task
         return tuple
       }).pipe(
-        defaultAll,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -508,8 +530,7 @@ describe('Fork', () => {
 
     it('maps iterable items to child values in input order', async () => {
       const result = await mapAll([3, 1, 2], n => asyncValue(n * 2)).pipe(
-        defaultAll,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -523,8 +544,7 @@ describe('Fork', () => {
         indexes.push(index)
         return ok(`${index}:${value}`)
       }).pipe(
-        defaultAll,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -540,8 +560,7 @@ describe('Fork', () => {
       }
 
       const result = await mapAll(values(), n => ok(n + 10)).pipe(
-        defaultAll,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -558,8 +577,7 @@ describe('Fork', () => {
       })
 
       const result = await mapAll([1, 2, 3], child).pipe(
-        defaultAll,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -567,7 +585,7 @@ describe('Fork', () => {
       assert.deepEqual(events.slice(0, 3), ['start 1', 'start 2', 'start 3'])
     })
 
-    it('respects bounded scheduling for mapped children', async () => {
+    it('respects withBoundedConcurrency scheduling for mapped children', async () => {
       const events = [] as string[]
       const child = (n: number) => fx(function* () {
         events.push(`start ${n}`)
@@ -577,8 +595,7 @@ describe('Fork', () => {
       })
 
       const result = await mapAll([1, 2, 3], child).pipe(
-        defaultAll,
-        bounded(1),
+        withBoundedConcurrency(1),
         runPromise
       )
 
@@ -603,9 +620,8 @@ describe('Fork', () => {
         })
 
       const result = await mapAll([1, 2], child).pipe(
-        defaultAll,
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -614,13 +630,12 @@ describe('Fork', () => {
       assert.equal(cancelled, true)
     })
 
-    it('runs mapped children with handlers between mapAll and defaultAll', async () => {
+    it('runs mapped children with handlers between mapAll and withUnboundedConcurrency', async () => {
       class CurrentValue extends Effect('test/Fork/MapAllCurrentValue')<void, string> { }
 
       const result = await mapAll([1], () => new CurrentValue()).pipe(
         handle(CurrentValue, () => ok('handled')),
-        defaultAll,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -633,9 +648,8 @@ describe('Fork', () => {
       const result = await mapAll([cause], error => fx(function* () {
         yield* fail(error)
       })).pipe(
-        defaultAll,
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -656,9 +670,8 @@ describe('Fork', () => {
         void task
         return array
       }).pipe(
-        defaultAll,
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -668,15 +681,15 @@ describe('Fork', () => {
     })
   })
 
-  describe('cooperativeAll', () => {
+  describe('withCoopConcurrency', () => {
     it('rejects invalid options', () => {
-      assert.throws(() => cooperativeAll({ concurrency: 0 }), RangeError)
-      assert.throws(() => cooperativeAll({ yieldBudget: 0 }), RangeError)
+      assert.throws(() => withCoopConcurrency({ concurrency: 0 }), RangeError)
+      assert.throws(() => withCoopConcurrency({ yieldBudget: 0 }), RangeError)
     })
 
     it('returns child values directly in input order', async () => {
       const result = await all([ok(1), asyncValue('two')]).pipe(
-        cooperativeAll(),
+        withCoopConcurrency(),
         runPromise
       )
 
@@ -685,7 +698,7 @@ describe('Fork', () => {
 
     it('maps iterable items to child values in input order', async () => {
       const result = await mapAll([3, 1, 2], n => asyncValue(n * 2)).pipe(
-        cooperativeAll(),
+        withCoopConcurrency(),
         runPromise
       )
 
@@ -702,7 +715,7 @@ describe('Fork', () => {
       })
 
       const result = await all([child(1), child(2), child(3)]).pipe(
-        cooperativeAll({ concurrency: 2 }),
+        withCoopConcurrency({ concurrency: 2 }),
         runPromise
       )
 
@@ -720,7 +733,7 @@ describe('Fork', () => {
       })
 
       const result = await all([child('A'), child('B')]).pipe(
-        cooperativeAll({ yieldBudget: 1 }),
+        withCoopConcurrency({ yieldBudget: 1 }),
         handle(Step, step => fx(function* () {
           events.push(step.arg)
         })),
@@ -744,7 +757,7 @@ describe('Fork', () => {
       })
 
       const promise = all([slow, fast]).pipe(
-        cooperativeAll(),
+        withCoopConcurrency(),
         handle(Step, step => fx(function* () {
           events.push(step.arg)
         })),
@@ -757,24 +770,24 @@ describe('Fork', () => {
       assert.deepEqual(await promise, ['slow', 'fast'])
     })
 
-    it('runs children with handlers between all and cooperativeAll', async () => {
+    it('runs children with handlers between all and withCoopConcurrency', async () => {
       class CurrentValue extends Effect('test/Fork/CooperativeAllCurrentValue')<void, string> { }
 
       const result = await all([new CurrentValue()]).pipe(
         handle(CurrentValue, () => ok('handled')),
-        cooperativeAll(),
+        withCoopConcurrency(),
         runPromise
       )
 
       assert.deepEqual(result, ['handled'])
     })
 
-    it('runs mapped children with handlers between mapAll and cooperativeAll', async () => {
+    it('runs mapped children with handlers between mapAll and withCoopConcurrency', async () => {
       class CurrentValue extends Effect('test/Fork/CooperativeMapAllCurrentValue')<void, string> { }
 
       const result = await mapAll([1], () => new CurrentValue()).pipe(
         handle(CurrentValue, () => ok('handled')),
-        cooperativeAll(),
+        withCoopConcurrency(),
         runPromise
       )
 
@@ -796,7 +809,27 @@ describe('Fork', () => {
       })
 
       const result = await all([slow, bad]).pipe(
-        cooperativeAll(),
+        withCoopConcurrency(),
+        returnFail,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.equal((result.arg as Error).cause, cause)
+      assert.equal(cancelled, true)
+    })
+
+    it('does not wait for cancelled async work to settle after abort', async () => {
+      const cause = new Error('cooperative all failed')
+      let cancelled = false
+      const slow = assertPromise<void>(signal => new Promise(() => {
+        signal.addEventListener('abort', () => {
+          cancelled = true
+        }, { once: true })
+      }))
+
+      const result = await all([slow, fail(cause)]).pipe(
+        withCoopConcurrency(),
         returnFail,
         runPromise
       )
@@ -810,7 +843,7 @@ describe('Fork', () => {
       const cause = new Error('cooperative async rejected')
 
       const result = await all([assertPromise(() => Promise.reject(cause))]).pipe(
-        cooperativeAll(),
+        withCoopConcurrency(),
         returnFail,
         runPromise
       )
@@ -832,7 +865,7 @@ describe('Fork', () => {
       }))
 
       const task = all([parked]).pipe(
-        cooperativeAll(),
+        withCoopConcurrency(),
         runTask
       )
 
@@ -847,7 +880,7 @@ describe('Fork', () => {
       const result = await all([fx(function* () {
         yield* fail(cause)
       })]).pipe(
-        cooperativeAll(),
+        withCoopConcurrency(),
         returnFail,
         runPromise
       )
@@ -875,7 +908,7 @@ describe('Fork', () => {
       })
 
       const result = await all([slow, bad]).pipe(
-        cooperativeAll(),
+        withCoopConcurrency(),
         withScope(TestScope),
         returnFail,
         runPromise
@@ -900,7 +933,7 @@ describe('Fork', () => {
       })
 
       const result = await all([slow, bad]).pipe(
-        cooperativeAll(),
+        withCoopConcurrency(),
         returnFail,
         runPromise
       )
@@ -918,7 +951,7 @@ describe('Fork', () => {
       const result = await mapAll([cause], error => fx(function* () {
         yield* fail(error)
       })).pipe(
-        cooperativeAll(),
+        withCoopConcurrency(),
         returnFail,
         runPromise
       )
@@ -951,7 +984,7 @@ describe('Fork', () => {
       })
 
       const promise = all([masked, bad]).pipe(
-        cooperativeAll(),
+        withCoopConcurrency(),
         withScope(TestScope),
         returnFail,
         runPromise
@@ -979,7 +1012,7 @@ describe('Fork', () => {
         void task
         return tuple
       }).pipe(
-        cooperativeAll(),
+        withCoopConcurrency(),
         returnFail,
         runPromise
       )
@@ -990,19 +1023,19 @@ describe('Fork', () => {
     })
   })
 
-  describe('cooperativeStructured', () => {
+  describe('withCoopConcurrency', () => {
     it('rejects invalid options', () => {
-      assert.throws(() => cooperativeStructured({ concurrency: 0 }), RangeError)
-      assert.throws(() => cooperativeStructured({ yieldBudget: 0 }), RangeError)
+      assert.throws(() => withCoopConcurrency({ concurrency: 0 }), RangeError)
+      assert.throws(() => withCoopConcurrency({ yieldBudget: 0 }), RangeError)
     })
 
     it('returns all and mapAll child values directly in input order', async () => {
       const tuple = await all([ok(1), asyncValue('two')]).pipe(
-        cooperativeStructured(),
+        withCoopConcurrency(),
         runPromise
       )
       const mapped = await mapAll([3, 1, 2], n => asyncValue(n * 2)).pipe(
-        cooperativeStructured(),
+        withCoopConcurrency(),
         runPromise
       )
 
@@ -1010,7 +1043,7 @@ describe('Fork', () => {
       assert.deepEqual(mapped, [6, 2, 4])
     })
 
-    it('uses first-settled race semantics by default and cancels losers', async () => {
+    it('uses tagged first-settled race semantics and cancels losers', async () => {
       let cancelled = false
       const slow = assertPromise<string>(signal => new Promise(resolve => {
         signal.addEventListener('abort', () => {
@@ -1020,7 +1053,8 @@ describe('Fork', () => {
       }))
 
       const result = await race([slow, ok('winner')]).pipe(
-        cooperativeStructured(),
+        firstSettled,
+        withCoopConcurrency(),
         runPromise
       )
 
@@ -1035,11 +1069,22 @@ describe('Fork', () => {
       })
 
       const result = await race([bad, asyncValue('winner')]).pipe(
-        cooperativeStructured({ racePolicy: 'firstSuccess' }),
+        firstSuccess,
+        withCoopConcurrency(),
         runPromise
       )
 
       assert.equal(result, 'winner')
+    })
+
+    it('can tag races for cooperative first-settled semantics explicitly', async () => {
+      const result = await race([asyncValue('slow'), ok('fast')]).pipe(
+        firstSettled,
+        withCoopConcurrency(),
+        runPromise
+      )
+
+      assert.equal(result, 'fast')
     })
 
     it('fails first-success races with input-ordered errors when every child fails', async () => {
@@ -1050,7 +1095,8 @@ describe('Fork', () => {
         fx(function* () { yield* fail(first) }),
         fx(function* () { yield* fail(second) })
       ]).pipe(
-        cooperativeStructured({ racePolicy: 'firstSuccess' }),
+        firstSuccess,
+        withCoopConcurrency(),
         returnFail,
         runPromise
       )
@@ -1068,7 +1114,7 @@ describe('Fork', () => {
       const firstSettledResult = await all([
         race([assertPromise(() => new Promise<string>(resolve => setImmediate(() => resolve('slow')))), ok('fast')])
       ]).pipe(
-        cooperativeStructured(),
+        withCoopConcurrency(),
         runPromise
       )
 
@@ -1076,14 +1122,34 @@ describe('Fork', () => {
         race([
           fx(function* () { yield* fail(failed) }),
           asyncValue('replica')
-        ])
+        ]).pipe(firstSuccess)
       ]).pipe(
-        cooperativeStructured({ racePolicy: 'firstSuccess' }),
+        withCoopConcurrency(),
         runPromise
       )
 
       assert.deepEqual(firstSettledResult, ['fast'])
       assert.deepEqual(firstSuccessResult, ['replica'])
+    })
+
+    it('supports mixed first-settled and first-success races in one cooperative region', async () => {
+      const failed = new Error('primary failed')
+
+      const result = await all([
+        race([
+          assertPromise(() => new Promise<string>(resolve => setImmediate(() => resolve('slow')))),
+          ok('first-settled')
+        ]),
+        race([
+          fx(function* () { yield* fail(failed) }),
+          asyncValue('first-success')
+        ]).pipe(firstSuccess)
+      ]).pipe(
+        withCoopConcurrency(),
+        runPromise
+      )
+
+      assert.deepEqual(result, ['first-settled', 'first-success'])
     })
 
     it('continues ready children while another child waits on async work', async () => {
@@ -1099,7 +1165,7 @@ describe('Fork', () => {
       })
 
       const promise = all([slow, fast]).pipe(
-        cooperativeStructured(),
+        withCoopConcurrency(),
         handle(Step, step => fx(function* () {
           events.push(step.arg)
         })),
@@ -1112,18 +1178,31 @@ describe('Fork', () => {
       assert.deepEqual(await promise, ['slow', 'fast'])
     })
 
-    it('runs handlers between structured effects and cooperativeStructured', async () => {
+    it('runs handlers between structured effects and withCoopConcurrency', async () => {
       class CurrentValue extends Effect('test/Fork/CooperativeStructuredCurrentValue')<void, string> { }
 
       const result = await all([
         race([new CurrentValue()])
       ]).pipe(
         handle(CurrentValue, () => ok('handled')),
-        cooperativeStructured(),
+        withCoopConcurrency(),
         runPromise
       )
 
       assert.deepEqual(result, ['handled'])
+    })
+
+    it('runs handlers between race and concurrency policy appliers', async () => {
+      class CurrentValue extends Effect('test/Fork/CooperativeTaggedRaceCurrentValue')<void, string> { }
+
+      const result = await race([new CurrentValue()]).pipe(
+        handle(CurrentValue, () => ok('handled')),
+        firstSuccess,
+        withCoopConcurrency(),
+        runPromise
+      )
+
+      assert.equal(result, 'handled')
     })
 
     it('aborts parked async children when the parent task is interrupted', async () => {
@@ -1136,7 +1215,8 @@ describe('Fork', () => {
       }))
 
       const task = all([race([parked])]).pipe(
-        cooperativeStructured(),
+        firstSettled,
+        withCoopConcurrency(),
         runTask
       )
 
@@ -1149,7 +1229,8 @@ describe('Fork', () => {
       const cause = new Error('cooperative structured async rejected')
 
       const result = await race([assertPromise(() => Promise.reject(cause))]).pipe(
-        cooperativeStructured(),
+        firstSettled,
+        withCoopConcurrency(),
         returnFail,
         runPromise
       )
@@ -1167,17 +1248,18 @@ describe('Fork', () => {
       const raceCause = new Error('cooperative structured race traced failure')
 
       const allResult = await all([fx(function* () { yield* fail(allCause) })]).pipe(
-        cooperativeStructured(),
+        withCoopConcurrency(),
         returnFail,
         runPromise
       )
       const mapAllResult = await mapAll([mapAllCause], error => fx(function* () { yield* fail(error) })).pipe(
-        cooperativeStructured(),
+        withCoopConcurrency(),
         returnFail,
         runPromise
       )
       const raceResult = await race([fx(function* () { yield* fail(raceCause) })]).pipe(
-        cooperativeStructured(),
+        firstSettled,
+        withCoopConcurrency(),
         returnFail,
         runPromise
       )
@@ -1204,7 +1286,7 @@ describe('Fork', () => {
       })
 
       const result = await all([slow, bad]).pipe(
-        cooperativeStructured(),
+        withCoopConcurrency(),
         returnFail,
         runPromise
       )
@@ -1238,7 +1320,7 @@ describe('Fork', () => {
       })
 
       const promise = all([masked, bad]).pipe(
-        cooperativeStructured(),
+        withCoopConcurrency(),
         withScope(TestScope),
         returnFail,
         runPromise
@@ -1265,7 +1347,7 @@ describe('Fork', () => {
         const tuple: readonly [number, string] = values
         return tuple
       }).pipe(
-        cooperativeStructured(),
+        withCoopConcurrency(),
         runPromise
       )
       const raceResult = await fx(function* () {
@@ -1273,14 +1355,16 @@ describe('Fork', () => {
         const union: number | string = value
         return union
       }).pipe(
-        cooperativeStructured(),
+        firstSettled,
+        withCoopConcurrency(),
         runPromise
       )
       const failed = await race([
         fail(new FirstError()),
         fail(new SecondError())
       ]).pipe(
-        cooperativeStructured({ racePolicy: 'firstSuccess' }),
+        firstSuccess,
+        withCoopConcurrency(),
         returnFail,
         runPromise
       )
@@ -1296,7 +1380,7 @@ describe('Fork', () => {
     it('returns the first settled child value directly without wait', async () => {
       const result = await race([asyncValue('winner'), ok('loser')]).pipe(
         firstSettled,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -1314,7 +1398,7 @@ describe('Fork', () => {
 
       const result = await race([ok('winner'), slow]).pipe(
         firstSettled,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -1336,8 +1420,8 @@ describe('Fork', () => {
       const result = await race([ok('winner'), slow]).pipe(
         firstSettled,
         withScope(TestScope),
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -1357,8 +1441,8 @@ describe('Fork', () => {
       const result = await race([ok('winner'), slow]).pipe(
         firstSettled,
         withScope(TestScope),
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -1374,7 +1458,7 @@ describe('Fork', () => {
       const result = await race([new CurrentValue()]).pipe(
         handle(CurrentValue, () => ok('handled')),
         firstSettled,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -1391,7 +1475,7 @@ describe('Fork', () => {
         return n
       }).pipe(
         firstSettled,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -1408,7 +1492,7 @@ describe('Fork', () => {
 
       const result = await race([bad, asyncValue('winner')]).pipe(
         firstSuccess,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -1426,7 +1510,7 @@ describe('Fork', () => {
 
       const result = await race([ok('winner'), slow]).pipe(
         firstSuccess,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -1446,8 +1530,8 @@ describe('Fork', () => {
       const result = await race([ok('winner'), slow]).pipe(
         firstSuccess,
         withScope(TestScope),
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -1466,8 +1550,8 @@ describe('Fork', () => {
 
       const result = await race([bad(first), bad(second)]).pipe(
         firstSuccess,
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -1491,8 +1575,8 @@ describe('Fork', () => {
         fail(new SecondError())
       ]).pipe(
         firstSuccess,
+        withUnboundedConcurrency,
         returnFail,
-        unbounded,
         runPromise
       )
 
@@ -1514,7 +1598,7 @@ describe('Fork', () => {
       const result = await race([new CurrentValue()]).pipe(
         handle(CurrentValue, () => ok('handled')),
         firstSuccess,
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
 
@@ -1537,8 +1621,8 @@ describe('Task interruption finalization', () => {
       }))
     }).pipe(
       withScope(TestScope),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       runPromise
     ))
 
@@ -1560,8 +1644,8 @@ describe('Task interruption finalization', () => {
       }))
     }).pipe(
       withScope(TestScope),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       runPromise
     ))
 
@@ -1584,8 +1668,8 @@ describe('Task interruption finalization', () => {
       }))
     }).pipe(
       withScope(TestScope),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       runPromise
     ))
 
@@ -1594,7 +1678,7 @@ describe('Task interruption finalization', () => {
     assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope }])
   })
 
-  it('interrupts queued bounded tasks before semaphore acquisition', async () => {
+  it('interrupts queued withBoundedConcurrency tasks before semaphore acquisition', async () => {
     const events = [] as string[]
     const child = (label: string) => fx(function* () {
       events.push(`start ${label}`)
@@ -1607,7 +1691,7 @@ describe('Task interruption finalization', () => {
       const third = yield* fork(child('third'))
       return [first, second, third] as const
     }).pipe(
-      bounded(1),
+      withBoundedConcurrency(1),
       runPromise
     )
 
@@ -1635,8 +1719,8 @@ describe('Task interruption finalization', () => {
       }))
     }).pipe(
       withScope(TestScope),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       runPromise
     ))
 
@@ -1662,8 +1746,8 @@ describe('Task interruption finalization', () => {
       }))
     }).pipe(
       withScope(TestScope),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       runPromise
     ))
 
@@ -1693,8 +1777,8 @@ describe('Task interruption finalization', () => {
       }))
     }).pipe(
       withScope(TestScope),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       runPromise
     ))
 
@@ -1715,8 +1799,8 @@ describe('Task interruption finalization', () => {
     const result = await race([ok('winner'), slow]).pipe(
       firstSettled,
       withScope(TestScope),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       runPromise
     )
 
@@ -1747,8 +1831,8 @@ describe('Task interruption finalization', () => {
     const result = await race([ok('winner'), slow]).pipe(
       firstSettled,
       withScope(TestScope),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       runPromise
     )
 
@@ -1783,8 +1867,8 @@ describe('Task interruption finalization', () => {
     const result = await race([ok('winner'), slow]).pipe(
       firstSettled,
       withScope(TestScope),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       runPromise
     )
 
@@ -1806,8 +1890,8 @@ describe('Task interruption finalization', () => {
       }))
     }).pipe(
       withScope(TestScope),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       handle(Release, () => fx(function* () {
         released.push('task')
       })),
@@ -1834,8 +1918,8 @@ describe('Task interruption finalization', () => {
       handle(Release, () => fx(function* () {
         released.push('task')
       })),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       runPromise
     ))
 

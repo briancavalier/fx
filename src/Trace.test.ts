@@ -2,7 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise, tryPromise } from './Async.js'
 import { at } from './Breadcrumb.js'
-import { all, cooperativeAll, cooperativeStructured, defaultAll, firstSettled, fork, mapAll, race, unbounded } from './Concurrent.js'
+import { RaceAllFailed, all, withCoopConcurrency, firstSettled, firstSuccess, fork, mapAll, race, withUnboundedConcurrency } from './Concurrent.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { andFinally } from './Finalization.js'
 import { fx, runPromise } from './Fx.js'
@@ -379,7 +379,7 @@ describe('Trace', () => {
         return [offResult, labelsResult] as const
       })
 
-      const [offResult, labelsResult] = await f.pipe(unbounded, runPromise)
+      const [offResult, labelsResult] = await f.pipe(withUnboundedConcurrency, runPromise)
 
       assert.ok(Fail.is(offResult))
       assert.ok(Fail.is(labelsResult))
@@ -396,14 +396,14 @@ describe('Trace', () => {
       const allError = new Error('all failed')
       const raceError = new Error('race failed')
       const allProgram = fx(function* () {
-        return yield* all([fx(function* () { yield* fail(allError) })]).pipe(withTraceCapture('labels'), defaultAll)
+        return yield* all([fx(function* () { yield* fail(allError) })]).pipe(withTraceCapture('labels'))
       })
       const raceProgram = fx(function* () {
         return yield* race([fx(function* () { yield* fail(raceError) })]).pipe(withTraceCapture('labels'), firstSettled)
       })
 
-      const allResult = await allProgram.pipe(returnFail, unbounded, runPromise)
-      const raceResult = await raceProgram.pipe(returnFail, unbounded, runPromise)
+      const allResult = await allProgram.pipe(withUnboundedConcurrency, returnFail, runPromise)
+      const raceResult = await raceProgram.pipe(withUnboundedConcurrency, returnFail, runPromise)
 
       assert.ok(Fail.is(allResult))
       assert.ok(Fail.is(raceResult))
@@ -418,16 +418,16 @@ describe('Trace', () => {
     }
   })
 
-  it('propagates regional trace policy and frame metadata through cooperativeAll', async () => {
+  it('propagates regional trace policy and frame metadata through withCoopConcurrency', async () => {
     const previous = setTraceCapturePolicy('off')
     try {
       const allError = new Error('cooperative all failed')
       const mapAllError = new Error('cooperative mapAll failed')
       const allProgram = fx(function* () {
-        return yield* all([fx(function* () { yield* fail(allError) })]).pipe(withTraceCapture('labels'), cooperativeAll())
+        return yield* all([fx(function* () { yield* fail(allError) })]).pipe(withTraceCapture('labels'), withCoopConcurrency())
       })
       const mapAllProgram = fx(function* () {
-        return yield* mapAll([mapAllError], error => fx(function* () { yield* fail(error) })).pipe(withTraceCapture('labels'), cooperativeAll())
+        return yield* mapAll([mapAllError], error => fx(function* () { yield* fail(error) })).pipe(withTraceCapture('labels'), withCoopConcurrency())
       })
 
       const allResult = await allProgram.pipe(returnFail, runPromise)
@@ -446,20 +446,20 @@ describe('Trace', () => {
     }
   })
 
-  it('propagates regional trace policy and frame metadata through cooperativeStructured', async () => {
+  it('propagates regional trace policy and frame metadata through withCoopConcurrency', async () => {
     const previous = setTraceCapturePolicy('off')
     try {
       const allError = new Error('cooperative structured all failed')
       const mapAllError = new Error('cooperative structured mapAll failed')
       const raceError = new Error('cooperative structured race failed')
       const allProgram = fx(function* () {
-        return yield* all([fx(function* () { yield* fail(allError) })]).pipe(withTraceCapture('labels'), cooperativeStructured())
+        return yield* all([fx(function* () { yield* fail(allError) })]).pipe(withTraceCapture('labels'), withCoopConcurrency())
       })
       const mapAllProgram = fx(function* () {
-        return yield* mapAll([mapAllError], error => fx(function* () { yield* fail(error) })).pipe(withTraceCapture('labels'), cooperativeStructured())
+        return yield* mapAll([mapAllError], error => fx(function* () { yield* fail(error) })).pipe(withTraceCapture('labels'), withCoopConcurrency())
       })
       const raceProgram = fx(function* () {
-        return yield* race([fx(function* () { yield* fail(raceError) })]).pipe(withTraceCapture('labels'), cooperativeStructured())
+        return yield* race([fx(function* () { yield* fail(raceError) })]).pipe(withTraceCapture('labels'), firstSettled, withCoopConcurrency())
       })
 
       const allResult = await allProgram.pipe(returnFail, runPromise)
@@ -483,6 +483,30 @@ describe('Trace', () => {
     }
   })
 
+  it('propagates regional trace policy through first-success race policy', async () => {
+    const previous = setTraceCapturePolicy('off')
+    try {
+      const raceError = new Error('cooperative tagged race failed')
+      const raceProgram = fx(function* () {
+        return yield* race([fx(function* () { yield* fail(raceError) })]).pipe(
+          withTraceCapture('labels'),
+          firstSuccess,
+          withCoopConcurrency()
+        )
+      })
+
+      const raceResult = await raceProgram.pipe(returnFail, runPromise)
+
+      assert.ok(Fail.is(raceResult))
+      assert.ok(raceResult.arg instanceof RaceAllFailed)
+      assert.deepEqual(traceMessages(raceResult.arg.errors[0]).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/race[0]', 'fx/Concurrent/race'])
+      assert.equal(snapshotError(raceResult.arg.errors[0]).trace?.frames[1]?.kind, 'race')
+      assert.equal(snapshotError(raceResult.arg.errors[0]).trace?.frames[1]?.index, 0)
+    } finally {
+      setTraceCapturePolicy(previous)
+    }
+  })
+
   it('propagates active scopes to forked children', async () => {
     const HttpRequest = scope('http/request')
     const f = fx(function* () {
@@ -493,7 +517,7 @@ describe('Trace', () => {
     }).pipe(withScope(HttpRequest))
 
     await assert.rejects(
-      runPromise(f.pipe(unbounded) as never),
+      runPromise(f.pipe(withUnboundedConcurrency) as never),
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'http/request',
@@ -508,14 +532,14 @@ describe('Trace', () => {
   it('propagates active scopes through structured concurrency handlers', async () => {
     const HttpRequest = scope('http/request')
     const allProgram = fx(function* () {
-      yield* all([fx(function* () { yield* fail(new Error('all scoped')) })]).pipe(defaultAll)
+      yield* all([fx(function* () { yield* fail(new Error('all scoped')) })])
     }).pipe(withScope(HttpRequest))
     const raceProgram = fx(function* () {
       yield* race([fx(function* () { yield* fail(new Error('race scoped')) })]).pipe(firstSettled)
     }).pipe(withScope(HttpRequest))
 
     await assert.rejects(
-      runPromise(allProgram.pipe(unbounded) as never),
+      runPromise(allProgram.pipe(withUnboundedConcurrency) as never),
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'http/request',
@@ -526,7 +550,7 @@ describe('Trace', () => {
       }
     )
     await assert.rejects(
-      runPromise(raceProgram.pipe(unbounded) as never),
+      runPromise(raceProgram.pipe(withUnboundedConcurrency) as never),
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'http/request',
@@ -586,7 +610,7 @@ describe('Trace', () => {
         return yield* fork(fx(function* () {
           yield* fail(new Error('task context'))
         }).pipe(withTraceCapture('full')))
-      }).pipe(unbounded, runPromise)
+      }).pipe(withUnboundedConcurrency, runPromise)
 
       const result = await wait(failingTask).pipe(
         withTraceCapture('off'),
@@ -652,17 +676,15 @@ describe('Trace', () => {
       return yield* sleep(100).pipe(timeout(TimeoutScope, { ms: 50 }))
     })
 
-    const timeoutPromise = timeoutProgram.pipe(
+    const timeoutPromise = runPromise(timeoutProgram.pipe(
       withScope(TimeoutScope),
       control(InterruptFrom, (_, interrupt) => fx(function* () {
         return interrupt.arg
       })),
       withTraceCapture('labels'),
-      returnFail,
-      unbounded,
-      withClock(clock),
-      runPromise
-    )
+      withUnboundedConcurrency,
+      withClock(clock)
+    ) as never)
     await clock.step(50)
     const timeoutResult = await timeoutPromise
 

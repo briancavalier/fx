@@ -4,67 +4,101 @@ import { Fail, fail, returnFail } from './Fail.js';
 import { Finally } from './Finalization.js';
 import { fx } from './Fx.js';
 import { HandlerCapture } from './HandlerCapture.js';
+import { InterruptFrom } from './InterruptFrom.js';
 import { ReturnFrom } from './ReturnFrom.js';
 import { drainIteratorReturn, isInterpretingReturn } from './internal/iteratorClose.js';
 import { pipeThis } from './internal/pipe.js';
-import { withActiveScope } from './internal/runtimeContext.js';
-export const brand = () => (name) => name;
-export function scope(name) {
-    return (f) => new ScopeBoundary(f, name);
+import { interruptionReason, withActiveScope } from './internal/runtimeContext.js';
+import { ScopeTypeId, sameScope } from './internal/scopeIdentity.js';
+export { ScopeTypeId, sameScope };
+export function scope(name, metadata = {}) {
+    if (name === undefined)
+        return scope;
+    const token = {
+        ...metadata,
+        name
+    };
+    Object.defineProperty(token, ScopeTypeId, {
+        value: name,
+        enumerable: false,
+        writable: false,
+        configurable: false
+    });
+    return token;
+}
+export const scopeLabel = (scope) => scope.label ?? scope.name;
+const scopeDiagnostic = (scope) => {
+    return {
+        id: scope[ScopeTypeId],
+        label: scopeLabel(scope),
+        description: scope.description
+    };
+};
+export function withScope(scope) {
+    return (f) => new ScopeBoundary(f, scope);
 }
 class ScopeBoundary {
     fx;
-    scopeName;
+    scope;
     pipe = pipeThis;
-    constructor(fx, scopeName) {
+    constructor(fx, scope) {
         this.fx = fx;
-        this.scopeName = scopeName;
+        this.scope = scope;
     }
     wrap(fx) {
-        return new ScopeBoundary(fx, this.scopeName);
+        return new ScopeBoundary(fx, this.scope);
     }
     *[Symbol.iterator]() {
         const finalizers = [];
-        const { scopeName } = this;
-        const i = withActiveScope(scopeName, this.fx)[Symbol.iterator]();
+        const { scope } = this;
+        const activeScope = scopeDiagnostic(scope);
+        const i = withActiveScope(activeScope, this.fx)[Symbol.iterator]();
         const captured = {
-            wrap: fx => new ScopeBoundary(fx, scopeName)
+            wrap: fx => new ScopeBoundary(fx, scope)
         };
         let released = false;
         const release = function* (exit) {
             if (released)
                 return [];
             released = true;
-            return yield* withActiveScope(scopeName, releaseSafely(finalizers, exit));
+            return yield* withActiveScope(activeScope, releaseSafely(finalizers, exit));
         };
         const step = function* (ir) {
             while (!ir.done) {
                 if (isEffect(ir.value)) {
                     const effect = ir.value;
-                    const sameScope = effect.scope === scopeName;
-                    if (sameScope && Finally.is(effect)) {
+                    const effectScope = effect.scope;
+                    const matchesScope = effectScope !== undefined && sameScope(effectScope, scope);
+                    if (matchesScope && Finally.is(effect)) {
                         finalizers.push(effect.arg);
                         ir = i.next(undefined);
                     }
-                    else if (sameScope && ReturnFrom.is(effect)) {
-                        const exit = { type: 'returnFrom', scope: scopeName, value: effect.arg };
+                    else if (matchesScope && ReturnFrom.is(effect)) {
+                        const exit = { type: 'returnFrom', scope, value: effect.arg };
                         const failures = yield* release(exit);
                         if (failures.length > 0)
-                            return (yield* withActiveScope(scopeName, failCleanup(failures)));
+                            return (yield* withActiveScope(activeScope, failCleanup(failures)));
                         return effect.arg;
                     }
-                    else if (sameScope && Abort.is(effect)) {
-                        const exit = { type: 'abort', scope: scopeName };
+                    else if (matchesScope && Abort.is(effect)) {
+                        const exit = { type: 'abort', scope };
                         const failures = yield* release(exit);
                         if (failures.length > 0)
-                            return (yield* withActiveScope(scopeName, failCleanup(failures)));
+                            return (yield* withActiveScope(activeScope, failCleanup(failures)));
+                        return (yield effect);
+                    }
+                    else if (matchesScope && InterruptFrom.is(effect)) {
+                        const exit = interruptedExit(scope, effect.arg);
+                        const failures = yield* release(exit);
+                        if (failures.length > 0)
+                            return (yield* withActiveScope(activeScope, failCleanup(failures)));
                         return (yield effect);
                     }
                     else if (Fail.is(effect)) {
                         const exit = { type: 'failure', failure: effect };
                         const failures = yield* release(exit);
                         if (failures.length > 0)
-                            return (yield* withActiveScope(scopeName, failCleanup([effect.arg, ...failures])));
+                            return (yield* withActiveScope(activeScope, failCleanup([effect.arg, ...failures])));
                         return (yield effect);
                     }
                     else if (HandlerCapture.is(effect)) {
@@ -81,7 +115,7 @@ class ScopeBoundary {
             const exit = { type: 'success', value: ir.value };
             const failures = yield* release(exit);
             if (failures.length > 0)
-                return (yield* withActiveScope(scopeName, failCleanup(failures)));
+                return (yield* withActiveScope(activeScope, failCleanup(failures)));
             return ir.value;
         };
         let completed = false;
@@ -91,15 +125,15 @@ class ScopeBoundary {
             return value;
         }
         finally {
-            const cleanupFailures = yield* collectInterruptedCleanupFailures(scopeName, release, completed, isInterpretingReturn(), i, step);
+            const cleanupFailures = yield* collectInterruptedCleanupFailures(scope, release, completed, isInterpretingReturn(), i, step);
             if (cleanupFailures.length > 0)
-                yield* withActiveScope(scopeName, failCleanup(cleanupFailures));
+                yield* withActiveScope(activeScope, failCleanup(cleanupFailures));
         }
     }
 }
-const collectInterruptedCleanupFailures = function* (scopeName, release, completed, shouldDrainReturn, iterator, step) {
+const collectInterruptedCleanupFailures = function* (scope, release, completed, shouldDrainReturn, iterator, step) {
     const failures = [];
-    const exit = { type: 'interrupted', scope: scopeName };
+    const exit = interruptedExit(scope, interruptionReason());
     yield* collectCleanupFailures(failures, function* () {
         failures.push(...yield* release(exit));
     });
@@ -114,6 +148,9 @@ const collectInterruptedCleanupFailures = function* (scopeName, release, complet
     }
     return failures;
 };
+const interruptedExit = (scope, reason) => reason === undefined
+    ? { type: 'interrupted', scope }
+    : { type: 'interrupted', scope, reason };
 const collectCleanupFailures = function* (failures, cleanup) {
     try {
         yield* cleanup();

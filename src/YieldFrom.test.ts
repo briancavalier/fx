@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { abort, orReturn } from './Abort.js'
-import { unbounded } from './Concurrent.js'
+import { withUnboundedConcurrency } from './Concurrent.js'
 import { Effect } from './Effect.js'
 import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { handle, handleScoped } from './Handler.js'
@@ -261,7 +261,7 @@ describe('YieldFrom', () => {
 
     const [result, values] = await fromAsyncIterable(NumberScope, makeAsyncIterable).pipe(
       collectFrom(NumberScope),
-      unbounded,
+      withUnboundedConcurrency,
       runPromise
     )
 

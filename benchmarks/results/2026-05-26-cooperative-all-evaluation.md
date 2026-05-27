@@ -1,13 +1,8 @@
 # Cooperative All Evaluation
 
-- Date: 2026-05-26T23:00:08.550Z
-- Git SHA: a7bbca9
-- Worktree: M benchmarks/cooperative-all.ts
- M examples/advanced/diagnostics.ts
- M examples/advanced/incident-collector/cli.ts
- M src/Concurrent.test.ts
- M src/Concurrent.ts
- M src/Trace.test.ts
+- Date: 2026-05-27T14:17:33.513Z
+- Git SHA: 2eca93e
+- Worktree: dirty
 - Node: v24.14.0
 - Platform: darwin 25.3.0 arm64
 - Command: `pnpm benchmark:cooperative-all`
@@ -20,34 +15,28 @@
 
 | Case | Total steps | Max consecutive same-child steps | First-step spread |
 | --- | ---: | ---: | ---: |
-| defaultAll + unbounded | 256 | 16 | 240 |
-| cooperativeAll budget 1 | 256 | 1 | 15 |
-| cooperativeStructured budget 1 | 256 | 1 | 15 |
-| cooperativeAll budget 8 | 256 | 8 | 120 |
-| cooperativeAll budget 64 | 256 | 16 | 240 |
+| withUnboundedConcurrency | 256 | 16 | 240 |
+| withCoopConcurrency budget 1 | 256 | 1 | 15 |
+| withCoopConcurrency budget 8 | 256 | 8 | 120 |
+| withCoopConcurrency budget 64 | 256 | 16 | 240 |
 
 ## Performance
 
 | Case | Iterations | Total ms | Ops/sec | ns/op | Relative to group baseline |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| defaultAll + unbounded ok fanout 16 | 1,000 | 254.00 | 3937 | 253999 | 1.00x |
-| cooperativeAll ok fanout 16 | 1,000 | 71.14 | 14056 | 71142 | 0.28x |
-| cooperativeStructured ok fanout 16 | 1,000 | 75.39 | 13265 | 75386 | 0.30x |
-| defaultAll + unbounded async fanout 16 | 1,000 | 425.67 | 2349 | 425674 | 1.00x |
-| cooperativeAll async fanout 16 | 1,000 | 291.35 | 3432 | 291352 | 0.68x |
-| cooperativeStructured async fanout 16 | 1,000 | 291.79 | 3427 | 291789 | 0.69x |
-| defaultAll + unbounded yielding 16x16 | 250 | 89.26 | 2801 | 357021 | 1.00x |
-| cooperativeAll yielding 16x16 budget 1 | 250 | 59.76 | 4183 | 239041 | 0.67x |
-| cooperativeStructured yielding 16x16 budget 1 | 250 | 66.26 | 3773 | 265041 | 0.74x |
-| cooperativeAll yielding 16x16 budget 8 | 250 | 54.64 | 4576 | 218543 | 0.61x |
-| cooperativeAll yielding 16x16 budget 64 | 250 | 54.82 | 4560 | 219281 | 0.61x |
-| defaultAll + unbounded mixed parked async | 250 | 56.65 | 4413 | 226585 | 1.00x |
-| cooperativeAll mixed parked async budget 1 | 250 | 53.22 | 4697 | 212892 | 0.94x |
-| cooperativeStructured mixed parked async budget 1 | 250 | 54.16 | 4616 | 216623 | 0.96x |
-| defaultAll + firstSettled + unbounded nested race | 250 | 53.31 | 4689 | 213245 | 1.00x |
-| cooperativeStructured nested race | 250 | 40.70 | 6142 | 162807 | 0.76x |
-| defaultAll + firstSuccess + unbounded nested firstSuccess | 250 | 56.33 | 4438 | 225311 | 1.00x |
-| cooperativeStructured nested firstSuccess | 250 | 38.29 | 6528 | 153179 | 0.68x |
-| defaultAll + unbounded cancel cleanup | 250 | 79.42 | 3148 | 317672 | 1.00x |
-| cooperativeAll cancel cleanup | 250 | 69.47 | 3599 | 277865 | 0.87x |
-| cooperativeStructured cancel cleanup | 250 | 75.76 | 3300 | 303038 | 0.95x |
+| withUnboundedConcurrency ok fanout 16 | 1,000 | 251.26 | 3980 | 251265 | 1.00x |
+| withCoopConcurrency ok fanout 16 | 1,000 | 71.87 | 13915 | 71865 | 0.29x |
+| withUnboundedConcurrency async fanout 16 | 1,000 | 411.36 | 2431 | 411364 | 1.00x |
+| withCoopConcurrency async fanout 16 | 1,000 | 297.91 | 3357 | 297905 | 0.72x |
+| withUnboundedConcurrency yielding 16x16 | 250 | 76.45 | 3270 | 305797 | 1.00x |
+| withCoopConcurrency yielding 16x16 budget 1 | 250 | 57.56 | 4344 | 230226 | 0.75x |
+| withCoopConcurrency yielding 16x16 budget 8 | 250 | 54.53 | 4585 | 218106 | 0.71x |
+| withCoopConcurrency yielding 16x16 budget 64 | 250 | 54.50 | 4588 | 217983 | 0.71x |
+| withUnboundedConcurrency mixed parked async | 250 | 51.43 | 4861 | 205725 | 1.00x |
+| withCoopConcurrency mixed parked async budget 1 | 250 | 50.53 | 4947 | 202123 | 0.98x |
+| firstSettled + withUnboundedConcurrency nested race | 250 | 62.91 | 3974 | 251650 | 1.00x |
+| withCoopConcurrency nested race | 250 | 23.85 | 10480 | 95419 | 0.38x |
+| firstSuccess + withUnboundedConcurrency nested firstSuccess | 250 | 72.86 | 3431 | 291422 | 1.00x |
+| withCoopConcurrency nested firstSuccess | 250 | 47.09 | 5309 | 188367 | 0.65x |
+| withUnboundedConcurrency cancel cleanup | 250 | 78.22 | 3196 | 312899 | 1.00x |
+| withCoopConcurrency cancel cleanup | 250 | 60.69 | 4120 | 242742 | 0.78x |

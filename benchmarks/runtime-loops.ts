@@ -3,7 +3,7 @@ import { arch, platform, release } from 'node:os'
 import { performance } from 'node:perf_hooks'
 
 import { assertPromise } from '../src/Async.js'
-import { all, bounded, defaultAll, firstSettled, fork, race, unbounded } from '../src/Concurrent.js'
+import { all, withBoundedConcurrency, firstSettled, fork, race, withUnboundedConcurrency } from '../src/Concurrent.js'
 import { Effect } from '../src/Effect.js'
 import { andFinally } from '../src/Finalization.js'
 import { fx, ok, run, runPromise, runTask } from '../src/Fx.js'
@@ -207,19 +207,19 @@ const cases: readonly BenchmarkCase[] = [
   benchmark('sequential async x10', 'runFork', RunForkIterations, 100, async () => {
     await runPromise(sequentialAsync10)
   }),
-  benchmark('fork fanout 16 unbounded', 'runFork', RunForkIterations, 100, async () => {
-    await forkFanout16.pipe(unbounded, runPromise)
+  benchmark('fork fanout 16 withUnboundedConcurrency', 'runFork', RunForkIterations, 100, async () => {
+    await forkFanout16.pipe(withUnboundedConcurrency, runPromise)
   }),
   ...forkBounds.map(limit =>
-    benchmark(`fork fanout 16 bounded ${limit}`, 'runFork', RunForkIterations, 100, async () => {
-      await forkFanout16.pipe(bounded(limit), runPromise)
+    benchmark(`fork fanout 16 withBoundedConcurrency ${limit}`, 'runFork', RunForkIterations, 100, async () => {
+      await forkFanout16.pipe(withBoundedConcurrency(limit), runPromise)
     })
   ),
   benchmark('all fanout 16', 'runFork', RunForkIterations, 100, async () => {
-    await allFanout16.pipe(defaultAll, unbounded, runPromise)
+    await allFanout16.pipe(withUnboundedConcurrency, runPromise)
   }),
   benchmark('race fanout 16', 'runFork', RunForkIterations, 100, async () => {
-    await raceFanout16.pipe(firstSettled, unbounded, runPromise)
+    await raceFanout16.pipe(firstSettled, withUnboundedConcurrency, runPromise)
   }),
   benchmark('dispose blocked task', 'interrupt', InterruptIterations, 100, async () => {
     await disposeTask(blocked)
@@ -232,7 +232,7 @@ const cases: readonly BenchmarkCase[] = [
       const task = yield* fork(blocked)
       task[Symbol.dispose]()
       yield* assertPromise(() => task._disposeAndWait())
-    }).pipe(unbounded, runPromise)
+    }).pipe(withUnboundedConcurrency, runPromise)
   })
 ]
 

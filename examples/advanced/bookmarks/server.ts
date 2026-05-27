@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { networkInterfaces } from 'node:os'
 import { dirname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { unbounded } from '@briancavalier/fx/concurrent'
+import { withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 import { assert as assertNoFail, catchAll, Fail, flatMap, fx, type Fx, map, ok, provide, returnAll } from '@briancavalier/fx'
 
 import { decodeOrFail, encodeOrFail, type Decode, type Encode } from '@briancavalier/fx/codec'
@@ -310,6 +310,6 @@ await server.pipe(
     host: process.env.HOST ?? '127.0.0.1',
     port: Number(process.env.PORT ?? 3000)
   }),
-  unbounded,
+  withUnboundedConcurrency,
   runNodeMain
 )

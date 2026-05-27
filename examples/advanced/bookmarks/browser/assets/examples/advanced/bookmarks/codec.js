@@ -1,25 +1,29 @@
-import { fail, ok } from '@briancavalier/fx';
-import { codecKey, withCodec } from '@briancavalier/fx/codec';
+import { ok } from '@briancavalier/fx';
+import { codecFail, codecKey, codecOk, withCodec } from '@briancavalier/fx/codec';
 export class InvalidBookmarkJson extends Error {
 }
-export const BookmarkJson = codecKey()(Symbol('examples/advanced/bookmarks/BookmarkJson'), {
+export const BookmarkJson = codecKey()('examples/advanced/bookmarks/BookmarkJson', {
     description: 'Bookmark JSON with Date fields encoded as ISO strings'
 });
-export const BookmarksJson = codecKey()(Symbol('examples/advanced/bookmarks/BookmarksJson'), {
+export const BookmarksJson = codecKey()('examples/advanced/bookmarks/BookmarksJson', {
     description: 'Bookmark array JSON with Date fields encoded as ISO strings'
 });
-export const AddBookmarkInputJson = codecKey()(Symbol('examples/advanced/bookmarks/AddBookmarkInputJson'), {
+export const AddBookmarkInputJson = codecKey()('examples/advanced/bookmarks/AddBookmarkInputJson', {
     description: 'Add bookmark request JSON'
 });
+// This example uses a small hand-rolled JSON codec so the data boundary is easy
+// to inspect without adding dependencies. A real application could keep the same
+// codec keys and delegate these handlers to Zod, Valibot, Arktype, Effect
+// Schema, a Standard Schema adapter, or a project-local parser/serializer.
 export const withBookmarkCodecs = (program) => program.pipe(withCodec(BookmarkJson, {
-    encode: bookmark => ok(bookmarkToWire(bookmark)),
-    decode: decodeBookmarkWire
+    encode: bookmark => ok(encodeJson(bookmarkToWire(bookmark))),
+    decode: text => ok(flatMapCodecResult(parseJson(text), decodeBookmarkWire))
 }), withCodec(BookmarksJson, {
-    encode: bookmarks => ok(bookmarks.map(bookmarkToWire)),
-    decode: decodeBookmarkWireArray
+    encode: bookmarks => ok(encodeJson(bookmarks.map(bookmarkToWire))),
+    decode: text => ok(flatMapCodecResult(parseJson(text), decodeBookmarkWireArray))
 }), withCodec(AddBookmarkInputJson, {
-    encode: input => ok(input),
-    decode: decodeAddBookmarkInputWire
+    encode: input => ok(encodeJson(input)),
+    decode: text => ok(flatMapCodecResult(parseJson(text), decodeAddBookmarkInputWire))
 }));
 const decodeBookmarkWireArray = (values) => {
     if (!Array.isArray(values))
@@ -31,7 +35,7 @@ const decodeBookmarkWireArray = (values) => {
             return invalidBookmarkJson('invalid bookmark JSON');
         bookmarks.push(bookmark);
     }
-    return ok(bookmarks);
+    return codecOk(bookmarks);
 };
 const bookmarkToWire = (bookmark) => ({
     id: bookmark.id,
@@ -46,7 +50,7 @@ const bookmarkToWire = (bookmark) => ({
 });
 const decodeBookmarkWire = (value) => {
     const bookmark = parseBookmarkWire(value);
-    return bookmark === undefined ? invalidBookmarkJson('invalid bookmark JSON') : ok(bookmark);
+    return bookmark === undefined ? invalidBookmarkJson('invalid bookmark JSON') : codecOk(bookmark);
 };
 const parseBookmarkWire = (value) => {
     if (!isRecord(value))
@@ -79,9 +83,9 @@ const decodeAddBookmarkInputWire = (value) => {
     if (!isRecord(value) || typeof value.url !== 'string')
         return invalidBookmarkJson('invalid add bookmark input JSON');
     if (value.tags === undefined)
-        return ok({ url: value.url });
+        return codecOk({ url: value.url });
     return isStringArray(value.tags)
-        ? ok({ url: value.url, tags: value.tags })
+        ? codecOk({ url: value.url, tags: value.tags })
         : invalidBookmarkJson('invalid add bookmark input JSON');
 };
 const parseDate = (value) => {
@@ -90,7 +94,24 @@ const parseDate = (value) => {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? undefined : date;
 };
-const invalidBookmarkJson = (message) => fail(new InvalidBookmarkJson(message));
+const invalidBookmarkJson = (message) => codecFail(new InvalidBookmarkJson(message));
+const encodeJson = (value) => {
+    try {
+        return codecOk(JSON.stringify(value));
+    }
+    catch {
+        return invalidBookmarkJson('invalid bookmark JSON');
+    }
+};
+const parseJson = (text) => {
+    try {
+        return codecOk(JSON.parse(text));
+    }
+    catch {
+        return invalidBookmarkJson('invalid bookmark JSON');
+    }
+};
+const flatMapCodecResult = (result, f) => result.tag === 'ok' ? f(result.value) : result;
 const isMetadataStatus = (value) => isRecord(value) &&
     (value.tag === 'not-requested' ||
         value.tag === 'available' ||

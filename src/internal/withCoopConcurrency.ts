@@ -1,7 +1,7 @@
 import { Async } from '../Async.js'
 import { at, indexed } from '../Breadcrumb.js'
-import { All, Race, RaceAllFailed } from '../Concurrent.js'
-import type { EffectsOf, ErrorsOf, ResultOf } from '../Concurrent.js'
+import { Concurrently, RaceAllFailed, allPolicy, firstSettledPolicy, firstSuccessPolicy } from '../Concurrent.js'
+import type { ConcurrentPolicy, ConcurrentResult, EffectsOf, ErrorsOf } from '../Concurrent.js'
 import { Fail, fail } from '../Fail.js'
 import { Fx, fx } from '../Fx.js'
 import type { TraceFrameKind, TraceOrigin } from '../Trace.js'
@@ -16,13 +16,11 @@ export interface CooperativeConfig {
   readonly yieldBudget: number
 }
 
-export type CooperativeRacePolicy = 'firstSettled' | 'firstSuccess'
-
-type CooperativeRaceEffects<E> = Async | ErrorsOf<EffectsOfRace<E>> | FirstSuccessRaceFailure<E>
-type EffectsOfRace<E> = E extends Race<infer Fxs> ? EffectsOf<Fxs[number]> : never
-type FirstSuccessRaceFailure<E> = E extends Race<infer Fxs>
-  ? EveryFxCanFail<Fxs> extends true ? Fail<RaceAllFailed<FailuresOfFxs<Fxs>>> : never
+export type CooperativeConcurrentlyEffects<E> = E extends Concurrently<infer Policy, infer Fxs>
+  ? Policy['tag'] extends 'firstSuccess' ? Async | FirstSuccessFailure<Fxs> : Async | ErrorsOf<EffectsOf<Fxs[number]>>
   : never
+type FirstSuccessFailure<Fxs extends readonly Fx<unknown, unknown>[]> =
+  EveryFxCanFail<Fxs> extends true ? Fail<RaceAllFailed<FailuresOfFxs<Fxs>>> : never
 type EveryFxCanFail<Fxs extends readonly Fx<unknown, unknown>[]> = Fxs extends readonly []
   ? true
   : number extends Fxs['length']
@@ -71,25 +69,14 @@ interface GroupPolicy<S> {
   readonly onFailure: (state: S, index: number, error: unknown) => GroupDecision<S>
 }
 
-export const runCooperativeAll = (config: CooperativeConfig) =>
-  <const Fxs extends readonly Fx<unknown, unknown>[]>(
-    all: All<Fxs>
-  ): Fx<Async | ErrorsOf<EffectsOf<Fxs[number]>>, {
-    readonly [K in keyof Fxs]: ResultOf<Fxs[K]>
-  }> => cooperativeGroupFx(all, config, allPolicy()) as Fx<Async | ErrorsOf<EffectsOf<Fxs[number]>>, {
-  readonly [K in keyof Fxs]: ResultOf<Fxs[K]>
-}>
-
-export const runCooperativeRace = (config: CooperativeConfig, racePolicy: CooperativeRacePolicy) =>
-  <const Fxs extends readonly Fx<unknown, unknown>[]>(
-    race: Race<Fxs>
-  ): Fx<CooperativeRaceEffects<Race<Fxs>>, ResultOf<Fxs[number]>> => {
-    const policy: GroupPolicy<any> = racePolicy === 'firstSuccess' ? firstSuccessGroupPolicy() : raceGroupPolicy()
-    return cooperativeGroupFx(race, config, policy) as Fx<CooperativeRaceEffects<Race<Fxs>>, ResultOf<Fxs[number]>>
-  }
+export const runCooperativeConcurrently = (config: CooperativeConfig) =>
+  <const Policy extends ConcurrentPolicy, const Fxs extends readonly Fx<unknown, unknown>[]>(
+    group: Concurrently<Policy, Fxs>
+  ): Fx<CooperativeConcurrentlyEffects<Concurrently<Policy, Fxs>>, ConcurrentResult<Policy, Fxs>> =>
+    cooperativeGroupFx(group, config, groupPolicy(group.arg.policy)) as Fx<CooperativeConcurrentlyEffects<Concurrently<Policy, Fxs>>, ConcurrentResult<Policy, Fxs>>
 
 const cooperativeGroupFx = <const Fxs extends readonly Fx<unknown, unknown>[], S>(
-  group: All<Fxs> | Race<Fxs>,
+  group: Concurrently<ConcurrentPolicy, Fxs>,
   config: CooperativeConfig,
   policy: GroupPolicy<S>
 ) => fx(function* () {
@@ -196,6 +183,11 @@ const cooperativeGroupFx = <const Fxs extends readonly Fx<unknown, unknown>[], S
           break
         }
 
+        if (Concurrently.is(ir.value)) {
+          fiber.resume = { type: 'next', value: yield* runCooperativeConcurrently(config)(ir.value as Concurrently<ConcurrentPolicy, readonly Fx<unknown, unknown>[]>) }
+          continue
+        }
+
         if (Fail.is(ir.value)) {
           failFiber(fiber, { error: wrapFiberFailure(fiber, ir.value) })
           break
@@ -270,13 +262,20 @@ const emptyOutcome = <S>(
   return decision?.type === 'continue' ? undefined : decision
 }
 
-const groupKind = (group: All<any> | Race<any>): TraceFrameKind =>
-  All.is(group) ? 'all' : 'race'
+const groupKind = (group: Concurrently<ConcurrentPolicy, any>): TraceFrameKind =>
+  group.arg.policy.tag === 'all' ? 'all' : 'race'
 
 const childFrameKind = (trace: TraceOrigin['trace'] | undefined) =>
   trace?.frame.kind === 'all' || trace?.frame.kind === 'race' ? trace.frame.kind : 'fork'
 
-const allPolicy = (): GroupPolicy<{ readonly results: unknown[], completed: number }> => ({
+const groupPolicy = (policy: ConcurrentPolicy): GroupPolicy<any> => {
+  if (policy === allPolicy) return allGroupPolicy()
+  if (policy === firstSettledPolicy) return raceGroupPolicy()
+  if (policy === firstSuccessPolicy) return firstSuccessGroupPolicy()
+  throw new TypeError('Unknown concurrency policy')
+}
+
+const allGroupPolicy = (): GroupPolicy<{ readonly results: unknown[], completed: number }> => ({
   init: size => ({ results: sparseArray(size), completed: 0 }),
   onEmpty: state => ({ type: 'succeed', state, value: state.results, cancelRest: false }),
   onSuccess: (state, index, value) => {
@@ -326,9 +325,17 @@ const startCooperativeAsync = (
   const context = getRuntimeContext(async)
   const run = () => async.arg.run(abort.signal)
   const promise = context === undefined ? run() : withActiveRuntimeContext(context, run)
+  const wakeOnAbort = () => {
+    if (fiber.status !== 'waiting') return
+    fiber.abort = undefined
+    fiber.status = 'ready'
+    wake.ready(fiber)
+  }
+  abort.signal.addEventListener('abort', wakeOnAbort, { once: true })
   promise.then(
     value => {
       if (fiber.status !== 'waiting') return
+      abort.signal.removeEventListener('abort', wakeOnAbort)
       fiber.abort = undefined
       fiber.resume = { type: 'next', value }
       fiber.status = 'ready'
@@ -336,6 +343,7 @@ const startCooperativeAsync = (
     },
     error => {
       if (fiber.status !== 'waiting') return
+      abort.signal.removeEventListener('abort', wakeOnAbort)
       fiber.abort = undefined
       failFiber(fiber, { error: wrapAsyncFiberError(fiber, async, error, context) })
       wake.notify()
@@ -454,8 +462,8 @@ const AsyncWait = (waiters: (() => void)[]) =>
       signal.addEventListener('abort', resolveOnce, { once: true })
       waiters.push(resolveOnce)
     }),
-    origin: at('fx/Concurrent/cooperativeStructured/wait', AsyncWait),
-    trace: captureTrace(at('fx/Concurrent/cooperativeStructured/wait', AsyncWait), undefined, { kind: 'async' })
+    origin: at('fx/Concurrent/withCoopConcurrency/wait', AsyncWait),
+    trace: captureTrace(at('fx/Concurrent/withCoopConcurrency/wait', AsyncWait), undefined, { kind: 'async' })
   }) as Fx<Async, void>
 
 const resourceReleaseFailed = (failures: readonly unknown[]) =>

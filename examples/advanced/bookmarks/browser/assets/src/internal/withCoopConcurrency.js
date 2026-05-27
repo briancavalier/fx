@@ -1,8 +1,9 @@
 import { Async } from '../Async.js';
 import { at, indexed } from '../Breadcrumb.js';
-import { Concurrently, Fork, RaceAllFailed, allPolicy, firstSettledPolicy, firstSuccessPolicy } from '../Concurrent.js';
+import { Concurrently, Fork, RaceAllFailed } from '../Concurrent.js';
 import { Fail, fail } from '../Fail.js';
 import { fx, runPromise } from '../Fx.js';
+import { HandlerCapture, handleCaptured } from '../HandlerCapture.js';
 import { Task } from '../Task.js';
 import { captureTrace, getTrace } from '../Trace.js';
 import { ForkError, capturePrependTraceWithContext, captureTraceWithContext, forkFrameMetadata, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from './forkDiagnostics.js';
@@ -18,6 +19,7 @@ export class CooperativeRuntime {
         this.availableSlots = Math.floor(config.concurrency);
     }
     runConcurrently = (group) => cooperativeGroupFx(this, group, groupPolicy(group.arg.policy));
+    runNestedConcurrently = (group, parent) => cooperativeGroupFx(this, group, groupPolicy(group.arg.policy), parent);
     runFork = (fork) => fx(function* () {
         return this.startFork(fork);
     }.bind(this));
@@ -35,7 +37,8 @@ export class CooperativeRuntime {
             status: 'ready',
             resume: { type: 'next', value: undefined },
             cancelRequested: false,
-            cleanupFailures: []
+            cleanupFailures: [],
+            releaseSlotBeforeResume: false
         };
         const done = Promise.withResolvers();
         const interrupted = Promise.withResolvers();
@@ -85,7 +88,7 @@ export class CooperativeRuntime {
                     continue;
                 }
                 if (fiber.cancelRequested && fiber.masks.canInterrupt) {
-                    await runPromise(fx(function* () { yield* closeFiber(fiber); }));
+                    await runPromise(fx(function* () { yield* closeFiber(this, fiber); }.bind(this)));
                     finishDetachedFiber(this, fiber);
                     if (fiber.cleanupFailures.length > 0)
                         done.reject(resourceReleaseFailed(fiber.cleanupFailures));
@@ -147,7 +150,7 @@ export class CooperativeRuntime {
             waiter();
     }
 }
-const cooperativeGroupFx = (runtime, group, policy) => fx(function* () {
+const cooperativeGroupFx = (runtime, group, policy, borrowedSlotFrom) => fx(function* () {
     const fxs = group.arg.fxs;
     const fibers = [];
     const ready = [];
@@ -177,9 +180,14 @@ const cooperativeGroupFx = (runtime, group, policy) => fx(function* () {
                 status: 'ready',
                 resume: { type: 'next', value: undefined },
                 cancelRequested: false,
-                cleanupFailures: []
+                cleanupFailures: [],
+                releaseSlotBeforeResume: false
             };
-            if (!runtime.tryAcquireSlot(fiber))
+            if (borrowedSlotFrom?.slotAcquired) {
+                borrowedSlotFrom.slotAcquired = false;
+                fiber.slotAcquired = true;
+            }
+            else if (!runtime.tryAcquireSlot(fiber))
                 break;
             next++;
             active++;
@@ -201,7 +209,7 @@ const cooperativeGroupFx = (runtime, group, policy) => fx(function* () {
         if (decision.type === 'continue')
             return;
         outcome ??= decision;
-        if (decision.cancelRest)
+        if (decision.type !== 'pending' && decision.cancelRest)
             cancelActiveFibers(fibers);
     };
     const succeedFiber = (fiber, value) => {
@@ -235,7 +243,7 @@ const cooperativeGroupFx = (runtime, group, policy) => fx(function* () {
             if (fiber.status !== 'ready')
                 continue;
             if (fiber.cancelRequested && fiber.masks.canInterrupt) {
-                yield* closeFiber(fiber);
+                yield* closeFiber(runtime, fiber);
                 finish(fiber);
                 continue;
             }
@@ -252,7 +260,7 @@ const cooperativeGroupFx = (runtime, group, policy) => fx(function* () {
             cancelActiveFibers(fibers);
             for (const fiber of fibers) {
                 if (fiber.status !== 'done') {
-                    yield* closeFiber(fiber);
+                    yield* closeFiber(runtime, fiber);
                     finish(fiber);
                 }
             }
@@ -263,6 +271,8 @@ const cooperativeGroupFx = (runtime, group, policy) => fx(function* () {
                     : cleanupFailures;
                 return (yield* fail(resourceReleaseFailed(failures)));
             }
+            if (outcome.type === 'pending')
+                return yield* waitForInterruption();
             if (outcome.type === 'fail')
                 return (yield* fail(outcome.error));
             return outcome.value;
@@ -274,7 +284,7 @@ const cooperativeGroupFx = (runtime, group, policy) => fx(function* () {
             cancelActiveFibers(fibers);
             for (const fiber of fibers) {
                 if (fiber.status !== 'done') {
-                    yield* closeFiber(fiber);
+                    yield* closeFiber(runtime, fiber);
                     finish(fiber);
                 }
             }
@@ -290,13 +300,11 @@ const emptyOutcome = (policy, state, size) => {
 const groupKind = (group) => group.arg.policy.tag === 'all' ? 'all' : 'race';
 const childFrameKind = (trace) => trace?.frame.kind === 'all' || trace?.frame.kind === 'race' ? trace.frame.kind : 'fork';
 const groupPolicy = (policy) => {
-    if (policy === allPolicy)
-        return allGroupPolicy;
-    if (policy === firstSettledPolicy)
-        return raceGroupPolicy;
-    if (policy === firstSuccessPolicy)
-        return firstSuccessGroupPolicy;
-    throw new TypeError('Unknown concurrency policy');
+    switch (policy.tag) {
+        case 'all': return allGroupPolicy;
+        case 'firstSettled': return raceGroupPolicy;
+        case 'firstSuccess': return firstSuccessGroupPolicy;
+    }
 };
 const allGroupPolicy = {
     init: size => ({ results: sparseArray(size), completed: 0 }),
@@ -312,6 +320,7 @@ const allGroupPolicy = {
 };
 const raceGroupPolicy = {
     init: () => undefined,
+    onEmpty: state => ({ type: 'pending', state }),
     onSuccess: (_state, _index, value) => ({ type: 'succeed', state: undefined, value, cancelRest: true }),
     onFailure: (_state, _index, error) => ({ type: 'fail', state: undefined, error, cancelRest: true })
 };
@@ -373,6 +382,10 @@ function* stepFiber(runtime, fiber, wake, callbacks) {
     while (budget > 0 && fiber.status === 'ready') {
         budget--;
         let ir;
+        const releaseSlotBeforeResume = fiber.releaseSlotBeforeResume && fiber.slotAcquired;
+        fiber.releaseSlotBeforeResume = false;
+        if (releaseSlotBeforeResume)
+            runtime.releaseSlot(fiber);
         try {
             ir = fiber.resume.type === 'throw'
                 ? fiber.iterator.throw?.(fiber.resume.error) ?? throwIntoMissingIterator(fiber.resume.error)
@@ -381,6 +394,10 @@ function* stepFiber(runtime, fiber, wake, callbacks) {
         catch (e) {
             callbacks.fail(wrapThrownFiberError(fiber, e));
             break;
+        }
+        finally {
+            if (releaseSlotBeforeResume)
+                yield* reacquireSlot(runtime, fiber);
         }
         fiber.resume = { type: 'next', value: undefined };
         if (ir.done) {
@@ -394,7 +411,12 @@ function* stepFiber(runtime, fiber, wake, callbacks) {
             break;
         }
         if (Concurrently.is(ir.value)) {
-            fiber.resume = { type: 'next', value: yield* runtime.runConcurrently(ir.value) };
+            try {
+                fiber.resume = { type: 'next', value: yield* runtime.runNestedConcurrently(ir.value, fiber) };
+            }
+            finally {
+                yield* reacquireSlot(runtime, fiber);
+            }
             continue;
         }
         if (Fork.is(ir.value)) {
@@ -421,17 +443,28 @@ function* stepFiber(runtime, fiber, wake, callbacks) {
         if (InterruptMaskEnd.is(ir.value)) {
             fiber.masks.unmask(ir.value.arg);
             if (fiber.cancelRequested && fiber.masks.canInterrupt) {
-                yield* closeFiber(fiber);
+                yield* closeFiber(runtime, fiber);
                 callbacks.cancel?.();
                 break;
             }
             fiber.resume = { type: 'next', value: undefined };
             continue;
         }
+        if (HandlerCapture.is(ir.value)) {
+            fiber.resume = { type: 'next', value: yield ir.value };
+            fiber.releaseSlotBeforeResume = true;
+            continue;
+        }
         fiber.resume = { type: 'next', value: yield ir.value };
     }
 }
-function* closeFiber(fiber) {
+function* reacquireSlot(runtime, fiber) {
+    if (fiber.status === 'done')
+        return;
+    while (!runtime.tryAcquireSlot(fiber))
+        yield* runtime.waitForSlot();
+}
+function* closeFiber(runtime, fiber) {
     fiber.abort?.abort();
     fiber.abort = undefined;
     let ir;
@@ -447,6 +480,17 @@ function* closeFiber(fiber) {
             if (Async.is(ir.value)) {
                 ir = fiber.iterator.next(yield ir.value);
             }
+            else if (Concurrently.is(ir.value)) {
+                try {
+                    ir = fiber.iterator.next(yield* runtime.runNestedConcurrently(ir.value, fiber));
+                }
+                finally {
+                    yield* reacquireSlot(runtime, fiber);
+                }
+            }
+            else if (Fork.is(ir.value)) {
+                ir = fiber.iterator.next(runtime.startFork(ir.value));
+            }
             else if (Fail.is(ir.value)) {
                 fiber.cleanupFailures.push(ir.value.arg);
                 return;
@@ -459,8 +503,20 @@ function* closeFiber(fiber) {
                 fiber.masks.unmask(ir.value.arg);
                 ir = fiber.iterator.next();
             }
+            else if (HandlerCapture.is(ir.value)) {
+                const releaseSlotBeforeResume = fiber.slotAcquired;
+                if (releaseSlotBeforeResume)
+                    runtime.releaseSlot(fiber);
+                try {
+                    ir = fiber.iterator.next(yield* runCleanupEffect(runtime, fiber, ir.value));
+                }
+                finally {
+                    if (releaseSlotBeforeResume)
+                        yield* reacquireSlot(runtime, fiber);
+                }
+            }
             else {
-                ir = fiber.iterator.next(yield ir.value);
+                ir = fiber.iterator.next(yield* runCleanupEffect(runtime, fiber, ir.value));
             }
         }
         catch (e) {
@@ -469,6 +525,9 @@ function* closeFiber(fiber) {
         }
     }
 }
+const runCleanupEffect = (runtime, fiber, effect) => fx(function* () {
+    return yield effect;
+}).pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, group => runtime.runNestedConcurrently(group, fiber)), handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork));
 const finishDetachedFiber = (runtime, fiber) => {
     if (fiber.status === 'done')
         return;
@@ -544,5 +603,12 @@ const AsyncWait = (waiters) => new Async({
     }),
     origin: at('fx/Concurrent/withCoopConcurrency/wait', AsyncWait),
     trace: captureTrace(at('fx/Concurrent/withCoopConcurrency/wait', AsyncWait), undefined, { kind: 'async' })
+});
+const waitForInterruption = () => new Async({
+    run: signal => new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    }),
+    origin: at('fx/Concurrent/withCoopConcurrency/pending', waitForInterruption),
+    trace: captureTrace(at('fx/Concurrent/withCoopConcurrency/pending', waitForInterruption), undefined, { kind: 'async' })
 });
 const resourceReleaseFailed = (failures) => new AggregateError(failures, 'Resource release failed');

@@ -101,7 +101,7 @@ export const concurrently = (policy, fxs, options) => {
 export const withCoopConcurrency = (options = {}) => {
     const normalized = normalizeCoopOptions(options, 'withCoopConcurrency');
     const runtime = new CooperativeRuntime(normalized);
-    return (f) => f.pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, runtime.runConcurrently), handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork));
+    return (f) => withCapturedHandlers('fx/Concurrent/Concurrently', f).pipe(flatMap(fx => withCapturedHandlers('fx/Concurrent/Fork', fx.pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, runtime.runConcurrently)))), flatMap(fx => ok(fx.pipe(handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)))), flatten);
 };
 /**
  * Retag a structured concurrency request for first-settled race semantics.
@@ -191,13 +191,15 @@ const taskAll = (tasks) => {
 const normalizeCoopOptions = (options, handlerName) => {
     const concurrency = options.concurrency ?? Infinity;
     const yieldBudget = options.yieldBudget ?? 64;
-    if (concurrency <= 0)
-        throw new RangeError(`${handlerName} concurrency must be > 0, got ${concurrency}`);
-    if (yieldBudget <= 0)
-        throw new RangeError(`${handlerName} yieldBudget must be > 0, got ${yieldBudget}`);
+    if (concurrency <= 0 || (concurrency !== Infinity && !Number.isInteger(concurrency))) {
+        throw new RangeError(`${handlerName} concurrency must be a positive integer or Infinity, got ${concurrency}`);
+    }
+    if (yieldBudget <= 0 || !Number.isInteger(yieldBudget)) {
+        throw new RangeError(`${handlerName} yieldBudget must be a positive integer, got ${yieldBudget}`);
+    }
     return {
-        concurrency: Math.floor(concurrency),
-        yieldBudget: Math.floor(yieldBudget)
+        concurrency,
+        yieldBudget
     };
 };
 const taskRace = (tasks) => {

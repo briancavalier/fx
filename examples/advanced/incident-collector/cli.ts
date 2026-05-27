@@ -1,5 +1,7 @@
-import { bounded, defaultAll, firstSuccess } from '@briancavalier/fx/concurrent'
+// import { bounded, defaultAll, firstSuccess } from '@briancavalier/fx/concurrent'
+// import { bounded, cooperativeAll, firstSuccess } from '@briancavalier/fx/concurrent'
 import { consoleError, consoleLog, defaultConsole, fx, returnAll, runPromise } from '@briancavalier/fx'
+import { bounded, cooperativeStructured } from '@briancavalier/fx/concurrent'
 
 import { withConsoleLog } from '@briancavalier/fx/log'
 import { withScope } from '@briancavalier/fx/scope'
@@ -25,8 +27,12 @@ const runSnapshot = (label: string, failDeploy: boolean) => fx(function* () {
     withScope(CollectorScope),
     withConsoleLog,
     defaultTime,
-    firstSuccess,
-    defaultAll,
+    // Toggle structured concurrency handlers:
+    // firstSuccess,
+    // defaultAll,
+    // cooperativeAll({ concurrency: 6, yieldBudget: 64 }),
+    cooperativeStructured({ concurrency: 6, yieldBudget: 64, racePolicy: 'firstSuccess' }),
+    // Keep bounded(6) active when firstSuccess/defaultAll or cooperativeAll delegate nested Fork.
     bounded(6),
     withScope(BundleScope),
     returnAll,

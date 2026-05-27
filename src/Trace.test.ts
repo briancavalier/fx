@@ -2,7 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise, tryPromise } from './Async.js'
 import { at } from './Breadcrumb.js'
-import { all, cooperativeAll, defaultAll, firstSettled, fork, mapAll, race, unbounded } from './Concurrent.js'
+import { all, cooperativeAll, cooperativeStructured, defaultAll, firstSettled, fork, mapAll, race, unbounded } from './Concurrent.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { andFinally } from './Finalization.js'
 import { fx, runPromise } from './Fx.js'
@@ -441,6 +441,43 @@ describe('Trace', () => {
       assert.deepEqual(traceMessages(mapAllResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/mapAll[0]', 'fx/Concurrent/mapAll'])
       assert.equal(snapshotError(mapAllResult.arg).trace?.frames[1]?.kind, 'all')
       assert.equal(snapshotError(mapAllResult.arg).trace?.frames[1]?.index, 0)
+    } finally {
+      setTraceCapturePolicy(previous)
+    }
+  })
+
+  it('propagates regional trace policy and frame metadata through cooperativeStructured', async () => {
+    const previous = setTraceCapturePolicy('off')
+    try {
+      const allError = new Error('cooperative structured all failed')
+      const mapAllError = new Error('cooperative structured mapAll failed')
+      const raceError = new Error('cooperative structured race failed')
+      const allProgram = fx(function* () {
+        return yield* all([fx(function* () { yield* fail(allError) })]).pipe(withTraceCapture('labels'), cooperativeStructured())
+      })
+      const mapAllProgram = fx(function* () {
+        return yield* mapAll([mapAllError], error => fx(function* () { yield* fail(error) })).pipe(withTraceCapture('labels'), cooperativeStructured())
+      })
+      const raceProgram = fx(function* () {
+        return yield* race([fx(function* () { yield* fail(raceError) })]).pipe(withTraceCapture('labels'), cooperativeStructured())
+      })
+
+      const allResult = await allProgram.pipe(returnFail, runPromise)
+      const mapAllResult = await mapAllProgram.pipe(returnFail, runPromise)
+      const raceResult = await raceProgram.pipe(returnFail, runPromise)
+
+      assert.ok(Fail.is(allResult))
+      assert.ok(Fail.is(mapAllResult))
+      assert.ok(Fail.is(raceResult))
+      assert.deepEqual(traceMessages(allResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/all[0]', 'fx/Concurrent/all'])
+      assert.equal(snapshotError(allResult.arg).trace?.frames[1]?.kind, 'all')
+      assert.equal(snapshotError(allResult.arg).trace?.frames[1]?.index, 0)
+      assert.deepEqual(traceMessages(mapAllResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/mapAll[0]', 'fx/Concurrent/mapAll'])
+      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[1]?.kind, 'all')
+      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[1]?.index, 0)
+      assert.deepEqual(traceMessages(raceResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/race[0]', 'fx/Concurrent/race'])
+      assert.equal(snapshotError(raceResult.arg).trace?.frames[1]?.kind, 'race')
+      assert.equal(snapshotError(raceResult.arg).trace?.frames[1]?.index, 0)
     } finally {
       setTraceCapturePolicy(previous)
     }

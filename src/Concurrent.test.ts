@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
-import { RaceAllFailed, all, bounded, cooperativeAll, defaultAll, firstSettled, firstSuccess, fork, forkEach, mapAll, race, unbounded } from './Concurrent.js'
+import { RaceAllFailed, all, bounded, cooperativeAll, cooperativeStructured, defaultAll, firstSettled, firstSuccess, fork, forkEach, mapAll, race, unbounded } from './Concurrent.js'
 import { andFinally, andFinallyExit } from './Finalization.js'
 import { bracket, flatMap, fx, ok, runPromise, runTask } from './Fx.js'
 import { handle } from './Handler.js'
@@ -987,6 +987,308 @@ describe('Fork', () => {
       assert.ok(Fail.is(result))
       const error: Error = result.arg
       assert.equal(error.cause, cause)
+    })
+  })
+
+  describe('cooperativeStructured', () => {
+    it('rejects invalid options', () => {
+      assert.throws(() => cooperativeStructured({ concurrency: 0 }), RangeError)
+      assert.throws(() => cooperativeStructured({ yieldBudget: 0 }), RangeError)
+    })
+
+    it('returns all and mapAll child values directly in input order', async () => {
+      const tuple = await all([ok(1), asyncValue('two')]).pipe(
+        cooperativeStructured(),
+        runPromise
+      )
+      const mapped = await mapAll([3, 1, 2], n => asyncValue(n * 2)).pipe(
+        cooperativeStructured(),
+        runPromise
+      )
+
+      assert.deepEqual(tuple, [1, 'two'])
+      assert.deepEqual(mapped, [6, 2, 4])
+    })
+
+    it('uses first-settled race semantics by default and cancels losers', async () => {
+      let cancelled = false
+      const slow = assertPromise<string>(signal => new Promise(resolve => {
+        signal.addEventListener('abort', () => {
+          cancelled = true
+          resolve('cancelled')
+        }, { once: true })
+      }))
+
+      const result = await race([slow, ok('winner')]).pipe(
+        cooperativeStructured(),
+        runPromise
+      )
+
+      assert.equal(result, 'winner')
+      assert.equal(cancelled, true)
+    })
+
+    it('can use first-success race semantics', async () => {
+      const failed = new Error('fast failure')
+      const bad = fx(function* () {
+        yield* fail(failed)
+      })
+
+      const result = await race([bad, asyncValue('winner')]).pipe(
+        cooperativeStructured({ racePolicy: 'firstSuccess' }),
+        runPromise
+      )
+
+      assert.equal(result, 'winner')
+    })
+
+    it('fails first-success races with input-ordered errors when every child fails', async () => {
+      const first = new Error('first failed')
+      const second = new Error('second failed')
+
+      const result = await race([
+        fx(function* () { yield* fail(first) }),
+        fx(function* () { yield* fail(second) })
+      ]).pipe(
+        cooperativeStructured({ racePolicy: 'firstSuccess' }),
+        returnFail,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.ok(result.arg instanceof RaceAllFailed)
+      assert.equal(result.arg.code, 'FX_RACE_ALL_FAILED')
+      assert.equal(result.arg.errors.length, 2)
+      assert.deepEqual(result.arg.errors.map(e => (e as Error).cause), [first, second])
+    })
+
+    it('runs nested all to race and firstSuccess-shaped race without hanging', async () => {
+      const failed = new Error('primary failed')
+
+      const firstSettledResult = await all([
+        race([assertPromise(() => new Promise<string>(resolve => setImmediate(() => resolve('slow')))), ok('fast')])
+      ]).pipe(
+        cooperativeStructured(),
+        runPromise
+      )
+
+      const firstSuccessResult = await all([
+        race([
+          fx(function* () { yield* fail(failed) }),
+          asyncValue('replica')
+        ])
+      ]).pipe(
+        cooperativeStructured({ racePolicy: 'firstSuccess' }),
+        runPromise
+      )
+
+      assert.deepEqual(firstSettledResult, ['fast'])
+      assert.deepEqual(firstSuccessResult, ['replica'])
+    })
+
+    it('continues ready children while another child waits on async work', async () => {
+      class Step extends Effect('test/Fork/CooperativeStructuredAsyncQueue')<string, void> { }
+      const events = [] as string[]
+      let releaseSlow!: () => void
+      const slow = assertPromise<string>(() => new Promise(resolve => {
+        releaseSlow = () => resolve('slow')
+      }))
+      const fast = fx(function* () {
+        yield* new Step('fast')
+        return 'fast'
+      })
+
+      const promise = all([slow, fast]).pipe(
+        cooperativeStructured(),
+        handle(Step, step => fx(function* () {
+          events.push(step.arg)
+        })),
+        runPromise
+      )
+
+      await eventually(() => events.includes('fast'))
+      releaseSlow()
+
+      assert.deepEqual(await promise, ['slow', 'fast'])
+    })
+
+    it('runs handlers between structured effects and cooperativeStructured', async () => {
+      class CurrentValue extends Effect('test/Fork/CooperativeStructuredCurrentValue')<void, string> { }
+
+      const result = await all([
+        race([new CurrentValue()])
+      ]).pipe(
+        handle(CurrentValue, () => ok('handled')),
+        cooperativeStructured(),
+        runPromise
+      )
+
+      assert.deepEqual(result, ['handled'])
+    })
+
+    it('aborts parked async children when the parent task is interrupted', async () => {
+      let aborted = false
+      const parked = assertPromise<void>(signal => new Promise(resolve => {
+        signal.addEventListener('abort', () => {
+          aborted = true
+          resolve()
+        }, { once: true })
+      }))
+
+      const task = all([race([parked])]).pipe(
+        cooperativeStructured(),
+        runTask
+      )
+
+      await task.interrupt()
+
+      assert.equal(aborted, true)
+    })
+
+    it('converts rejected async work into recoverable failure', async () => {
+      const cause = new Error('cooperative structured async rejected')
+
+      const result = await race([assertPromise(() => Promise.reject(cause))]).pipe(
+        cooperativeStructured(),
+        returnFail,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      const snapshot = snapshotError(result.arg)
+      assert.equal(snapshot.code, 'FX_AWAITED_ASYNC_FAILED')
+      assert.equal(snapshot.cause?.message, 'cooperative structured async rejected')
+      assert.equal((result.arg as Error).cause, cause)
+    })
+
+    it('preserves indexed failure traces for all, mapAll, and race', async () => {
+      const allCause = new Error('cooperative structured all traced failure')
+      const mapAllCause = new Error('cooperative structured mapAll traced failure')
+      const raceCause = new Error('cooperative structured race traced failure')
+
+      const allResult = await all([fx(function* () { yield* fail(allCause) })]).pipe(
+        cooperativeStructured(),
+        returnFail,
+        runPromise
+      )
+      const mapAllResult = await mapAll([mapAllCause], error => fx(function* () { yield* fail(error) })).pipe(
+        cooperativeStructured(),
+        returnFail,
+        runPromise
+      )
+      const raceResult = await race([fx(function* () { yield* fail(raceCause) })]).pipe(
+        cooperativeStructured(),
+        returnFail,
+        runPromise
+      )
+
+      assert.ok(Fail.is(allResult))
+      assert.ok(Fail.is(mapAllResult))
+      assert.ok(Fail.is(raceResult))
+      assert.deepEqual(traceMessages(allResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/all[0]', 'fx/Concurrent/all'])
+      assert.deepEqual(traceMessages(mapAllResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/mapAll[0]', 'fx/Concurrent/mapAll'])
+      assert.deepEqual(traceMessages(raceResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/race[0]', 'fx/Concurrent/race'])
+    })
+
+    it('runs scoped finalizers and aggregates cleanup failures with the primary failure first', async () => {
+      const cause = new Error('cooperative structured all failed')
+      const releaseFailure = new Error('cooperative structured release failed')
+      const slow = bracket(
+        ok(undefined),
+        () => fail(releaseFailure),
+        () => awaitAbort()
+      )
+      const bad = fx(function* () {
+        yield* asyncValue(undefined)
+        yield* fail(cause)
+      })
+
+      const result = await all([slow, bad]).pipe(
+        cooperativeStructured(),
+        returnFail,
+        runPromise
+      )
+
+      assert.ok(Fail.is(result))
+      assert.ok(result.arg instanceof AggregateError)
+      assert.equal(result.arg.message, 'Resource release failed')
+      assert.equal((result.arg.errors[0] as Error).cause, cause)
+      assert.deepEqual(result.arg.errors.slice(1), [releaseFailure])
+    })
+
+    it('defers sibling cancellation while a child is interruption-masked', async () => {
+      const TestScope = scope('test/Fork/CooperativeStructuredMaskedCancelScope')
+      const events = [] as string[]
+      const cause = new Error('cooperative structured masked all failed')
+      let releaseMasked!: () => void
+
+      const masked = uninterruptible(fx(function* () {
+        yield* andFinally(TestScope, fx(function* () {
+          events.push('released')
+        }))
+        events.push('masked start')
+        yield* assertPromise<void>(() => new Promise(resolve => {
+          releaseMasked = () => resolve()
+        }))
+        events.push('masked end')
+      }))
+      const bad = fx(function* () {
+        yield* asyncValue(undefined)
+        yield* fail(cause)
+      })
+
+      const promise = all([masked, bad]).pipe(
+        cooperativeStructured(),
+        withScope(TestScope),
+        returnFail,
+        runPromise
+      )
+
+      await eventually(() => events.includes('masked start'))
+      await new Promise(resolve => setImmediate(resolve))
+      assert.deepEqual(events, ['masked start'])
+
+      releaseMasked()
+      const result = await promise
+
+      assert.ok(Fail.is(result))
+      assert.equal((result.arg as Error).cause, cause)
+      assert.deepEqual(events, ['masked start', 'masked end', 'released'])
+    })
+
+    it('preserves structured result and failure types', async () => {
+      class FirstError extends Error { readonly first = true }
+      class SecondError extends Error { readonly second = true }
+
+      const allResult = await fx(function* () {
+        const values = yield* all([ok(1), ok('two')])
+        const tuple: readonly [number, string] = values
+        return tuple
+      }).pipe(
+        cooperativeStructured(),
+        runPromise
+      )
+      const raceResult = await fx(function* () {
+        const value = yield* race([ok(1), ok('two')])
+        const union: number | string = value
+        return union
+      }).pipe(
+        cooperativeStructured(),
+        runPromise
+      )
+      const failed = await race([
+        fail(new FirstError()),
+        fail(new SecondError())
+      ]).pipe(
+        cooperativeStructured({ racePolicy: 'firstSuccess' }),
+        returnFail,
+        runPromise
+      )
+
+      assert.deepEqual(allResult, [1, 'two'])
+      assert.equal(raceResult, 1)
+      assert.ok(Fail.is(failed))
+      assert.ok(failed.arg instanceof RaceAllFailed)
     })
   })
 

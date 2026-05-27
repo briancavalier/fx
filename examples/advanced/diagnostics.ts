@@ -1,8 +1,10 @@
-import { all, defaultAll, unbounded } from '@briancavalier/fx/concurrent'
+// import { all, cooperativeAll, unbounded } from '@briancavalier/fx/concurrent'
+// import { all, defaultAll, unbounded } from '@briancavalier/fx/concurrent'
 import { catchAll, consoleError, consoleLog, defaultConsole, fail, fx, runPromise } from '@briancavalier/fx'
+import { all, cooperativeStructured, unbounded } from '@briancavalier/fx/concurrent'
 
-import { formatDiagnostic, formatError, snapshotError, withTraceCapture } from '@briancavalier/fx/trace'
 import { nodeSourceLookup } from '@briancavalier/fx/platform-node'
+import { formatDiagnostic, formatError, snapshotError, withTraceCapture } from '@briancavalier/fx/trace'
 
 const sourceLookup = nodeSourceLookup()
 
@@ -40,7 +42,10 @@ const checkout = fx(function* () {
     authorizePayment(order)
   ]).pipe(
     withTraceCapture('full'),
-    defaultAll
+    // Toggle All handler:
+    // defaultAll
+    // cooperativeAll({ yieldBudget: 64 })
+    cooperativeStructured({ yieldBudget: 64 })
   )
 
   return { order, reservation, shipping, payment }

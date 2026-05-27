@@ -1,19 +1,17 @@
 import { Async } from './Async.js'
 import { at, indexed } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
-import { Fail, fail } from './Fail.js'
+import { Fail } from './Fail.js'
 import { Fx, flatMap, flatten, fx, ok } from './Fx.js'
 import { Handle } from './Handler.js'
 import { HandlerCapture, handleCaptured, mapCapturedHandlers, withCapturedHandlers } from './HandlerCapture.js'
 import { Task, wait as waitTask } from './Task.js'
 import type { TraceFrameKind, TraceOptions, TraceOrigin } from './Trace.js'
-import { Trace, captureTrace, getTrace } from './Trace.js'
+import { Trace, captureTrace } from './Trace.js'
 import { Semaphore } from './internal/Semaphore.js'
-import { ForkError, capturePrependTraceWithContext, captureTraceWithContext, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from './internal/forkDiagnostics.js'
-import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './internal/interrupt.js'
-import { withInterpretedReturn } from './internal/iteratorClose.js'
+import { runCooperativeAll, runCooperativeRace, type CooperativeConfig } from './internal/cooperativeStructured.js'
 import { acquireAndRunFork } from './internal/runFork.js'
-import { currentRuntimeContext, getRuntimeContext, withActiveRuntimeContext } from './internal/runtimeContext.js'
+import { currentRuntimeContext } from './internal/runtimeContext.js'
 
 /**
  * Request that a computation be started concurrently.
@@ -182,6 +180,18 @@ export interface CooperativeAllOptions {
   readonly yieldBudget?: number
 }
 
+export interface CooperativeStructuredOptions extends CooperativeAllOptions {
+  readonly racePolicy?: 'firstSettled' | 'firstSuccess'
+}
+
+export interface CooperativeStructuredFirstSettledOptions extends CooperativeAllOptions {
+  readonly racePolicy?: 'firstSettled'
+}
+
+export interface CooperativeStructuredFirstSuccessOptions extends CooperativeAllOptions {
+  readonly racePolicy: 'firstSuccess'
+}
+
 /**
  * Handle All with a cooperative FIFO scheduler.
  *
@@ -194,6 +204,24 @@ export const cooperativeAll = (options: CooperativeAllOptions = {}) => {
   const normalized = normalizeCooperativeAllOptions(options)
   return <const E, const A>(f: Fx<E, A>): Fx<Handle<Handle<E, AnyAll, CooperativeAllEffects<E>>, HandlerCapture<'fx/Concurrent/All'>>, A> =>
     f.pipe(handleCaptured('fx/Concurrent/All', All, runCooperativeAll(normalized))) as Fx<Handle<Handle<E, AnyAll, CooperativeAllEffects<E>>, HandlerCapture<'fx/Concurrent/All'>>, A>
+}
+
+/**
+ * Handle structured All and Race effects with one cooperative FIFO scheduler.
+ *
+ * Race effects use first-settled semantics by default. Set `racePolicy` to
+ * `firstSuccess` to evaluate Race with first-success semantics.
+ */
+export function cooperativeStructured(options?: CooperativeStructuredFirstSettledOptions): <const E, const A>(f: Fx<E, A>) => Fx<CooperativeStructuredFirstSettledHandledEffects<E>, A>
+export function cooperativeStructured(options: CooperativeStructuredFirstSuccessOptions): <const E, const A>(f: Fx<E, A>) => Fx<CooperativeStructuredFirstSuccessHandledEffects<E>, A>
+export function cooperativeStructured(options: CooperativeStructuredOptions = {}): <const E, const A>(f: Fx<E, A>) => Fx<any, A> {
+  const normalized = normalizeCooperativeAllOptions(options)
+  const racePolicy = options.racePolicy ?? 'firstSettled'
+  return <const E, const A>(f: Fx<E, A>) =>
+    f.pipe(
+      handleCaptured('fx/Concurrent/All', All, runCooperativeAll(normalized)),
+      handleCaptured('fx/Concurrent/Race', Race, runCooperativeRace(normalized, racePolicy))
+    )
 }
 
 /**
@@ -335,6 +363,10 @@ type DefaultAllEffects<E> = Fork | Async | ErrorsOf<EffectsOfAll<E>>
 type CooperativeAllEffects<E> = Async | ErrorsOf<EffectsOfAll<E>>
 type DefaultRaceEffects<E> = Fork | Async | ErrorsOf<EffectsOfRace<E>>
 type FirstSuccessRaceEffects<E> = Fork | Async | FirstSuccessRaceFailure<E>
+type CooperativeStructuredFirstSettledHandledEffects<E> =
+  Handle<Handle<Handle<Handle<E, AnyAll, CooperativeAllEffects<E>>, AnyRace, Async | ErrorsOf<EffectsOfRace<E>>>, HandlerCapture<'fx/Concurrent/All'>>, HandlerCapture<'fx/Concurrent/Race'>>
+type CooperativeStructuredFirstSuccessHandledEffects<E> =
+  Handle<Handle<Handle<Handle<E, AnyAll, CooperativeAllEffects<E>>, AnyRace, Async | FirstSuccessRaceFailure<E>>, HandlerCapture<'fx/Concurrent/All'>>, HandlerCapture<'fx/Concurrent/Race'>>
 type FirstSuccessRaceFailure<E> = E extends Race<infer Fxs>
   ? EveryFxCanFail<Fxs> extends true ? Fail<RaceAllFailed<FailuresOfFxs<Fxs>>> : never
   : never
@@ -378,31 +410,7 @@ const taskAll = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) 
   return new Task(p, reason => { void d.interrupt(reason) }, currentRuntimeContext(), d.interrupted) as Task<{ readonly [K in keyof Tasks]: TaskResult<Tasks[K]> }, TaskErrors<Tasks[number]>>
 }
 
-interface CooperativeAllConfig {
-  readonly concurrency: number
-  readonly yieldBudget: number
-}
-
-type Resume =
-  | { readonly type: 'next', readonly value: unknown }
-  | { readonly type: 'throw', readonly error: unknown }
-
-interface Fiber {
-  readonly index: number
-  readonly iterator: Iterator<unknown, unknown, unknown>
-  readonly traceOrigin: TraceOrigin
-  readonly masks: InterruptMaskState
-  status: 'ready' | 'waiting' | 'done'
-  resume: Resume
-  abort?: AbortController
-  cancelRequested: boolean
-  cleanupFailures: unknown[]
-}
-
-type PrimaryFailure =
-  | { readonly error: unknown }
-
-const normalizeCooperativeAllOptions = (options: CooperativeAllOptions): CooperativeAllConfig => {
+const normalizeCooperativeAllOptions = (options: CooperativeAllOptions): CooperativeConfig => {
   const concurrency = options.concurrency ?? Infinity
   const yieldBudget = options.yieldBudget ?? 64
   if (concurrency <= 0) throw new RangeError(`cooperativeAll concurrency must be > 0, got ${concurrency}`)
@@ -412,314 +420,6 @@ const normalizeCooperativeAllOptions = (options: CooperativeAllOptions): Coopera
     yieldBudget: Math.floor(yieldBudget)
   }
 }
-
-const runCooperativeAll = (config: CooperativeAllConfig) =>
-  <const Fxs extends readonly Fx<unknown, unknown>[]>(
-    all: All<Fxs>
-  ): Fx<Async | ErrorsOf<EffectsOf<Fxs[number]>>, {
-    readonly [K in keyof Fxs]: ResultOf<Fxs[K]>
-  }> => cooperativeAllFx(all, config) as Fx<Async | ErrorsOf<EffectsOf<Fxs[number]>>, {
-    readonly [K in keyof Fxs]: ResultOf<Fxs[K]>
-  }>
-
-const cooperativeAllFx = <const Fxs extends readonly Fx<unknown, unknown>[]>(
-  all: All<Fxs>,
-  config: CooperativeAllConfig
-) => fx(function* () {
-  const fxs = all.arg.fxs
-  const results = [] as unknown[]
-  const fibers = [] as Fiber[]
-  const ready = [] as Fiber[]
-  const wake = new Wake()
-  const context = getRuntimeContext(all)
-  const parentTraceOrigin = {
-    origin: all.arg.origin,
-    trace: all.arg.trace ?? captureTraceWithContext(context, all.arg.origin, undefined, { kind: 'all' })
-  }
-  const childKind = childFrameKind(parentTraceOrigin.trace)
-  let next = 0
-  let active = 0
-  let completed = false
-  let primaryFailure: PrimaryFailure | undefined
-
-  const startNext = () => {
-    while (primaryFailure === undefined && active < config.concurrency && next < fxs.length) {
-      const fiber: Fiber = {
-        index: next,
-        iterator: fxs[next][Symbol.iterator](),
-        traceOrigin: childTraceOriginWithContext(context, parentTraceOrigin, next, childKind),
-        masks: new InterruptMaskState(),
-        status: 'ready',
-        resume: { type: 'next', value: undefined },
-        cancelRequested: false,
-        cleanupFailures: []
-      }
-      next++
-      active++
-      fibers.push(fiber)
-      ready.push(fiber)
-    }
-  }
-
-  const finish = (fiber: Fiber) => {
-    if (fiber.status === 'done') return
-    fiber.status = 'done'
-    fiber.abort?.abort()
-    active--
-  }
-
-  const failFiber = (fiber: Fiber, failure: PrimaryFailure) => {
-    finish(fiber)
-    primaryFailure ??= failure
-    cancelActiveFibers(fibers, fiber)
-  }
-
-  try {
-    while (fxs.length !== fibers.filter(f => f.status === 'done').length || next < fxs.length) {
-      startNext()
-
-      if (ready.length === 0) {
-        if (active === 0) break
-        ready.push(...(yield* wake.wait()))
-        continue
-      }
-
-      const fiber = ready.shift()!
-      if (fiber.status !== 'ready') continue
-      if (fiber.cancelRequested && fiber.masks.canInterrupt) {
-        yield* closeFiber(fiber)
-        finish(fiber)
-        continue
-      }
-
-      let budget = config.yieldBudget
-      while (budget > 0 && fiber.status === 'ready') {
-        budget--
-        let ir: IteratorResult<unknown, unknown>
-        try {
-          ir = fiber.resume.type === 'throw'
-            ? fiber.iterator.throw?.(fiber.resume.error) ?? throwIntoMissingIterator(fiber.resume.error)
-            : fiber.iterator.next(fiber.resume.value)
-        } catch (e) {
-          failFiber(fiber, { error: wrapThrownFiberError(fiber, e) })
-          break
-        }
-        fiber.resume = { type: 'next', value: undefined }
-
-        if (ir.done) {
-          results[fiber.index] = ir.value
-          finish(fiber)
-          break
-        }
-
-        if (Async.is(ir.value)) {
-          startCooperativeAsync(fiber, ir.value, wake, failFiber)
-          break
-        }
-
-        if (Fail.is(ir.value)) {
-          failFiber(fiber, { error: wrapFiberFailure(fiber, ir.value) })
-          break
-        }
-
-        if (InterruptMaskBegin.is(ir.value)) {
-          fiber.masks.mask(ir.value.arg)
-          fiber.resume = { type: 'next', value: undefined }
-          continue
-        }
-
-        if (InterruptMaskEnd.is(ir.value)) {
-          fiber.masks.unmask(ir.value.arg)
-          if (fiber.cancelRequested && fiber.masks.canInterrupt) {
-            yield* closeFiber(fiber)
-            finish(fiber)
-            break
-          }
-          fiber.resume = { type: 'next', value: undefined }
-          continue
-        }
-
-        fiber.resume = { type: 'next', value: yield ir.value as any }
-      }
-
-      if (fiber.status === 'ready') ready.push(fiber)
-    }
-
-    completed = true
-
-    if (primaryFailure !== undefined) {
-      cancelActiveFibers(fibers)
-      for (const fiber of fibers) {
-        if (fiber.status !== 'done') {
-          yield* closeFiber(fiber)
-          finish(fiber)
-        }
-      }
-
-      const cleanupFailures = fibers.flatMap(fiber => fiber.cleanupFailures)
-      if (cleanupFailures.length > 0) {
-        return (yield* fail(resourceReleaseFailed([primaryFailure.error, ...cleanupFailures]))) as never
-      }
-      return (yield* fail(primaryFailure.error)) as never
-    }
-
-    return results as { readonly [K in keyof Fxs]: ResultOf<Fxs[K]> }
-  } finally {
-    if (!completed) {
-      cancelActiveFibers(fibers)
-      for (const fiber of fibers) {
-        if (fiber.status !== 'done') {
-          yield* closeFiber(fiber)
-          finish(fiber)
-        }
-      }
-    }
-  }
-})
-
-const startCooperativeAsync = (
-  fiber: Fiber,
-  async: Async,
-  wake: Wake,
-  failFiber: (fiber: Fiber, failure: PrimaryFailure) => void
-) => {
-  const abort = new AbortController()
-  fiber.abort = abort
-  fiber.status = 'waiting'
-  const context = getRuntimeContext(async)
-  const run = () => async.arg.run(abort.signal)
-  const promise = context === undefined ? run() : withActiveRuntimeContext(context, run)
-  promise.then(
-    value => {
-      if (fiber.status !== 'waiting') return
-      fiber.abort = undefined
-      fiber.resume = { type: 'next', value }
-      fiber.status = 'ready'
-      wake.ready(fiber)
-    },
-    error => {
-      if (fiber.status !== 'waiting') return
-      fiber.abort = undefined
-      failFiber(fiber, { error: wrapAsyncFiberError(fiber, async, error, context) })
-      wake.notify()
-    }
-  )
-}
-
-function* closeFiber(fiber: Fiber): Generator<unknown, void, unknown> {
-  fiber.abort?.abort()
-  fiber.abort = undefined
-  let ir: IteratorResult<unknown, unknown>
-  try {
-    ir = withInterpretedReturn(() => fiber.iterator.return?.() ?? { done: true, value: undefined })
-  } catch (e) {
-    fiber.cleanupFailures.push(e)
-    return
-  }
-
-  while (!ir.done) {
-    try {
-      if (Async.is(ir.value)) {
-        ir = fiber.iterator.next(yield ir.value as any)
-      } else if (Fail.is(ir.value)) {
-        fiber.cleanupFailures.push(ir.value.arg)
-        return
-      } else if (InterruptMaskBegin.is(ir.value)) {
-        fiber.masks.mask(ir.value.arg)
-        ir = fiber.iterator.next()
-      } else if (InterruptMaskEnd.is(ir.value)) {
-        fiber.masks.unmask(ir.value.arg)
-        ir = fiber.iterator.next()
-      } else {
-        ir = fiber.iterator.next(yield ir.value as any)
-      }
-    } catch (e) {
-      fiber.cleanupFailures.push(e)
-      return
-    }
-  }
-}
-
-const cancelActiveFibers = (fibers: readonly Fiber[], except?: Fiber) => {
-  for (const fiber of fibers) {
-    if (fiber === except || fiber.status === 'done') continue
-    fiber.cancelRequested = true
-    if (fiber.masks.canInterrupt) {
-      fiber.abort?.abort()
-    }
-  }
-}
-
-const wrapFiberFailure = (fiber: Fiber, failure: Fail<unknown>): ForkError => {
-  const context = runtimeContextOfEffect(failure)
-  const causeTrace = getTrace(failure.arg)
-  const trace = traceUnhandledFail(failure, causeTrace, fiber.traceOrigin.trace, context)
-  const origin = originOfUnhandledFail(failure, causeTrace)
-  return new ForkError('FX_UNHANDLED_FAILURE', 'Unhandled failure in forked task', origin, trace, context, { cause: failure.arg })
-}
-
-const wrapThrownFiberError = (fiber: Fiber, error: unknown): ForkError => {
-  const context = runtimeContextOfEffect(error)
-  return new ForkError('FX_UNHANDLED_EXCEPTION', 'Unhandled exception in forked task', fiber.traceOrigin.origin, traceWithCause(fiber.traceOrigin.trace, error, context, getTrace(error)), context, { cause: error })
-}
-
-const wrapAsyncFiberError = (fiber: Fiber, async: Async, error: unknown, fallbackContext?: ReturnType<typeof getRuntimeContext>): ForkError => {
-  const context = runtimeContextOfEffect(error, fallbackContext)
-  const asyncTrace = capturePrependTraceWithContext(context, async.arg.origin, fiber.traceOrigin.trace, { kind: 'async' })
-  return new ForkError('FX_AWAITED_ASYNC_FAILED', 'Awaited Async task failed', async.arg.origin, traceWithCause(asyncTrace, error, context, getTrace(error)), context, { cause: error })
-}
-
-const childTraceOriginWithContext = (
-  context: ReturnType<typeof getRuntimeContext>,
-  parent: TraceOrigin,
-  index: number,
-  kind: TraceFrameKind
-): TraceOrigin => {
-  const origin = indexed(parent.origin, index)
-  return { origin, trace: captureTraceWithContext(context, origin, parent.trace, { kind, index }) }
-}
-
-const throwIntoMissingIterator = (error: unknown): never => {
-  throw error
-}
-
-class Wake {
-  private readonly readyFibers = [] as Fiber[]
-  private readonly waiters = [] as (() => void)[]
-
-  ready(fiber: Fiber) {
-    this.readyFibers.push(fiber)
-    this.notify()
-  }
-
-  notify() {
-    const waiters = this.waiters.splice(0)
-    for (const waiter of waiters) waiter()
-  }
-
-  wait() {
-    return fx(function* (this: Wake) {
-      if (this.readyFibers.length === 0) {
-        yield* AsyncWait(this.waiters)
-      }
-      return this.readyFibers.splice(0)
-    }.bind(this))
-  }
-}
-
-const AsyncWait = (waiters: (() => void)[]) =>
-  new Async({
-    run: signal => new Promise<void>(resolve => {
-      const resolveOnce = () => {
-        signal.removeEventListener('abort', resolveOnce)
-        resolve()
-      }
-      signal.addEventListener('abort', resolveOnce, { once: true })
-      waiters.push(resolveOnce)
-    }),
-    origin: at('fx/Concurrent/cooperativeAll/wait', AsyncWait),
-    trace: captureTrace(at('fx/Concurrent/cooperativeAll/wait', AsyncWait), undefined, { kind: 'async' })
-  }) as Fx<Async, void>
 
 const taskRace = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) => {
   tasks.forEach(t => t._markHandled())

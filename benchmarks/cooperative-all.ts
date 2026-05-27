@@ -4,7 +4,7 @@ import { arch, platform, release } from 'node:os'
 import { performance } from 'node:perf_hooks'
 
 import { assertPromise } from '../src/Async.js'
-import { all, cooperativeAll, defaultAll, unbounded } from '../src/Concurrent.js'
+import { all, cooperativeAll, cooperativeStructured, defaultAll, firstSettled, firstSuccess, race, unbounded } from '../src/Concurrent.js'
 import { Effect } from '../src/Effect.js'
 import { fail, returnFail } from '../src/Fail.js'
 import { andFinally } from '../src/Finalization.js'
@@ -53,6 +53,7 @@ await runSemanticChecks()
 const fairness = [
   await measureFairness('defaultAll + unbounded', f => f.pipe(defaultAll, unbounded)),
   await measureFairness('cooperativeAll budget 1', f => f.pipe(cooperativeAll({ yieldBudget: 1 }))),
+  await measureFairness('cooperativeStructured budget 1', f => f.pipe(cooperativeStructured({ yieldBudget: 1 }))),
   await measureFairness('cooperativeAll budget 8', f => f.pipe(cooperativeAll({ yieldBudget: 8 }))),
   await measureFairness('cooperativeAll budget 64', f => f.pipe(cooperativeAll({ yieldBudget: 64 })))
 ]
@@ -64,17 +65,26 @@ const results = await runBenchmarks([
   benchmark('cooperativeAll ok fanout 16', 'ok fanout', FastIterations, 100, async () => {
     await all(okChildren(Fanout)).pipe(cooperativeAll(), runPromise)
   }),
+  benchmark('cooperativeStructured ok fanout 16', 'ok fanout', FastIterations, 100, async () => {
+    await all(okChildren(Fanout)).pipe(cooperativeStructured(), runPromise)
+  }),
   benchmark('defaultAll + unbounded async fanout 16', 'async fanout', FastIterations, 100, async () => {
     await all(asyncChildren(Fanout)).pipe(defaultAll, unbounded, runPromise)
   }),
   benchmark('cooperativeAll async fanout 16', 'async fanout', FastIterations, 100, async () => {
     await all(asyncChildren(Fanout)).pipe(cooperativeAll(), runPromise)
   }),
+  benchmark('cooperativeStructured async fanout 16', 'async fanout', FastIterations, 100, async () => {
+    await all(asyncChildren(Fanout)).pipe(cooperativeStructured(), runPromise)
+  }),
   benchmark('defaultAll + unbounded yielding 16x16', 'yielding fanout', YieldingIterations, 50, async () => {
     await yieldingAll().pipe(defaultAll, handleStep(), unbounded, runPromise)
   }),
   benchmark('cooperativeAll yielding 16x16 budget 1', 'yielding fanout', YieldingIterations, 50, async () => {
     await yieldingAll().pipe(cooperativeAll({ yieldBudget: 1 }), handleStep(), runPromise)
+  }),
+  benchmark('cooperativeStructured yielding 16x16 budget 1', 'yielding fanout', YieldingIterations, 50, async () => {
+    await yieldingAll().pipe(cooperativeStructured({ yieldBudget: 1 }), handleStep(), runPromise)
   }),
   benchmark('cooperativeAll yielding 16x16 budget 8', 'yielding fanout', YieldingIterations, 50, async () => {
     await yieldingAll().pipe(cooperativeAll({ yieldBudget: 8 }), handleStep(), runPromise)
@@ -88,11 +98,29 @@ const results = await runBenchmarks([
   benchmark('cooperativeAll mixed parked async budget 1', 'mixed async', YieldingIterations, 50, async () => {
     await mixedAsyncAndYielding().pipe(cooperativeAll({ yieldBudget: 1 }), handleStep(), runPromise)
   }),
+  benchmark('cooperativeStructured mixed parked async budget 1', 'mixed async', YieldingIterations, 50, async () => {
+    await mixedAsyncAndYielding().pipe(cooperativeStructured({ yieldBudget: 1 }), handleStep(), runPromise)
+  }),
+  benchmark('defaultAll + firstSettled + unbounded nested race', 'nested race', YieldingIterations, 50, async () => {
+    await nestedRace().pipe(firstSettled, defaultAll, handleStep(), unbounded, runPromise)
+  }),
+  benchmark('cooperativeStructured nested race', 'nested race', YieldingIterations, 50, async () => {
+    await nestedRace().pipe(cooperativeStructured(), handleStep(), runPromise)
+  }),
+  benchmark('defaultAll + firstSuccess + unbounded nested firstSuccess', 'nested firstSuccess', YieldingIterations, 50, async () => {
+    await nestedFirstSuccess().pipe(firstSuccess, defaultAll, handleStep(), unbounded, runPromise)
+  }),
+  benchmark('cooperativeStructured nested firstSuccess', 'nested firstSuccess', YieldingIterations, 50, async () => {
+    await nestedFirstSuccess().pipe(cooperativeStructured({ racePolicy: 'firstSuccess' }), handleStep(), runPromise)
+  }),
   benchmark('defaultAll + unbounded cancel cleanup', 'cleanup', CleanupIterations, 50, async () => {
     await cleanupFailureProgram().pipe(defaultAll, withScope(CleanupScope), returnFail, unbounded, runPromise)
   }),
   benchmark('cooperativeAll cancel cleanup', 'cleanup', CleanupIterations, 50, async () => {
     await cleanupFailureProgram().pipe(cooperativeAll(), withScope(CleanupScope), returnFail, runPromise)
+  }),
+  benchmark('cooperativeStructured cancel cleanup', 'cleanup', CleanupIterations, 50, async () => {
+    await cleanupFailureProgram().pipe(cooperativeStructured(), withScope(CleanupScope), returnFail, runPromise)
   })
 ])
 
@@ -101,18 +129,26 @@ console.log(formatMarkdown(fairness, results))
 async function runSemanticChecks(): Promise<void> {
   const defaultResult = await parityProgram().pipe(defaultAll, handleStep(), withScope(CleanupScope), returnFail, unbounded, runPromise)
   const cooperativeResult = await parityProgram().pipe(cooperativeAll({ yieldBudget: 1 }), handleStep(), withScope(CleanupScope), returnFail, runPromise)
+  const structuredResult = await parityProgram().pipe(cooperativeStructured({ yieldBudget: 1 }), handleStep(), withScope(CleanupScope), returnFail, runPromise)
 
   assert.deepEqual(defaultResult, cooperativeResult)
+  assert.deepEqual(defaultResult, structuredResult)
 
   const defaultFailure = await cleanupFailureProgram().pipe(defaultAll, withScope(CleanupScope), returnFail, unbounded, runPromise)
   const cooperativeFailure = await cleanupFailureProgram().pipe(cooperativeAll(), withScope(CleanupScope), returnFail, runPromise)
+  const structuredFailure = await cleanupFailureProgram().pipe(cooperativeStructured(), withScope(CleanupScope), returnFail, runPromise)
 
   assert.equal(defaultFailure.constructor, cooperativeFailure.constructor)
+  assert.equal(defaultFailure.constructor, structuredFailure.constructor)
   assert.ok('arg' in defaultFailure && 'arg' in cooperativeFailure)
+  assert.ok('arg' in structuredFailure)
   assert.ok(defaultFailure.arg instanceof AggregateError)
   assert.ok(cooperativeFailure.arg instanceof AggregateError)
+  assert.ok(structuredFailure.arg instanceof AggregateError)
   assert.equal(defaultFailure.arg.message, cooperativeFailure.arg.message)
+  assert.equal(defaultFailure.arg.message, structuredFailure.arg.message)
   assert.equal(defaultFailure.arg.errors.length, cooperativeFailure.arg.errors.length)
+  assert.equal(defaultFailure.arg.errors.length, structuredFailure.arg.errors.length)
 }
 
 function benchmark(
@@ -198,6 +234,28 @@ function mixedAsyncAndYielding() {
   return all([
     assertPromise(() => new Promise<string>(resolve => setImmediate(() => resolve('async')))),
     ...Array.from({ length: 7 }, (_, id) => yieldingChild(id, StepsPerChild))
+  ])
+}
+
+function nestedRace() {
+  return all([
+    race([
+      assertPromise(() => new Promise<string>(resolve => setImmediate(() => resolve('slow')))),
+      ok('fast')
+    ]),
+    yieldingChild(0, 2)
+  ])
+}
+
+function nestedFirstSuccess() {
+  return all([
+    race([
+      fx(function* () {
+        yield* fail(new Error('primary failed'))
+      }),
+      assertPromise(() => Promise.resolve('replica'))
+    ]),
+    yieldingChild(0, 2)
   ])
 }
 

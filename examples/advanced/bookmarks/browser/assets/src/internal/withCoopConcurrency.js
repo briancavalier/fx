@@ -139,7 +139,10 @@ export class CooperativeRuntime {
         return new Promise(resolve => this.slotWaiters.push(resolve));
     }
     notifySlotWaiters() {
-        const waiters = this.slotWaiters.splice(0);
+        if (this.slotWaiters.length === 0)
+            return;
+        const waiters = this.slotWaiters;
+        this.slotWaiters = [];
         for (const waiter of waiters)
             waiter();
     }
@@ -148,6 +151,7 @@ const cooperativeGroupFx = (runtime, group, policy) => fx(function* () {
     const fxs = group.arg.fxs;
     const fibers = [];
     const ready = [];
+    let readyIndex = 0;
     const wake = new Wake();
     const context = getRuntimeContext(group);
     const parentTraceOrigin = {
@@ -211,7 +215,9 @@ const cooperativeGroupFx = (runtime, group, policy) => fx(function* () {
     try {
         while (done < fxs.length || next < fxs.length) {
             startNext();
-            if (ready.length === 0) {
+            if (readyIndex >= ready.length) {
+                ready.length = 0;
+                readyIndex = 0;
                 if (active === 0 && next < fxs.length) {
                     yield* runtime.waitForSlot();
                     continue;
@@ -221,7 +227,11 @@ const cooperativeGroupFx = (runtime, group, policy) => fx(function* () {
                 ready.push(...(yield* wake.wait()));
                 continue;
             }
-            const fiber = ready.shift();
+            const fiber = ready[readyIndex++];
+            if (readyIndex > 64 && readyIndex * 2 > ready.length) {
+                ready.splice(0, readyIndex);
+                readyIndex = 0;
+            }
             if (fiber.status !== 'ready')
                 continue;
             if (fiber.cancelRequested && fiber.masks.canInterrupt) {
@@ -503,7 +513,10 @@ class Wake {
         this.notify();
     }
     notify() {
-        const waiters = this.waiters.splice(0);
+        if (this.waiters.length === 0)
+            return;
+        const waiters = this.waiters;
+        this.waiters = [];
         for (const waiter of waiters)
             waiter();
     }

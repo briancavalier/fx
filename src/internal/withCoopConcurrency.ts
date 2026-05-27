@@ -73,7 +73,7 @@ interface GroupPolicy<S> {
 }
 
 export class CooperativeRuntime {
-  private readonly slotWaiters = [] as (() => void)[]
+  private slotWaiters = [] as (() => void)[]
   private availableSlots: number
 
   constructor(readonly config: CooperativeConfig) {
@@ -209,7 +209,9 @@ export class CooperativeRuntime {
   }
 
   private notifySlotWaiters() {
-    const waiters = this.slotWaiters.splice(0)
+    if (this.slotWaiters.length === 0) return
+    const waiters = this.slotWaiters
+    this.slotWaiters = []
     for (const waiter of waiters) waiter()
   }
 }
@@ -222,6 +224,7 @@ const cooperativeGroupFx = <const Fxs extends readonly Fx<unknown, unknown>[], S
   const fxs = group.arg.fxs
   const fibers = [] as Fiber[]
   const ready = [] as Fiber[]
+  let readyIndex = 0
   const wake = new Wake()
   const context = getRuntimeContext(group)
   const parentTraceOrigin = {
@@ -288,7 +291,9 @@ const cooperativeGroupFx = <const Fxs extends readonly Fx<unknown, unknown>[], S
     while (done < fxs.length || next < fxs.length) {
       startNext()
 
-      if (ready.length === 0) {
+      if (readyIndex >= ready.length) {
+        ready.length = 0
+        readyIndex = 0
         if (active === 0 && next < fxs.length) {
           yield* runtime.waitForSlot()
           continue
@@ -298,7 +303,11 @@ const cooperativeGroupFx = <const Fxs extends readonly Fx<unknown, unknown>[], S
         continue
       }
 
-      const fiber = ready.shift()!
+      const fiber = ready[readyIndex++]!
+      if (readyIndex > 64 && readyIndex * 2 > ready.length) {
+        ready.splice(0, readyIndex)
+        readyIndex = 0
+      }
       if (fiber.status !== 'ready') continue
       if (fiber.cancelRequested && fiber.masks.canInterrupt) {
         yield* closeFiber(fiber)
@@ -617,7 +626,7 @@ const throwIntoMissingIterator = (error: unknown): never => {
 
 class Wake {
   private readonly readyFibers = [] as Fiber[]
-  private readonly waiters = [] as (() => void)[]
+  private waiters = [] as (() => void)[]
 
   ready(fiber: Fiber) {
     this.readyFibers.push(fiber)
@@ -625,7 +634,9 @@ class Wake {
   }
 
   notify() {
-    const waiters = this.waiters.splice(0)
+    if (this.waiters.length === 0) return
+    const waiters = this.waiters
+    this.waiters = []
     for (const waiter of waiters) waiter()
   }
 

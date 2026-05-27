@@ -299,7 +299,7 @@ const cooperativeGroupFx = <const Fxs extends readonly Fx<unknown, unknown>[], S
           continue
         }
         if (active === 0) break
-        ready.push(...(yield* wake.wait()))
+        appendReady(ready, yield* wake.wait())
         continue
       }
 
@@ -377,13 +377,13 @@ const childFrameKind = (trace: TraceOrigin['trace'] | undefined) =>
   trace?.frame.kind === 'all' || trace?.frame.kind === 'race' ? trace.frame.kind : 'fork'
 
 const groupPolicy = (policy: ConcurrentPolicy): GroupPolicy<any> => {
-  if (policy === allPolicy) return allGroupPolicy()
-  if (policy === firstSettledPolicy) return raceGroupPolicy()
-  if (policy === firstSuccessPolicy) return firstSuccessGroupPolicy()
+  if (policy === allPolicy) return allGroupPolicy
+  if (policy === firstSettledPolicy) return raceGroupPolicy
+  if (policy === firstSuccessPolicy) return firstSuccessGroupPolicy
   throw new TypeError('Unknown concurrency policy')
 }
 
-const allGroupPolicy = (): GroupPolicy<{ readonly results: unknown[], completed: number }> => ({
+const allGroupPolicy: GroupPolicy<{ readonly results: unknown[], completed: number }> = {
   init: size => ({ results: sparseArray(size), completed: 0 }),
   onEmpty: state => ({ type: 'succeed', state, value: state.results, cancelRest: false }),
   onSuccess: (state, index, value) => {
@@ -394,26 +394,30 @@ const allGroupPolicy = (): GroupPolicy<{ readonly results: unknown[], completed:
       : { type: 'continue', state }
   },
   onFailure: (state, _index, error) => ({ type: 'fail', state, error, cancelRest: true })
-})
+}
 
-const raceGroupPolicy = (): GroupPolicy<void> => ({
+const raceGroupPolicy: GroupPolicy<void> = {
   init: () => undefined,
   onSuccess: (_state, _index, value) => ({ type: 'succeed', state: undefined, value, cancelRest: true }),
   onFailure: (_state, _index, error) => ({ type: 'fail', state: undefined, error, cancelRest: true })
-})
+}
 
-const firstSuccessGroupPolicy = (): GroupPolicy<{ readonly size: number, readonly failures: unknown[] }> => ({
-  init: size => ({ size, failures: sparseArray(size) }),
+const firstSuccessGroupPolicy: GroupPolicy<{ readonly size: number, readonly failures: unknown[], failed: number }> = {
+  init: size => ({ size, failures: sparseArray(size), failed: 0 }),
   onEmpty: state => ({ type: 'fail', state, error: new RaceAllFailed(state.failures), cancelRest: false }),
   onSuccess: (state, _index, value) => ({ type: 'succeed', state, value, cancelRest: true }),
   onFailure: (state, index, error) => {
     state.failures[index] = error
-    const failed = state.failures.filter((_, i) => i in state.failures).length
-    return failed === state.size
+    state.failed++
+    return state.failed === state.size
       ? { type: 'fail', state, error: new RaceAllFailed(state.failures), cancelRest: true }
       : { type: 'continue', state }
   }
-})
+}
+
+const appendReady = (ready: Fiber[], fibers: readonly Fiber[]) => {
+  for (const fiber of fibers) ready.push(fiber)
+}
 
 const sparseArray = (length: number): unknown[] => {
   const array = [] as unknown[]

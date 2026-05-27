@@ -224,7 +224,7 @@ const cooperativeGroupFx = (runtime, group, policy) => fx(function* () {
                 }
                 if (active === 0)
                     break;
-                ready.push(...(yield* wake.wait()));
+                appendReady(ready, yield* wake.wait());
                 continue;
             }
             const fiber = ready[readyIndex++];
@@ -291,14 +291,14 @@ const groupKind = (group) => group.arg.policy.tag === 'all' ? 'all' : 'race';
 const childFrameKind = (trace) => trace?.frame.kind === 'all' || trace?.frame.kind === 'race' ? trace.frame.kind : 'fork';
 const groupPolicy = (policy) => {
     if (policy === allPolicy)
-        return allGroupPolicy();
+        return allGroupPolicy;
     if (policy === firstSettledPolicy)
-        return raceGroupPolicy();
+        return raceGroupPolicy;
     if (policy === firstSuccessPolicy)
-        return firstSuccessGroupPolicy();
+        return firstSuccessGroupPolicy;
     throw new TypeError('Unknown concurrency policy');
 };
-const allGroupPolicy = () => ({
+const allGroupPolicy = {
     init: size => ({ results: sparseArray(size), completed: 0 }),
     onEmpty: state => ({ type: 'succeed', state, value: state.results, cancelRest: false }),
     onSuccess: (state, index, value) => {
@@ -309,24 +309,28 @@ const allGroupPolicy = () => ({
             : { type: 'continue', state };
     },
     onFailure: (state, _index, error) => ({ type: 'fail', state, error, cancelRest: true })
-});
-const raceGroupPolicy = () => ({
+};
+const raceGroupPolicy = {
     init: () => undefined,
     onSuccess: (_state, _index, value) => ({ type: 'succeed', state: undefined, value, cancelRest: true }),
     onFailure: (_state, _index, error) => ({ type: 'fail', state: undefined, error, cancelRest: true })
-});
-const firstSuccessGroupPolicy = () => ({
-    init: size => ({ size, failures: sparseArray(size) }),
+};
+const firstSuccessGroupPolicy = {
+    init: size => ({ size, failures: sparseArray(size), failed: 0 }),
     onEmpty: state => ({ type: 'fail', state, error: new RaceAllFailed(state.failures), cancelRest: false }),
     onSuccess: (state, _index, value) => ({ type: 'succeed', state, value, cancelRest: true }),
     onFailure: (state, index, error) => {
         state.failures[index] = error;
-        const failed = state.failures.filter((_, i) => i in state.failures).length;
-        return failed === state.size
+        state.failed++;
+        return state.failed === state.size
             ? { type: 'fail', state, error: new RaceAllFailed(state.failures), cancelRest: true }
             : { type: 'continue', state };
     }
-});
+};
+const appendReady = (ready, fibers) => {
+    for (const fiber of fibers)
+        ready.push(fiber);
+};
 const sparseArray = (length) => {
     const array = [];
     array.length = length;

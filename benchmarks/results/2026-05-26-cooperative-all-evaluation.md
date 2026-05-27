@@ -1,12 +1,9 @@
 # Cooperative All Evaluation
 
-- Date: 2026-05-27T15:53:19.155Z
-- Git SHA: 178b079
-- Worktree: M .gitignore
- M benchmarks/cooperative-all.ts
- M benchmarks/results/2026-05-26-cooperative-all-evaluation.md
- M package.json
-?? tsconfig.benchmarks.json
+- Date: 2026-05-27T16:04:33.447Z
+- Git SHA: 2f24d49
+- Worktree: M examples/advanced/bookmarks/browser/assets/src/internal/withCoopConcurrency.js
+ M src/internal/withCoopConcurrency.ts
 - Node: v24.14.0
 - Platform: darwin 25.3.0 arm64
 - Command: `pnpm benchmark:cooperative-all:js`
@@ -30,21 +27,21 @@ Relative values use median ns/op; noisy rows have max/min > 1.25.
 
 | Case | Samples | Iterations/sample | Ops/sec | Median ns/op | Min ns/op | P75 ns/op | Max ns/op | Relative to group baseline | Noise |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| withUnboundedConcurrency ok fanout 16 | 7 | 256 | 1429 | 699794 | 389345 | 827833 | 1027380 | 1.00x | noisy |
-| withCoopConcurrency ok fanout 16 | 7 | 1,024 | 5213 | 191839 | 163922 | 235337 | 277906 | 0.27x | noisy |
-| withUnboundedConcurrency async fanout 16 | 7 | 128 | 999 | 1000840 | 767979 | 1246573 | 1384482 | 1.00x | noisy |
-| withCoopConcurrency async fanout 16 | 7 | 128 | 1586 | 630542 | 508196 | 1168176 | 1533040 | 0.63x | noisy |
-| withUnboundedConcurrency explicit fork fanout 16 | 7 | 128 | 642 | 1558152 | 1382815 | 1794227 | 1809416 | 1.00x | noisy |
-| withCoopConcurrency explicit fork fanout 16 | 7 | 128 | 456 | 2194337 | 1606428 | 2461571 | 3813409 | 1.41x | noisy |
-| withUnboundedConcurrency yielding 16x16 | 7 | 256 | 1233 | 810775 | 531315 | 1026831 | 1078655 | 1.00x | noisy |
-| withCoopConcurrency yielding 16x16 budget 1 | 7 | 256 | 1051 | 951915 | 730461 | 1189937 | 1289765 | 1.17x | noisy |
-| withCoopConcurrency yielding 16x16 budget 8 | 7 | 256 | 1478 | 676763 | 577612 | 751533 | 797900 | 0.83x | noisy |
-| withCoopConcurrency yielding 16x16 budget 64 | 7 | 256 | 1385 | 722214 | 519691 | 867792 | 1127790 | 0.89x | noisy |
-| withUnboundedConcurrency mixed parked async | 7 | 512 | 2422 | 412805 | 353401 | 529743 | 969536 | 1.00x | noisy |
-| withCoopConcurrency mixed parked async budget 1 | 7 | 512 | 1997 | 500689 | 430688 | 532626 | 739699 | 1.21x | noisy |
-| firstSettled + withUnboundedConcurrency nested race | 7 | 256 | 1602 | 624407 | 539767 | 648144 | 1019465 | 1.00x | noisy |
-| withCoopConcurrency nested race | 7 | 512 | 3969 | 251983 | 199441 | 339557 | 435078 | 0.40x | noisy |
-| firstSuccess + withUnboundedConcurrency nested firstSuccess | 7 | 256 | 1569 | 637505 | 607538 | 710729 | 1401519 | 1.00x | noisy |
-| withCoopConcurrency nested firstSuccess | 7 | 512 | 2250 | 444404 | 336311 | 471651 | 504660 | 0.70x | noisy |
-| withUnboundedConcurrency cancel cleanup | 7 | 128 | 1576 | 634333 | 476223 | 870445 | 1220737 | 1.00x | noisy |
-| withCoopConcurrency cancel cleanup | 7 | 256 | 1894 | 528081 | 394323 | 673861 | 903845 | 0.83x | noisy |
+| withUnboundedConcurrency ok fanout 16 | 7 | 256 | 1762 | 567545 | 482995 | 772960 | 1149967 | 1.00x | noisy |
+| withCoopConcurrency ok fanout 16 | 7 | 1,024 | 5830 | 171537 | 125990 | 220181 | 255567 | 0.30x | noisy |
+| withUnboundedConcurrency async fanout 16 | 7 | 128 | 963 | 1038446 | 795456 | 1286805 | 1395427 | 1.00x | noisy |
+| withCoopConcurrency async fanout 16 | 7 | 256 | 1298 | 770231 | 629769 | 889606 | 1048148 | 0.74x | noisy |
+| withUnboundedConcurrency explicit fork fanout 16 | 7 | 64 | 501 | 1994850 | 1437461 | 2183201 | 2339361 | 1.00x | noisy |
+| withCoopConcurrency explicit fork fanout 16 | 7 | 128 | 507 | 1971643 | 1583415 | 2106479 | 3475435 | 0.99x | noisy |
+| withUnboundedConcurrency yielding 16x16 | 7 | 256 | 1059 | 943975 | 627867 | 1076568 | 1087195 | 1.00x | noisy |
+| withCoopConcurrency yielding 16x16 budget 1 | 7 | 256 | 1163 | 859488 | 743255 | 972677 | 2678375 | 0.91x | noisy |
+| withCoopConcurrency yielding 16x16 budget 8 | 7 | 256 | 1454 | 687735 | 615735 | 829282 | 1272101 | 0.73x | noisy |
+| withCoopConcurrency yielding 16x16 budget 64 | 7 | 128 | 1275 | 784560 | 520299 | 840314 | 1737747 | 0.83x | noisy |
+| withUnboundedConcurrency mixed parked async | 7 | 256 | 1767 | 565785 | 430473 | 738436 | 1010726 | 1.00x | noisy |
+| withCoopConcurrency mixed parked async budget 1 | 7 | 256 | 1882 | 531463 | 478978 | 821670 | 1146725 | 0.94x | noisy |
+| firstSettled + withUnboundedConcurrency nested race | 7 | 256 | 1784 | 560581 | 445633 | 825560 | 830177 | 1.00x | noisy |
+| withCoopConcurrency nested race | 7 | 512 | 3997 | 250178 | 178129 | 314780 | 391877 | 0.45x | noisy |
+| firstSuccess + withUnboundedConcurrency nested firstSuccess | 7 | 128 | 1132 | 883439 | 562211 | 1068859 | 1201798 | 1.00x | noisy |
+| withCoopConcurrency nested firstSuccess | 7 | 512 | 2309 | 433176 | 384115 | 576156 | 697450 | 0.49x | noisy |
+| withUnboundedConcurrency cancel cleanup | 7 | 256 | 1316 | 759804 | 533263 | 799053 | 923808 | 1.00x | noisy |
+| withCoopConcurrency cancel cleanup | 7 | 256 | 1868 | 535312 | 410142 | 686722 | 798265 | 0.70x | noisy |

@@ -1,10 +1,10 @@
 import { Async } from '../Async.js';
 import { at } from '../Breadcrumb.js';
 import { Fail } from '../Fail.js';
-import { Fork } from '../Concurrent.js';
 import { HandlerCapture, withHandlerContext } from '../HandlerCapture.js';
 import { Task } from '../Task.js';
 import { getTrace } from '../Trace.js';
+import { Fork } from './concurrent/effects.js';
 import { Semaphore } from './Semaphore.js';
 import { DisposableSet } from './disposable.js';
 import { ForkError, capturePrependTraceWithContext, captureTraceWithContext, forkFrameMetadata, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from './forkDiagnostics.js';

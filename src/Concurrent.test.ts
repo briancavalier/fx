@@ -1277,6 +1277,24 @@ describe('Fork', () => {
       assert.equal(result, 'fast')
     })
 
+    it('keeps empty first-settled races pending until interrupted', async () => {
+      const pending = race([]).pipe(
+        firstSettled,
+        withCoopConcurrency(),
+        runPromise
+      )
+
+      assert.equal(await Promise.race([pending, delay(25).then(() => 'pending')]), 'pending')
+
+      const task = race([]).pipe(
+        firstSettled,
+        withCoopConcurrency(),
+        runTask
+      )
+
+      await withTimeout(task.interrupt('stop'), 100)
+    })
+
     it('fails first-success races with input-ordered errors when every child fails', async () => {
       const first = new Error('first failed')
       const second = new Error('second failed')
@@ -1320,6 +1338,30 @@ describe('Fork', () => {
 
       assert.deepEqual(firstSettledResult, ['fast'])
       assert.deepEqual(firstSuccessResult, ['replica'])
+    })
+
+    it('runs nested groups at the concurrency limit without deadlocking', async () => {
+      const failed = new Error('primary failed')
+
+      const result = await all([
+        fx(function* () {
+          return yield* all([ok(1)])
+        }),
+        fx(function* () {
+          return yield* race([ok('race')])
+        }),
+        fx(function* () {
+          return yield* race([
+            fx(function* () { yield* fail(failed) }),
+            ok('success')
+          ]).pipe(firstSuccess)
+        })
+      ]).pipe(
+        withCoopConcurrency({ concurrency: 1 }),
+        runPromise
+      )
+
+      assert.deepEqual(result, [[1], 'race', 'success'])
     })
 
     it('supports mixed first-settled and first-success races in one cooperative region', async () => {

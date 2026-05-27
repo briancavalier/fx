@@ -4,6 +4,7 @@ import { Concurrently, Fork, RaceAllFailed, allPolicy, firstSettledPolicy, first
 import type { ConcurrentPolicy, ConcurrentResult, EffectsOf, ErrorsOf } from '../Concurrent.js'
 import { Fail, fail } from '../Fail.js'
 import { Fx, fx, runPromise } from '../Fx.js'
+import { HandlerCapture } from '../HandlerCapture.js'
 import { Task } from '../Task.js'
 import type { TraceFrameKind, TraceOrigin } from '../Trace.js'
 import { captureTrace, getTrace } from '../Trace.js'
@@ -55,6 +56,7 @@ interface Fiber {
   abort?: AbortController
   cancelRequested: boolean
   cleanupFailures: unknown[]
+  releaseSlotBeforeResume: boolean
 }
 
 type PrimaryFailure =
@@ -62,6 +64,7 @@ type PrimaryFailure =
 
 type GroupDecision<S> =
   | { readonly type: 'continue', readonly state: S }
+  | { readonly type: 'pending', readonly state: S }
   | { readonly type: 'succeed', readonly state: S, readonly value: unknown, readonly cancelRest: boolean }
   | { readonly type: 'fail', readonly state: S, readonly error: unknown, readonly cancelRest: boolean }
 
@@ -85,6 +88,12 @@ export class CooperativeRuntime {
   ): Fx<CooperativeConcurrentlyEffects<Concurrently<Policy, Fxs>>, ConcurrentResult<Policy, Fxs>> =>
     cooperativeGroupFx(this, group, groupPolicy(group.arg.policy)) as Fx<CooperativeConcurrentlyEffects<Concurrently<Policy, Fxs>>, ConcurrentResult<Policy, Fxs>>
 
+  readonly runNestedConcurrently = <const Policy extends ConcurrentPolicy, const Fxs extends readonly Fx<unknown, unknown>[]>(
+    group: Concurrently<Policy, Fxs>,
+    parent: Fiber
+  ): Fx<CooperativeConcurrentlyEffects<Concurrently<Policy, Fxs>>, ConcurrentResult<Policy, Fxs>> =>
+    cooperativeGroupFx(this, group, groupPolicy(group.arg.policy), parent) as Fx<CooperativeConcurrentlyEffects<Concurrently<Policy, Fxs>>, ConcurrentResult<Policy, Fxs>>
+
   readonly runFork = (fork: Fork): Fx<never, Task<unknown, unknown>> =>
     fx(function* (this: CooperativeRuntime) {
       return this.startFork(fork)
@@ -104,7 +113,8 @@ export class CooperativeRuntime {
       status: 'ready',
       resume: { type: 'next', value: undefined },
       cancelRequested: false,
-      cleanupFailures: []
+      cleanupFailures: [],
+      releaseSlotBeforeResume: false
     }
     const done = Promise.withResolvers<unknown>()
     const interrupted = Promise.withResolvers<void>()
@@ -219,7 +229,8 @@ export class CooperativeRuntime {
 const cooperativeGroupFx = <const Fxs extends readonly Fx<unknown, unknown>[], S>(
   runtime: CooperativeRuntime,
   group: Concurrently<ConcurrentPolicy, Fxs>,
-  policy: GroupPolicy<S>
+  policy: GroupPolicy<S>,
+  borrowedSlotFrom?: Fiber
 ) => fx(function* () {
   const fxs = group.arg.fxs
   const fibers = [] as Fiber[]
@@ -251,9 +262,13 @@ const cooperativeGroupFx = <const Fxs extends readonly Fx<unknown, unknown>[], S
         status: 'ready',
         resume: { type: 'next', value: undefined },
         cancelRequested: false,
-        cleanupFailures: []
+        cleanupFailures: [],
+        releaseSlotBeforeResume: false
       }
-      if (!runtime.tryAcquireSlot(fiber)) break
+      if (borrowedSlotFrom?.slotAcquired) {
+        borrowedSlotFrom.slotAcquired = false
+        fiber.slotAcquired = true
+      } else if (!runtime.tryAcquireSlot(fiber)) break
       next++
       active++
       fibers.push(fiber)
@@ -274,7 +289,7 @@ const cooperativeGroupFx = <const Fxs extends readonly Fx<unknown, unknown>[], S
     state = decision.state
     if (decision.type === 'continue') return
     outcome ??= decision
-    if (decision.cancelRest) cancelActiveFibers(fibers)
+    if (decision.type !== 'pending' && decision.cancelRest) cancelActiveFibers(fibers)
   }
 
   const succeedFiber = (fiber: Fiber, value: unknown) => {
@@ -342,6 +357,7 @@ const cooperativeGroupFx = <const Fxs extends readonly Fx<unknown, unknown>[], S
           : cleanupFailures
         return (yield* fail(resourceReleaseFailed(failures))) as never
       }
+      if (outcome.type === 'pending') return yield* waitForInterruption()
       if (outcome.type === 'fail') return (yield* fail(outcome.error)) as never
       return outcome.value
     }
@@ -398,6 +414,7 @@ const allGroupPolicy: GroupPolicy<{ readonly results: unknown[], completed: numb
 
 const raceGroupPolicy: GroupPolicy<void> = {
   init: () => undefined,
+  onEmpty: state => ({ type: 'pending', state }),
   onSuccess: (_state, _index, value) => ({ type: 'succeed', state: undefined, value, cancelRest: true }),
   onFailure: (_state, _index, error) => ({ type: 'fail', state: undefined, error, cancelRest: true })
 }
@@ -479,6 +496,9 @@ function* stepFiber(
   while (budget > 0 && fiber.status === 'ready') {
     budget--
     let ir: IteratorResult<unknown, unknown>
+    const releaseSlotBeforeResume = fiber.releaseSlotBeforeResume && fiber.slotAcquired
+    fiber.releaseSlotBeforeResume = false
+    if (releaseSlotBeforeResume) runtime.releaseSlot(fiber)
     try {
       ir = fiber.resume.type === 'throw'
         ? fiber.iterator.throw?.(fiber.resume.error) ?? throwIntoMissingIterator(fiber.resume.error)
@@ -486,6 +506,8 @@ function* stepFiber(
     } catch (e) {
       callbacks.fail(wrapThrownFiberError(fiber, e))
       break
+    } finally {
+      if (releaseSlotBeforeResume) yield* reacquireSlot(runtime, fiber)
     }
     fiber.resume = { type: 'next', value: undefined }
 
@@ -502,7 +524,11 @@ function* stepFiber(
     }
 
     if (Concurrently.is(ir.value)) {
-      fiber.resume = { type: 'next', value: yield* runtime.runConcurrently(ir.value as Concurrently<ConcurrentPolicy, readonly Fx<unknown, unknown>[]>) }
+      try {
+        fiber.resume = { type: 'next', value: yield* runtime.runNestedConcurrently(ir.value as Concurrently<ConcurrentPolicy, readonly Fx<unknown, unknown>[]>, fiber) }
+      } finally {
+        yield* reacquireSlot(runtime, fiber)
+      }
       continue
     }
 
@@ -540,8 +566,22 @@ function* stepFiber(
       continue
     }
 
+    if (HandlerCapture.is(ir.value)) {
+      fiber.resume = { type: 'next', value: yield ir.value as any }
+      fiber.releaseSlotBeforeResume = true
+      continue
+    }
+
     fiber.resume = { type: 'next', value: yield ir.value as any }
   }
+}
+
+function* reacquireSlot(
+  runtime: CooperativeRuntime,
+  fiber: Fiber
+): Generator<unknown, void, unknown> {
+  if (fiber.status === 'done') return
+  while (!runtime.tryAcquireSlot(fiber)) yield* runtime.waitForSlot()
 }
 
 function* closeFiber(fiber: Fiber): Generator<unknown, void, unknown> {
@@ -667,6 +707,15 @@ const AsyncWait = (waiters: (() => void)[]) =>
     origin: at('fx/Concurrent/withCoopConcurrency/wait', AsyncWait),
     trace: captureTrace(at('fx/Concurrent/withCoopConcurrency/wait', AsyncWait), undefined, { kind: 'async' })
   }) as Fx<Async, void>
+
+const waitForInterruption = () =>
+  new Async({
+    run: signal => new Promise<never>((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    }),
+    origin: at('fx/Concurrent/withCoopConcurrency/pending', waitForInterruption),
+    trace: captureTrace(at('fx/Concurrent/withCoopConcurrency/pending', waitForInterruption), undefined, { kind: 'async' })
+  }) as Fx<Async, never>
 
 const resourceReleaseFailed = (failures: readonly unknown[]) =>
   new AggregateError(failures, 'Resource release failed')

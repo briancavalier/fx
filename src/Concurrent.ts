@@ -169,10 +169,13 @@ export const withCoopConcurrency = (options: CoopConcurrencyOptions = {}) => {
   const normalized = normalizeCoopOptions(options, 'withCoopConcurrency')
   const runtime = new CooperativeRuntime(normalized)
   return <const E, const A>(f: Fx<E, A>): Fx<CoopConcurrencyHandledEffects<E>, A> =>
-    withCapturedHandlers(
-      'fx/Concurrent/Fork',
-      f.pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, runtime.runConcurrently))
-    ).pipe(
+    withCapturedHandlers('fx/Concurrent/Concurrently', f).pipe(
+      flatMap(fx =>
+        withCapturedHandlers(
+          'fx/Concurrent/Fork',
+          fx.pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, runtime.runConcurrently))
+        )
+      ),
       flatMap(fx =>
         ok(fx.pipe(
           handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)

@@ -4,7 +4,7 @@ import { Concurrently, Fork, RaceAllFailed } from '../Concurrent.js'
 import type { ConcurrentPolicy, ConcurrentResult, EffectsOf, ErrorsOf } from '../Concurrent.js'
 import { Fail, fail } from '../Fail.js'
 import { Fx, fx, runPromise } from '../Fx.js'
-import { HandlerCapture } from '../HandlerCapture.js'
+import { HandlerCapture, handleCaptured } from '../HandlerCapture.js'
 import { Task } from '../Task.js'
 import type { TraceFrameKind, TraceOrigin } from '../Trace.js'
 import { captureTrace, getTrace } from '../Trace.js'
@@ -167,7 +167,7 @@ export class CooperativeRuntime {
           continue
         }
         if (fiber.cancelRequested && fiber.masks.canInterrupt) {
-          await runPromise(fx(function* () { yield* closeFiber(fiber) }) as Fx<any, void>)
+          await runPromise(fx(function* (this: CooperativeRuntime) { yield* closeFiber(this, fiber) }.bind(this)) as Fx<any, void>)
           finishDetachedFiber(this, fiber)
           if (fiber.cleanupFailures.length > 0) done.reject(resourceReleaseFailed(fiber.cleanupFailures))
           return
@@ -325,7 +325,7 @@ const cooperativeGroupFx = <const Fxs extends readonly Fx<unknown, unknown>[], S
       }
       if (fiber.status !== 'ready') continue
       if (fiber.cancelRequested && fiber.masks.canInterrupt) {
-        yield* closeFiber(fiber)
+        yield* closeFiber(runtime, fiber)
         finish(fiber)
         continue
       }
@@ -345,7 +345,7 @@ const cooperativeGroupFx = <const Fxs extends readonly Fx<unknown, unknown>[], S
       cancelActiveFibers(fibers)
       for (const fiber of fibers) {
         if (fiber.status !== 'done') {
-          yield* closeFiber(fiber)
+          yield* closeFiber(runtime, fiber)
           finish(fiber)
         }
       }
@@ -368,7 +368,7 @@ const cooperativeGroupFx = <const Fxs extends readonly Fx<unknown, unknown>[], S
       cancelActiveFibers(fibers)
       for (const fiber of fibers) {
         if (fiber.status !== 'done') {
-          yield* closeFiber(fiber)
+          yield* closeFiber(runtime, fiber)
           finish(fiber)
         }
       }
@@ -559,7 +559,7 @@ function* stepFiber(
     if (InterruptMaskEnd.is(ir.value)) {
       fiber.masks.unmask(ir.value.arg)
       if (fiber.cancelRequested && fiber.masks.canInterrupt) {
-        yield* closeFiber(fiber)
+        yield* closeFiber(runtime, fiber)
         callbacks.cancel?.()
         break
       }
@@ -585,7 +585,10 @@ function* reacquireSlot(
   while (!runtime.tryAcquireSlot(fiber)) yield* runtime.waitForSlot()
 }
 
-function* closeFiber(fiber: Fiber): Generator<unknown, void, unknown> {
+function* closeFiber(
+  runtime: CooperativeRuntime,
+  fiber: Fiber
+): Generator<unknown, void, unknown> {
   fiber.abort?.abort()
   fiber.abort = undefined
   let ir: IteratorResult<unknown, unknown>
@@ -600,6 +603,14 @@ function* closeFiber(fiber: Fiber): Generator<unknown, void, unknown> {
     try {
       if (Async.is(ir.value)) {
         ir = fiber.iterator.next(yield ir.value as any)
+      } else if (Concurrently.is(ir.value)) {
+        try {
+          ir = fiber.iterator.next(yield* runtime.runNestedConcurrently(ir.value as Concurrently<ConcurrentPolicy, readonly Fx<unknown, unknown>[]>, fiber))
+        } finally {
+          yield* reacquireSlot(runtime, fiber)
+        }
+      } else if (Fork.is(ir.value)) {
+        ir = fiber.iterator.next(runtime.startFork(ir.value))
       } else if (Fail.is(ir.value)) {
         fiber.cleanupFailures.push(ir.value.arg)
         return
@@ -609,8 +620,16 @@ function* closeFiber(fiber: Fiber): Generator<unknown, void, unknown> {
       } else if (InterruptMaskEnd.is(ir.value)) {
         fiber.masks.unmask(ir.value.arg)
         ir = fiber.iterator.next()
+      } else if (HandlerCapture.is(ir.value)) {
+        const releaseSlotBeforeResume = fiber.slotAcquired
+        if (releaseSlotBeforeResume) runtime.releaseSlot(fiber)
+        try {
+          ir = fiber.iterator.next(yield* runCleanupEffect(runtime, fiber, ir.value))
+        } finally {
+          if (releaseSlotBeforeResume) yield* reacquireSlot(runtime, fiber)
+        }
       } else {
-        ir = fiber.iterator.next(yield ir.value as any)
+        ir = fiber.iterator.next(yield* runCleanupEffect(runtime, fiber, ir.value))
       }
     } catch (e) {
       fiber.cleanupFailures.push(e)
@@ -618,6 +637,18 @@ function* closeFiber(fiber: Fiber): Generator<unknown, void, unknown> {
     }
   }
 }
+
+const runCleanupEffect = (
+  runtime: CooperativeRuntime,
+  fiber: Fiber,
+  effect: unknown
+) =>
+  fx(function* () {
+    return yield effect as any
+  }).pipe(
+    handleCaptured('fx/Concurrent/Concurrently', Concurrently, group => runtime.runNestedConcurrently(group, fiber)),
+    handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)
+  ) as Fx<unknown, unknown>
 
 const finishDetachedFiber = (runtime: CooperativeRuntime, fiber: Fiber) => {
   if (fiber.status === 'done') return

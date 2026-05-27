@@ -1,12 +1,13 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { assertPromise } from './Async.js'
+import { assertPromise, type Async } from './Async.js'
 import { Effect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { RaceAllFailed, all, allPolicy, concurrently, firstSettledPolicy, firstSuccessPolicy, withBoundedConcurrency, withCoopConcurrency, firstSettled, firstSuccess, fork, forkEach, mapAll, race, withUnboundedConcurrency } from './Concurrent.js'
 import { andFinally, andFinallyExit } from './Finalization.js'
-import { bracket, flatMap, fx, ok, runPromise, runTask } from './Fx.js'
+import { bracket, flatMap, fx, ok, runPromise, runTask, type Fx } from './Fx.js'
 import { handle } from './Handler.js'
+import { closeHandlerCapture, type HandlerCapture } from './HandlerCapture.js'
 import { uninterruptible } from './Interrupt.js'
 import { scope, withScope, type Exit } from './Scope.js'
 import { Task, wait } from './Task.js'
@@ -733,6 +734,7 @@ describe('Fork', () => {
       })
 
       const result = await all([child('A'), child('B')]).pipe(
+        closeHandlerCapture('fx/Concurrent/Concurrently'),
         withCoopConcurrency({ yieldBudget: 1 }),
         handle(Step, step => fx(function* () {
           events.push(step.arg)
@@ -917,6 +919,75 @@ describe('Fork', () => {
       assert.ok(Fail.is(result))
       assert.equal((result.arg as Error).cause, cause)
       assert.deepEqual(released, ['slow'])
+    })
+
+    it('runs structured concurrency yielded by outer cleanup handlers', async () => {
+      const TestScope = scope('test/Fork/CooperativeCleanupStructuredScope')
+      const events = [] as string[]
+
+      const slow = fx(function* () {
+        yield* andFinally(TestScope, fx(function* () {
+          events.push('cleanup before')
+          yield* all([fx(function* () {
+            events.push('cleanup all child')
+          })])
+          events.push('cleanup after')
+        }))
+        yield* awaitAbort()
+      })
+
+      const program = race([
+        slow,
+        assertPromise<string>(() => new Promise(resolve => setImmediate(() => resolve('winner'))))
+      ]).pipe(
+        withCoopConcurrency(),
+        withScope(TestScope),
+        returnFail
+      )
+      // The runtime handles cleanup-yielded concurrency through captured handlers;
+      // the current effect type cannot express that cleanup-only narrowing.
+      const result = await (program as Fx<Async | HandlerCapture<string>, string | void | Fail<AggregateError>>).pipe(
+        runPromise
+      )
+
+      assert.ok(!Fail.is(result))
+      assert.equal(result, 'winner')
+      assert.deepEqual(events, ['cleanup before', 'cleanup all child', 'cleanup after'])
+    })
+
+    it('runs explicit forks yielded by outer cleanup handlers', async () => {
+      const TestScope = scope('test/Fork/CooperativeCleanupForkScope')
+      const events = [] as string[]
+
+      const slow = fx(function* () {
+        yield* andFinally(TestScope, fx(function* () {
+          events.push('cleanup before')
+          const task = yield* fork(fx(function* () {
+            events.push('cleanup fork child')
+          }))
+          yield* wait(task)
+          events.push('cleanup after')
+        }))
+        yield* awaitAbort()
+      })
+
+      const program = race([
+        slow,
+        assertPromise<string>(() => new Promise(resolve => setImmediate(() => resolve('winner'))))
+      ]).pipe(
+        withCoopConcurrency(),
+        withScope(TestScope),
+        returnFail
+      )
+      // The runtime handles cleanup-yielded concurrency through captured handlers;
+      // the current effect type cannot express that cleanup-only narrowing.
+      const result = await (program as Fx<Async | HandlerCapture<string>, string | void | Fail<AggregateError>>).pipe(
+        runPromise
+      )
+
+      assert.ok(!Fail.is(result))
+      assert.equal(result, 'winner')
+      assert.deepEqual(events, ['cleanup before', 'cleanup fork child', 'cleanup after'])
     })
 
     it('aggregates cleanup failures with the primary failure first', async () => {

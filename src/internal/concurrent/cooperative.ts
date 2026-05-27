@@ -1,26 +1,59 @@
-import { Async } from '../Async.js'
-import { at, indexed } from '../Breadcrumb.js'
-import { Concurrently, Fork, RaceAllFailed } from '../Concurrent.js'
-import type { ConcurrentPolicy, ConcurrentResult, EffectsOf, ErrorsOf } from '../Concurrent.js'
-import { Fail, fail } from '../Fail.js'
-import { flatMap, flatten, Fx, fx, ok, runPromise } from '../Fx.js'
-import { HandlerCapture, handleCaptured, withCapturedHandlers } from '../HandlerCapture.js'
-import { Task } from '../Task.js'
-import type { TraceFrameKind, TraceOrigin } from '../Trace.js'
-import { captureTrace, getTrace } from '../Trace.js'
-import { ForkError, capturePrependTraceWithContext, captureTraceWithContext, forkFrameMetadata, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from './forkDiagnostics.js'
-import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './interrupt.js'
-import { withInterpretedReturn } from './iteratorClose.js'
-import { currentRuntimeContext, getRuntimeContext, withActiveRuntimeContext } from './runtimeContext.js'
+import { Async } from '../../Async.js'
+import { at, indexed } from '../../Breadcrumb.js'
+import { Concurrently, Fork, RaceAllFailed } from './effects.js'
+import type { ConcurrentPolicy, ConcurrentResult, EffectsOf, ErrorsOf } from './effects.js'
+import { Fail, fail } from '../../Fail.js'
+import { flatMap, flatten, Fx, fx, ok, runPromise } from '../../Fx.js'
+import { Handle } from '../../Handler.js'
+import { HandlerCapture, handleCaptured, withCapturedHandlers } from '../../HandlerCapture.js'
+import { Task } from '../../Task.js'
+import type { TraceFrameKind, TraceOrigin } from '../../Trace.js'
+import { captureTrace, getTrace } from '../../Trace.js'
+import { ForkError, capturePrependTraceWithContext, captureTraceWithContext, forkFrameMetadata, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from '../forkDiagnostics.js'
+import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from '../interrupt.js'
+import { withInterpretedReturn } from '../iteratorClose.js'
+import { currentRuntimeContext, getRuntimeContext, withActiveRuntimeContext } from '../runtimeContext.js'
 
 export interface CooperativeConfig {
   readonly concurrency: number
   readonly yieldBudget: number
 }
 
+export interface CoopConcurrencyOptions {
+  readonly concurrency?: number
+  readonly yieldBudget?: number
+}
+
+/**
+ * Provide cooperative concurrency for built-in structured concurrency policies.
+ */
+export const withCoopConcurrency = (options: CoopConcurrencyOptions = {}) => {
+  const normalized = normalizeCoopOptions(options, 'withCoopConcurrency')
+  const runtime = new CooperativeRuntime(normalized)
+  return <const E, const A>(f: Fx<E, A>): Fx<CoopConcurrencyHandledEffects<E>, A> =>
+    withCapturedHandlers('fx/Concurrent/Concurrently', f).pipe(
+      flatMap(fx =>
+        withCapturedHandlers(
+          'fx/Concurrent/Fork',
+          fx.pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, runtime.runConcurrently))
+        )
+      ),
+      flatMap(fx =>
+        ok(fx.pipe(
+          handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)
+        ))
+      ),
+      flatten
+    ) as Fx<CoopConcurrencyHandledEffects<E>, A>
+}
+
 export type CooperativeConcurrentlyEffects<E> = E extends Concurrently<infer Policy, infer Fxs>
   ? Policy['tag'] extends 'firstSuccess' ? Async | FirstSuccessFailure<Fxs> : Async | ErrorsOf<EffectsOf<Fxs[number]>>
   : never
+type AnyConcurrently = Concurrently<any, any>
+type ConcurrentEffects<E> = E extends Concurrently<infer Policy, infer Fxs> ? CooperativeConcurrentlyEffects<Concurrently<Policy, Fxs>> : never
+type CoopConcurrencyHandledEffects<E> =
+  Handle<Handle<Handle<E, AnyConcurrently, ConcurrentEffects<E>>, Fork>, HandlerCapture<'fx/Concurrent/Fork'> | HandlerCapture<'fx/Concurrent/Concurrently'>>
 type FirstSuccessFailure<Fxs extends readonly Fx<unknown, unknown>[]> =
   EveryFxCanFail<Fxs> extends true ? Fail<RaceAllFailed<FailuresOfFxs<Fxs>>> : never
 type EveryFxCanFail<Fxs extends readonly Fx<unknown, unknown>[]> = Fxs extends readonly []
@@ -391,6 +424,21 @@ const groupKind = (group: Concurrently<ConcurrentPolicy, any>): TraceFrameKind =
 
 const childFrameKind = (trace: TraceOrigin['trace'] | undefined) =>
   trace?.frame.kind === 'all' || trace?.frame.kind === 'race' ? trace.frame.kind : 'fork'
+
+const normalizeCoopOptions = (options: CoopConcurrencyOptions, handlerName: string): CooperativeConfig => {
+  const concurrency = options.concurrency ?? Infinity
+  const yieldBudget = options.yieldBudget ?? 64
+  if (concurrency <= 0 || (concurrency !== Infinity && !Number.isInteger(concurrency))) {
+    throw new RangeError(`${handlerName} concurrency must be a positive integer or Infinity, got ${concurrency}`)
+  }
+  if (yieldBudget <= 0 || !Number.isInteger(yieldBudget)) {
+    throw new RangeError(`${handlerName} yieldBudget must be a positive integer, got ${yieldBudget}`)
+  }
+  return {
+    concurrency,
+    yieldBudget
+  }
+}
 
 const groupPolicy = (policy: ConcurrentPolicy): GroupPolicy<any> => {
   switch (policy.tag) {

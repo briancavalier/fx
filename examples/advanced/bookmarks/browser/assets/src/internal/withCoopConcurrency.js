@@ -2,8 +2,8 @@ import { Async } from '../Async.js';
 import { at, indexed } from '../Breadcrumb.js';
 import { Concurrently, Fork, RaceAllFailed } from '../Concurrent.js';
 import { Fail, fail } from '../Fail.js';
-import { fx, runPromise } from '../Fx.js';
-import { HandlerCapture, handleCaptured } from '../HandlerCapture.js';
+import { flatMap, flatten, fx, ok, runPromise } from '../Fx.js';
+import { HandlerCapture, handleCaptured, withCapturedHandlers } from '../HandlerCapture.js';
 import { Task } from '../Task.js';
 import { captureTrace, getTrace } from '../Trace.js';
 import { ForkError, capturePrependTraceWithContext, captureTraceWithContext, forkFrameMetadata, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from './forkDiagnostics.js';
@@ -525,9 +525,9 @@ function* closeFiber(runtime, fiber) {
         }
     }
 }
-const runCleanupEffect = (runtime, fiber, effect) => fx(function* () {
+const runCleanupEffect = (runtime, fiber, effect) => withCapturedHandlers('fx/Concurrent/Concurrently', fx(function* () {
     return yield effect;
-}).pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, group => runtime.runNestedConcurrently(group, fiber)), handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork));
+})).pipe(flatMap(fx => withCapturedHandlers('fx/Concurrent/Fork', fx.pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, group => runtime.runNestedConcurrently(group, fiber))))), flatMap(fx => ok(fx.pipe(handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)))), flatten);
 const finishDetachedFiber = (runtime, fiber) => {
     if (fiber.status === 'done')
         return;

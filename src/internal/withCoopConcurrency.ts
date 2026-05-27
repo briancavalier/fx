@@ -3,8 +3,8 @@ import { at, indexed } from '../Breadcrumb.js'
 import { Concurrently, Fork, RaceAllFailed } from '../Concurrent.js'
 import type { ConcurrentPolicy, ConcurrentResult, EffectsOf, ErrorsOf } from '../Concurrent.js'
 import { Fail, fail } from '../Fail.js'
-import { Fx, fx, runPromise } from '../Fx.js'
-import { HandlerCapture, handleCaptured } from '../HandlerCapture.js'
+import { flatMap, flatten, Fx, fx, ok, runPromise } from '../Fx.js'
+import { HandlerCapture, handleCaptured, withCapturedHandlers } from '../HandlerCapture.js'
 import { Task } from '../Task.js'
 import type { TraceFrameKind, TraceOrigin } from '../Trace.js'
 import { captureTrace, getTrace } from '../Trace.js'
@@ -643,11 +643,21 @@ const runCleanupEffect = (
   fiber: Fiber,
   effect: unknown
 ) =>
-  fx(function* () {
+  withCapturedHandlers('fx/Concurrent/Concurrently', fx(function* () {
     return yield effect as any
-  }).pipe(
-    handleCaptured('fx/Concurrent/Concurrently', Concurrently, group => runtime.runNestedConcurrently(group, fiber)),
-    handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)
+  })).pipe(
+    flatMap(fx =>
+      withCapturedHandlers(
+        'fx/Concurrent/Fork',
+        fx.pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, group => runtime.runNestedConcurrently(group, fiber)))
+      )
+    ),
+    flatMap(fx =>
+      ok(fx.pipe(
+        handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)
+      ))
+    ),
+    flatten
   ) as Fx<unknown, unknown>
 
 const finishDetachedFiber = (runtime: CooperativeRuntime, fiber: Fiber) => {

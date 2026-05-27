@@ -990,6 +990,41 @@ describe('Fork', () => {
       assert.deepEqual(events, ['cleanup before', 'cleanup fork child', 'cleanup after'])
     })
 
+    it('runs cleanup fork children with handlers outside withCoopConcurrency', async () => {
+      const TestScope = scope('test/Fork/CooperativeCleanupForkOuterHandlerScope')
+      class CurrentValue extends Effect('test/Fork/CooperativeCleanupForkCurrentValue')<void, string> { }
+      const events = [] as string[]
+
+      const slow = fx(function* () {
+        yield* andFinally(TestScope, fx(function* () {
+          events.push('cleanup before')
+          const task = yield* fork(new CurrentValue())
+          events.push(yield* wait(task))
+          events.push('cleanup after')
+        }))
+        yield* awaitAbort()
+      })
+
+      const program = race([
+        slow,
+        assertPromise<string>(() => new Promise(resolve => setImmediate(() => resolve('winner'))))
+      ]).pipe(
+        withCoopConcurrency(),
+        handle(CurrentValue, () => ok('handled')),
+        withScope(TestScope),
+        returnFail
+      )
+      // The runtime handles cleanup-yielded concurrency through captured handlers;
+      // the current effect type cannot express that cleanup-only narrowing.
+      const result = await (program as Fx<Async | HandlerCapture<string>, string | void | Fail<AggregateError>>).pipe(
+        runPromise
+      )
+
+      assert.ok(!Fail.is(result))
+      assert.equal(result, 'winner')
+      assert.deepEqual(events, ['cleanup before', 'handled', 'cleanup after'])
+    })
+
     it('aggregates cleanup failures with the primary failure first', async () => {
       const cause = new Error('cooperative all failed')
       const releaseFailure = new Error('cooperative release failed')

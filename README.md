@@ -109,7 +109,7 @@ import {
   fx,
   runPromise
 } from "@briancavalier/fx"
-import { unbounded } from "@briancavalier/fx/concurrent"
+import { withUnboundedConcurrency } from "@briancavalier/fx/concurrent"
 import { andFinallyExit, recoverInterrupt, scope } from "@briancavalier/fx/scope"
 import { defaultTime, sleep } from "@briancavalier/fx/time"
 import { timeout } from "@briancavalier/fx/timeout"
@@ -137,7 +137,7 @@ await program.pipe(
   scope(RequestScope),
   recoverInterrupt(RequestScope, () => consoleLog("request timed out")),
   defaultTime,
-  unbounded,
+  withUnboundedConcurrency,
   defaultConsole,
   assertNoFail,
   runPromise

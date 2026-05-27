@@ -25,7 +25,8 @@ export interface CoopConcurrencyOptions {
 }
 
 /**
- * Provide cooperative concurrency for built-in structured concurrency policies.
+ * Provide cooperative concurrency for built-in structured concurrency policies
+ * and explicit or nested Fork requests.
  */
 export const withCoopConcurrency = (options: CoopConcurrencyOptions = {}) => {
   const normalized = normalizeCoopOptions(options, 'withCoopConcurrency')

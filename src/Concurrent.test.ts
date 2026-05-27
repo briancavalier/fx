@@ -1011,6 +1011,21 @@ describe('Fork', () => {
       assert.equal(result, 'handled')
     })
 
+    it('runs explicit forks with handlers outside withCoopConcurrency', async () => {
+      class CurrentValue extends Effect('test/Fork/CooperativeForkOuterCurrentValue')<void, string> { }
+
+      const result = await fx(function* () {
+        const task = yield* fork(new CurrentValue())
+        return yield* wait(task)
+      }).pipe(
+        withCoopConcurrency(),
+        handle(CurrentValue, () => ok('handled')),
+        runPromise
+      )
+
+      assert.equal(result, 'handled')
+    })
+
     it('runs nested fork inside all and all inside fork', async () => {
       const result = await all([
         fx(function* () {

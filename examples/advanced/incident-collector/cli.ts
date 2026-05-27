@@ -30,7 +30,7 @@ const runSnapshot = (label: string, failDeploy: boolean) => fx(function* () {
     // withBoundedConcurrency(6),
     // cooperative structured concurrency:
     withCoopConcurrency({ concurrency: 6, yieldBudget: 64 }),
-    // Keep withBoundedConcurrency(6) active when withCoopConcurrency delegates explicit/nested Fork.
+    // withCoopConcurrency now also handles explicit/nested Fork.
     // withBoundedConcurrency(6),
     withScope(BundleScope),
     returnAll,

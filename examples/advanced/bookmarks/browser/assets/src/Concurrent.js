@@ -6,7 +6,7 @@ import { handleCaptured, mapCapturedHandlers, withCapturedHandlers } from './Han
 import { Task, wait as waitTask } from './Task.js';
 import { captureTrace } from './Trace.js';
 import { Semaphore } from './internal/Semaphore.js';
-import { runCooperativeConcurrently } from './internal/withCoopConcurrency.js';
+import { CooperativeRuntime } from './internal/withCoopConcurrency.js';
 import { acquireAndRunFork } from './internal/runFork.js';
 import { currentRuntimeContext } from './internal/runtimeContext.js';
 /**
@@ -100,7 +100,8 @@ export const concurrently = (policy, fxs, options) => {
  */
 export const withCoopConcurrency = (options = {}) => {
     const normalized = normalizeCoopOptions(options, 'withCoopConcurrency');
-    return (f) => f.pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, runCooperativeConcurrently(normalized)));
+    const runtime = new CooperativeRuntime(normalized);
+    return (f) => f.pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, runtime.runConcurrently), handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork));
 };
 /**
  * Retag a structured concurrency request for first-settled race semantics.

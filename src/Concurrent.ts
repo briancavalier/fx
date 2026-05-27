@@ -9,7 +9,7 @@ import { Task, wait as waitTask } from './Task.js'
 import type { TraceFrameKind, TraceOptions, TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
 import { Semaphore } from './internal/Semaphore.js'
-import { runCooperativeConcurrently, type CooperativeConfig } from './internal/withCoopConcurrency.js'
+import { CooperativeRuntime, type CooperativeConfig } from './internal/withCoopConcurrency.js'
 import { acquireAndRunFork } from './internal/runFork.js'
 import { currentRuntimeContext } from './internal/runtimeContext.js'
 
@@ -167,9 +167,11 @@ export interface CoopConcurrencyOptions {
  */
 export const withCoopConcurrency = (options: CoopConcurrencyOptions = {}) => {
   const normalized = normalizeCoopOptions(options, 'withCoopConcurrency')
+  const runtime = new CooperativeRuntime(normalized)
   return <const E, const A>(f: Fx<E, A>): Fx<CoopConcurrencyHandledEffects<E>, A> =>
     f.pipe(
-      handleCaptured('fx/Concurrent/Concurrently', Concurrently, runCooperativeConcurrently(normalized))
+      handleCaptured('fx/Concurrent/Concurrently', Concurrently, runtime.runConcurrently),
+      handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)
     ) as Fx<CoopConcurrencyHandledEffects<E>, A>
 }
 
@@ -310,7 +312,7 @@ type ConcurrentEffects<E> = E extends Concurrently<infer Policy, infer Fxs> ? As
 type WithConcurrencyHandledEffects<E> =
   Handle<Handle<Handle<E, AnyConcurrently, Fork | Async | ConcurrentEffects<E>>, Fork>, HandlerCapture<'fx/Concurrent/Fork'> | HandlerCapture<'fx/Concurrent/Concurrently'>>
 type CoopConcurrencyHandledEffects<E> =
-  Handle<Handle<E, AnyConcurrently, ConcurrentEffects<E>>, HandlerCapture<'fx/Concurrent/Concurrently'>>
+  Handle<Handle<Handle<E, AnyConcurrently, ConcurrentEffects<E>>, Fork>, HandlerCapture<'fx/Concurrent/Fork'> | HandlerCapture<'fx/Concurrent/Concurrently'>>
 type FirstSuccessFailure<Fxs extends readonly Fx<unknown, unknown>[]> =
   EveryFxCanFail<Fxs> extends true ? Fail<RaceAllFailed<FailuresOfFxs<Fxs>>> : never
 type EveryFxCanFail<Fxs extends readonly Fx<unknown, unknown>[]> = Fxs extends readonly []

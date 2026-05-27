@@ -4,13 +4,14 @@ import { arch, platform, release } from 'node:os'
 import { performance } from 'node:perf_hooks'
 
 import { assertPromise } from '../src/Async.js'
-import { all, firstSettled, firstSuccess, race, withCoopConcurrency, withUnboundedConcurrency } from '../src/Concurrent.js'
+import { all, firstSettled, firstSuccess, fork, race, withCoopConcurrency, withUnboundedConcurrency } from '../src/Concurrent.js'
 import { Effect } from '../src/Effect.js'
 import { fail, returnFail } from '../src/Fail.js'
 import { andFinally } from '../src/Finalization.js'
 import { fx, ok, runPromise } from '../src/Fx.js'
 import { handle } from '../src/Handler.js'
 import { scope, withScope } from '../src/Scope.js'
+import { wait } from '../src/Task.js'
 import type { Fx } from '../src/Fx.js'
 
 interface BenchmarkCase {
@@ -69,6 +70,12 @@ const results = await runBenchmarks([
   }),
   benchmark('withCoopConcurrency async fanout 16', 'async fanout', FastIterations, 100, async () => {
     await all(asyncChildren(Fanout)).pipe(withCoopConcurrency(), runPromise)
+  }),
+  benchmark('withUnboundedConcurrency explicit fork fanout 16', 'explicit fork fanout', FastIterations, 100, async () => {
+    await explicitForkFanout(okChildren(Fanout)).pipe(withUnboundedConcurrency, runPromise)
+  }),
+  benchmark('withCoopConcurrency explicit fork fanout 16', 'explicit fork fanout', FastIterations, 100, async () => {
+    await explicitForkFanout(okChildren(Fanout)).pipe(withCoopConcurrency(), runPromise)
   }),
   benchmark('withUnboundedConcurrency yielding 16x16', 'yielding fanout', YieldingIterations, 50, async () => {
     await yieldingAll().pipe(handleStep(), withUnboundedConcurrency, runPromise)
@@ -211,6 +218,16 @@ function mixedAsyncAndYielding() {
     assertPromise(() => new Promise<string>(resolve => setImmediate(() => resolve('async')))),
     ...Array.from({ length: 7 }, (_, id) => yieldingChild(id, StepsPerChild))
   ])
+}
+
+function explicitForkFanout(children: readonly Fx<unknown, unknown>[]) {
+  return fx(function* () {
+    const tasks = []
+    for (const child of children) tasks.push(yield* fork(child))
+    const results = []
+    for (const task of tasks) results.push(yield* wait(task))
+    return results
+  })
 }
 
 function nestedRace() {

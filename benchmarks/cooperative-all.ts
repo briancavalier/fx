@@ -17,8 +17,6 @@ import type { Fx } from '../src/Fx.js'
 interface BenchmarkCase {
   readonly name: string
   readonly group: string
-  readonly iterations: number
-  readonly warmup: number
   readonly run: () => Promise<void>
 }
 
@@ -26,9 +24,13 @@ interface Result {
   readonly name: string
   readonly group: string
   readonly iterations: number
-  readonly totalMs: number
   readonly opsPerSecond: number
-  readonly nsPerOp: number
+  readonly samples: readonly number[]
+  readonly medianNsPerOp: number
+  readonly minNsPerOp: number
+  readonly p75NsPerOp: number
+  readonly maxNsPerOp: number
+  readonly spread: number
   readonly relativeToGroupBaseline: number
 }
 
@@ -44,9 +46,12 @@ class Step extends Effect('benchmark/cooperative-all/Step')<{ readonly id: numbe
 
 const Fanout = 16
 const StepsPerChild = 16
-const FastIterations = 1_000
-const YieldingIterations = 250
-const CleanupIterations = 250
+const Samples = 7
+const WarmupIterations = 3
+const TargetSampleMs = 250
+const CalibrationTargetMs = TargetSampleMs / 2
+const MaxCalibrationIterations = 65_536
+const NoiseSpreadThreshold = 1.25
 const CleanupScope = scope('benchmark/cooperative-all/Cleanup')
 
 await runSemanticChecks()
@@ -59,58 +64,58 @@ const fairness = [
 ]
 
 const results = await runBenchmarks([
-  benchmark('withUnboundedConcurrency ok fanout 16', 'ok fanout', FastIterations, 100, async () => {
+  benchmark('withUnboundedConcurrency ok fanout 16', 'ok fanout', async () => {
     await all(okChildren(Fanout)).pipe(withUnboundedConcurrency, runPromise)
   }),
-  benchmark('withCoopConcurrency ok fanout 16', 'ok fanout', FastIterations, 100, async () => {
+  benchmark('withCoopConcurrency ok fanout 16', 'ok fanout', async () => {
     await all(okChildren(Fanout)).pipe(withCoopConcurrency(), runPromise)
   }),
-  benchmark('withUnboundedConcurrency async fanout 16', 'async fanout', FastIterations, 100, async () => {
+  benchmark('withUnboundedConcurrency async fanout 16', 'async fanout', async () => {
     await all(asyncChildren(Fanout)).pipe(withUnboundedConcurrency, runPromise)
   }),
-  benchmark('withCoopConcurrency async fanout 16', 'async fanout', FastIterations, 100, async () => {
+  benchmark('withCoopConcurrency async fanout 16', 'async fanout', async () => {
     await all(asyncChildren(Fanout)).pipe(withCoopConcurrency(), runPromise)
   }),
-  benchmark('withUnboundedConcurrency explicit fork fanout 16', 'explicit fork fanout', FastIterations, 100, async () => {
+  benchmark('withUnboundedConcurrency explicit fork fanout 16', 'explicit fork fanout', async () => {
     await explicitForkFanout(okChildren(Fanout)).pipe(withUnboundedConcurrency, runPromise)
   }),
-  benchmark('withCoopConcurrency explicit fork fanout 16', 'explicit fork fanout', FastIterations, 100, async () => {
+  benchmark('withCoopConcurrency explicit fork fanout 16', 'explicit fork fanout', async () => {
     await explicitForkFanout(okChildren(Fanout)).pipe(withCoopConcurrency(), runPromise)
   }),
-  benchmark('withUnboundedConcurrency yielding 16x16', 'yielding fanout', YieldingIterations, 50, async () => {
+  benchmark('withUnboundedConcurrency yielding 16x16', 'yielding fanout', async () => {
     await yieldingAll().pipe(handleStep(), withUnboundedConcurrency, runPromise)
   }),
-  benchmark('withCoopConcurrency yielding 16x16 budget 1', 'yielding fanout', YieldingIterations, 50, async () => {
+  benchmark('withCoopConcurrency yielding 16x16 budget 1', 'yielding fanout', async () => {
     await yieldingAll().pipe(withCoopConcurrency({ yieldBudget: 1 }), handleStep(), runPromise)
   }),
-  benchmark('withCoopConcurrency yielding 16x16 budget 8', 'yielding fanout', YieldingIterations, 50, async () => {
+  benchmark('withCoopConcurrency yielding 16x16 budget 8', 'yielding fanout', async () => {
     await yieldingAll().pipe(withCoopConcurrency({ yieldBudget: 8 }), handleStep(), runPromise)
   }),
-  benchmark('withCoopConcurrency yielding 16x16 budget 64', 'yielding fanout', YieldingIterations, 50, async () => {
+  benchmark('withCoopConcurrency yielding 16x16 budget 64', 'yielding fanout', async () => {
     await yieldingAll().pipe(withCoopConcurrency({ yieldBudget: 64 }), handleStep(), runPromise)
   }),
-  benchmark('withUnboundedConcurrency mixed parked async', 'mixed async', YieldingIterations, 50, async () => {
+  benchmark('withUnboundedConcurrency mixed parked async', 'mixed async', async () => {
     await mixedAsyncAndYielding().pipe(handleStep(), withUnboundedConcurrency, runPromise)
   }),
-  benchmark('withCoopConcurrency mixed parked async budget 1', 'mixed async', YieldingIterations, 50, async () => {
+  benchmark('withCoopConcurrency mixed parked async budget 1', 'mixed async', async () => {
     await mixedAsyncAndYielding().pipe(withCoopConcurrency({ yieldBudget: 1 }), handleStep(), runPromise)
   }),
-  benchmark('firstSettled + withUnboundedConcurrency nested race', 'nested race', YieldingIterations, 50, async () => {
+  benchmark('firstSettled + withUnboundedConcurrency nested race', 'nested race', async () => {
     await nestedRace().pipe(firstSettled, handleStep(), withUnboundedConcurrency, runPromise)
   }),
-  benchmark('withCoopConcurrency nested race', 'nested race', YieldingIterations, 50, async () => {
+  benchmark('withCoopConcurrency nested race', 'nested race', async () => {
     await nestedRace().pipe(firstSettled, withCoopConcurrency(), handleStep(), runPromise)
   }),
-  benchmark('firstSuccess + withUnboundedConcurrency nested firstSuccess', 'nested firstSuccess', YieldingIterations, 50, async () => {
+  benchmark('firstSuccess + withUnboundedConcurrency nested firstSuccess', 'nested firstSuccess', async () => {
     await nestedFirstSuccess().pipe(firstSuccess, handleStep(), withUnboundedConcurrency, runPromise)
   }),
-  benchmark('withCoopConcurrency nested firstSuccess', 'nested firstSuccess', YieldingIterations, 50, async () => {
+  benchmark('withCoopConcurrency nested firstSuccess', 'nested firstSuccess', async () => {
     await nestedFirstSuccess().pipe(firstSuccess, withCoopConcurrency(), handleStep(), runPromise)
   }),
-  benchmark('withUnboundedConcurrency cancel cleanup', 'cleanup', CleanupIterations, 50, async () => {
+  benchmark('withUnboundedConcurrency cancel cleanup', 'cleanup', async () => {
     await cleanupFailureProgram().pipe(withScope(CleanupScope), withUnboundedConcurrency, returnFail, runPromise)
   }),
-  benchmark('withCoopConcurrency cancel cleanup', 'cleanup', CleanupIterations, 50, async () => {
+  benchmark('withCoopConcurrency cancel cleanup', 'cleanup', async () => {
     await cleanupFailureProgram().pipe(withCoopConcurrency(), withScope(CleanupScope), returnFail, runPromise)
   })
 ])
@@ -137,44 +142,105 @@ async function runSemanticChecks(): Promise<void> {
 function benchmark(
   name: string,
   group: string,
-  iterations: number,
-  warmup: number,
   run: () => Promise<void>
 ): BenchmarkCase {
-  return { name, group, iterations, warmup, run }
+  return { name, group, run }
 }
 
 async function runBenchmarks(benchmarks: readonly BenchmarkCase[]): Promise<readonly Result[]> {
-  const rawResults: Omit<Result, 'relativeToGroupBaseline'>[] = []
+  const groups = groupedBenchmarks(benchmarks)
+  const rawResults = new Map<BenchmarkCase, { iterations: number, samples: number[] }>()
 
   for (const b of benchmarks) {
-    for (let i = 0; i < b.warmup; i++) await b.run()
+    await warmup(b)
+    rawResults.set(b, { iterations: await calibrateIterations(b), samples: [] })
+  }
 
-    const start = performance.now()
-    for (let i = 0; i < b.iterations; i++) await b.run()
-    const totalMs = performance.now() - start
-    const opsPerSecond = b.iterations / (totalMs / 1_000)
-    const nsPerOp = (totalMs * 1_000_000) / b.iterations
-
-    rawResults.push({
-      name: b.name,
-      group: b.group,
-      iterations: b.iterations,
-      totalMs,
-      opsPerSecond,
-      nsPerOp
-    })
+  for (const group of groups) {
+    for (let sample = 0; sample < Samples; sample++) {
+      const ordered = sample % 2 === 0
+        ? group
+        : [...group.slice(1), group[0]]
+      for (const b of ordered) {
+        const result = rawResults.get(b)!
+        result.samples.push(await sampleNsPerOp(b, result.iterations))
+      }
+    }
   }
 
   const baselines = new Map<string, number>()
-  for (const result of rawResults) {
-    if (!baselines.has(result.group)) baselines.set(result.group, result.nsPerOp)
-  }
+  const results = benchmarks.map(b => {
+    const raw = rawResults.get(b)!
+    const samples = [...raw.samples].sort((a, b) => a - b)
+    const minNsPerOp = samples[0]
+    const maxNsPerOp = samples[samples.length - 1]
+    const medianNsPerOp = percentile(samples, 0.5)
+    const p75NsPerOp = percentile(samples, 0.75)
+    const spread = maxNsPerOp / minNsPerOp
+    const result: Omit<Result, 'relativeToGroupBaseline'> = {
+      name: b.name,
+      group: b.group,
+      iterations: raw.iterations,
+      opsPerSecond: 1_000_000_000 / medianNsPerOp,
+      samples,
+      medianNsPerOp,
+      minNsPerOp,
+      p75NsPerOp,
+      maxNsPerOp,
+      spread
+    }
+    if (!baselines.has(result.group)) baselines.set(result.group, result.medianNsPerOp)
+    return result
+  })
 
-  return rawResults.map(result => ({
+  return results.map(result => ({
     ...result,
-    relativeToGroupBaseline: result.nsPerOp / (baselines.get(result.group) ?? result.nsPerOp)
+    relativeToGroupBaseline: result.medianNsPerOp / (baselines.get(result.group) ?? result.medianNsPerOp)
   }))
+}
+
+function groupedBenchmarks(benchmarks: readonly BenchmarkCase[]): readonly BenchmarkCase[][] {
+  const groups = [] as BenchmarkCase[][]
+  const byName = new Map<string, BenchmarkCase[]>()
+  for (const b of benchmarks) {
+    let group = byName.get(b.group)
+    if (group === undefined) {
+      group = []
+      byName.set(b.group, group)
+      groups.push(group)
+    }
+    group.push(b)
+  }
+  return groups
+}
+
+async function warmup(b: BenchmarkCase): Promise<void> {
+  for (let i = 0; i < WarmupIterations; i++) await b.run()
+}
+
+async function calibrateIterations(b: BenchmarkCase): Promise<number> {
+  let iterations = 1
+  while (true) {
+    const totalMs = await timeIterations(b, iterations)
+    if (totalMs >= CalibrationTargetMs || iterations >= MaxCalibrationIterations) return iterations
+    iterations *= 2
+  }
+}
+
+async function sampleNsPerOp(b: BenchmarkCase, iterations: number): Promise<number> {
+  const totalMs = await timeIterations(b, iterations)
+  return (totalMs * 1_000_000) / iterations
+}
+
+async function timeIterations(b: BenchmarkCase, iterations: number): Promise<number> {
+  const start = performance.now()
+  for (let i = 0; i < iterations; i++) await b.run()
+  return performance.now() - start
+}
+
+function percentile(sorted: readonly number[], p: number): number {
+  const index = Math.ceil(sorted.length * p) - 1
+  return sorted[Math.max(0, Math.min(sorted.length - 1, index))]
 }
 
 async function measureFairness(
@@ -338,15 +404,21 @@ function formatMarkdown(fairness: readonly FairnessSummary[], results: readonly 
     '',
     '## Performance',
     '',
-    '| Case | Iterations | Total ms | Ops/sec | ns/op | Relative to group baseline |',
-    '| --- | ---: | ---: | ---: | ---: | ---: |',
+    'Relative values use median ns/op; noisy rows have max/min > 1.25.',
+    '',
+    '| Case | Samples | Iterations/sample | Ops/sec | Median ns/op | Min ns/op | P75 ns/op | Max ns/op | Relative to group baseline | Noise |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
     ...results.map(result => [
       `| ${result.name}`,
+      result.samples.length.toLocaleString(),
       result.iterations.toLocaleString(),
-      result.totalMs.toFixed(2),
       result.opsPerSecond.toFixed(0),
-      result.nsPerOp.toFixed(0),
-      `${result.relativeToGroupBaseline.toFixed(2)}x |`
+      result.medianNsPerOp.toFixed(0),
+      result.minNsPerOp.toFixed(0),
+      result.p75NsPerOp.toFixed(0),
+      result.maxNsPerOp.toFixed(0),
+      `${result.relativeToGroupBaseline.toFixed(2)}x`,
+      `${result.spread <= NoiseSpreadThreshold ? 'ok' : 'noisy'} |`
     ].join(' | '))
   ].join('\n')
 }

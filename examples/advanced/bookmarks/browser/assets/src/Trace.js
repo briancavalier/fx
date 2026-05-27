@@ -291,9 +291,10 @@ const formatActiveScopes = (scopes, context) => {
     if (scopes === undefined || scopes.length === 0)
         return [];
     const label = context?.style.section('Active scopes') ?? 'Active scopes';
-    return [`${label}: ${compactActiveScopes(scopes).join(' > ')}`];
+    return [`${label}: ${compactActiveScopes(scopes).map(formatActiveScopeLabel).join(' > ')}`];
 };
 const compactActiveScopes = (scopes) => scopes.length <= 4 ? scopes : [scopes[0], '...', ...scopes.slice(-3)];
+const formatActiveScopeLabel = (scope) => scope === '...' ? '...' : scope.label;
 const formatContext = (options) => ({
     style: colorEnabled(options?.colors ?? 'auto') ? ansiStyle : plainStyle,
     ...(options?.source === undefined || options.source === false
@@ -336,6 +337,24 @@ const formatDiagnosticActiveScopes = (scopes, lines, indent, context) => {
         return;
     const prefix = ' '.repeat(indent);
     lines.push(`${prefix}${formatted[0]}`);
+    formatDiagnosticActiveScopeDetails(scopes, lines, indent, context);
+};
+const formatDiagnosticActiveScopeDetails = (scopes, lines, indent, context) => {
+    if (scopes === undefined || scopes.length === 0)
+        return;
+    const compacted = compactActiveScopes(scopes);
+    if (!compacted.some(scope => scope !== '...' && scope.description !== undefined))
+        return;
+    const prefix = ' '.repeat(indent);
+    lines.push(`${prefix}${context.style.section('Active scope details:')}`);
+    for (const scope of compacted) {
+        if (scope === '...') {
+            lines.push(`${prefix}  ...`);
+        }
+        else if (scope.description !== undefined) {
+            lines.push(`${prefix}  ${scope.label}: ${scope.description}`);
+        }
+    }
 };
 const formatDiagnosticHeader = (error, context) => {
     const code = error.code === undefined ? '' : ` ${context.style.code(`[${error.code}]`)}`;

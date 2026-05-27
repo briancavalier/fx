@@ -1,5 +1,5 @@
 import { fail, Fail, fx, returnFail, runPromise } from '@briancavalier/fx'
-import { RaceAllFailed, firstSettled, firstSuccess, race, unbounded } from '@briancavalier/fx/concurrent'
+import { RaceAllFailed, firstSettled, firstSuccess, race, withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 import { formatDiagnostic, formatError, snapshotError } from '@briancavalier/fx/trace'
@@ -29,8 +29,8 @@ const sourceLookup = nodeSourceLookup()
 const firstSettledResult = await request.pipe(
   // First-settled semantics: the fast failure wins and cancels the slow success.
   firstSettled,
+  withUnboundedConcurrency,
   returnFail,
-  unbounded,
   defaultTime,
   runPromise
 )
@@ -45,8 +45,8 @@ if (Fail.is(firstSettledResult)) {
 const firstOk = await request.pipe(
   // First-success semantics: the fast failure is ignored, so the slower success wins.
   firstSuccess,
+  withUnboundedConcurrency,
   returnFail,
-  unbounded,
   defaultTime,
   runPromise
 )
@@ -63,8 +63,8 @@ const allFailed = await race([
 ]).pipe(
   // If every child fails, firstSuccess fails with input-ordered child errors.
   firstSuccess,
+  withUnboundedConcurrency,
   returnFail,
-  unbounded,
   defaultTime,
   runPromise
 )

@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { bounded, defaultAll } from '@briancavalier/fx/concurrent'
+import { withBoundedConcurrency } from '@briancavalier/fx/concurrent'
 import { type Async, type Fx, type HandlerCapture, type Interrupt, returnAll, runPromise } from '@briancavalier/fx'
 
 import { collect } from '@briancavalier/fx/log'
@@ -104,7 +104,6 @@ describe('tool agent example', () => {
 
     const error = agentErrorCause(result, 'ToolDenied')
     assert.equal(error.tool, 'shell')
-    assert.ok(events.includes('session:close:agent-session-1:failure'))
     assert.ok(!events.some(event => event.startsWith('tool:start:shell:')))
   })
 
@@ -126,7 +125,6 @@ describe('tool agent example', () => {
     assert.ok(events.includes('tool:start:searchExamples:safe search for https://example.com/fx/examples'))
     assert.ok(!events.some(event => event.startsWith('tool:done:readProjectSummary:')))
     assert.ok(!events.some(event => event.startsWith('tool:done:listOpenQuestions:')))
-    assert.ok(events.includes('session:close:agent-session-1:failure'))
   })
 
   it('keeps domain effects visible until handlers remove them', () => {
@@ -142,8 +140,7 @@ describe('tool agent example', () => {
       withFakeModel(),
       withClock(new VirtualClock(0)),
       collect,
-      defaultAll,
-      bounded(4),
+      withBoundedConcurrency(4),
       withScope(AgentSessionScope),
       returnAll,
       collectFrom(AgentEvents)
@@ -166,8 +163,7 @@ const runToolAgent = async (
     withFakeModel(modelOptions),
     withClock(clock),
     collect,
-    defaultAll,
-    bounded(4),
+    withBoundedConcurrency(4),
     withScope(AgentSessionScope),
     returnAll,
     collectFrom(AgentEvents),

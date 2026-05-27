@@ -1,5 +1,5 @@
 import { assert as assertNoFail, consoleLog, control, defaultConsole, fx, runPromise, uninterruptibleMask } from '@briancavalier/fx'
-import { unbounded } from '@briancavalier/fx/concurrent'
+import { withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 
 import { andFinallyExit, InterruptFrom, scope, withScope } from '@briancavalier/fx/scope'
 
@@ -58,7 +58,7 @@ await main.pipe(
     yield* consoleLog('result: timed out')
   })),
   defaultTime,
-  unbounded,
+  withUnboundedConcurrency,
   defaultConsole,
   assertNoFail,
   runPromise

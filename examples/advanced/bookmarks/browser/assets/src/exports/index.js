@@ -1,6 +1,7 @@
 export { Effect, EffectOriginTypeId, EffectTypeId, isEffect, originOf, ScopedEffect, traceOriginOf, withOrigin, withTraceOrigin } from '../Effect.js';
 export { andReturn, andThen, assertSync, bracket, flatMap, flatten, fx, map, ok, run, runPromise, runTask, tap, trySync, unit } from '../Fx.js';
 export { control, handle, handleScoped } from '../Handler.js';
+export { HandlerCapture } from '../HandlerCapture.js';
 export { assert, catchAll, catchIf, catchOnly, fail, failFrom, Fail, returnAll, returnFail, returnIf, returnOnly } from '../Fail.js';
 export { assertPromise, Async, tryPromise } from '../Async.js';
 export { defaultConsole, error as consoleError, Error as ConsoleError, log as consoleLog, Log as ConsoleLog } from '../Console.js';

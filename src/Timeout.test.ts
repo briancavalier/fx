@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Fail, fail, returnFail } from './Fail.js'
-import { unbounded } from './Concurrent.js'
+import { withUnboundedConcurrency } from './Concurrent.js'
 import { fx, ok, run, runPromise } from './Fx.js'
 import { andFinallyExit } from './Finalization.js'
 import { control } from './Handler.js'
@@ -29,8 +29,8 @@ describe('Timeout', () => {
       }),
       withScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       withClock(c),
       runPromise
     )
@@ -59,8 +59,8 @@ describe('Timeout', () => {
       timeout(TestScope, { ms: 50, reason: () => reason }),
       withScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       withClock(c),
       runPromise
     )
@@ -86,8 +86,8 @@ describe('Timeout', () => {
       timeout(TestScope, { ms: 50 }),
       withScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       withClock(c),
       runPromise
     )
@@ -116,8 +116,8 @@ describe('Timeout', () => {
       timeout(TestScope, { ms: 100 }),
       withScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       withClock(c),
       runPromise
     )
@@ -145,8 +145,8 @@ describe('Timeout', () => {
       timeout(TestScope, { ms: 50 }),
       withScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       withClock(c),
       runPromise
     ).then(r => {

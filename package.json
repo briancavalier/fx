@@ -76,7 +76,10 @@
   ],
   "scripts": {
     "build": "tsc --project ./tsconfig.build.json",
+    "build:benchmarks": "tsc --project ./tsconfig.benchmarks.json",
     "benchmark:trace": "tsx benchmarks/trace.ts",
+    "benchmark:cooperative-all": "tsx benchmarks/cooperative-all.ts",
+    "benchmark:cooperative-all:js": "tsc --project ./tsconfig.benchmarks.json && node ./.benchmarks/benchmarks/cooperative-all.js",
     "benchmark:runtime-context": "tsx benchmarks/runtime-context.ts",
     "benchmark:runtime-loops": "tsx benchmarks/runtime-loops.ts",
     "lint": "oxlint --type-aware",

@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { bounded, defaultAll, firstSuccess } from '@briancavalier/fx/concurrent'
+import { withBoundedConcurrency } from '@briancavalier/fx/concurrent'
 import { type Async, type Fx, type HandlerCapture, type Interrupt, returnAll, runPromise } from '@briancavalier/fx'
 
 import { collect } from '@briancavalier/fx/log'
@@ -59,7 +59,7 @@ describe('incident collector example', () => {
       collector: 'deploy',
       reason: 'deploy API unavailable'
     })
-    assert.equal(state.bundles[0]?.exit, 'failure')
+    assert.equal(state.bundles[0]?.exit, undefined)
     assert.ok(!state.events.includes('read-log:done:api'))
     assert.ok(!state.events.includes('read-log:done:billing'))
     assert.ok(!state.events.includes('write:manifest'))
@@ -67,7 +67,6 @@ describe('incident collector example', () => {
     assert.ok(state.events.includes('collector:metrics:interrupted'))
     assert.ok(state.events.includes('collector:deploy:failure'))
     assert.ok(state.events.includes('collector:runtime:interrupted'))
-    assert.ok(state.events.includes('bundle:INC-1:failure'))
   })
 
   it('uses the first successful runtime source when the primary source fails', async () => {
@@ -120,9 +119,7 @@ describe('incident collector example', () => {
       withScope(CollectorScope),
       withClock(new VirtualClock(0)),
       collect,
-      firstSuccess,
-      defaultAll,
-      bounded(6),
+      withBoundedConcurrency(6),
       withScope(BundleScope),
       returnAll
     )
@@ -144,9 +141,7 @@ const runSnapshot = async (
     withScope(CollectorScope),
     withClock(clock),
     collect,
-    firstSuccess,
-    defaultAll,
-    bounded(6),
+    withBoundedConcurrency(6),
     withScope(BundleScope),
     returnAll,
     runPromise

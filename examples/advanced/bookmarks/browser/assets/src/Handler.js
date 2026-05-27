@@ -1,4 +1,5 @@
 import { Control, Handler } from './internal/Handler.js';
+import { sameScope } from './internal/scopeIdentity.js';
 /**
  * Handle effects of the given type.
  *
@@ -28,21 +29,21 @@ export const handle = (e, f) => (fx) => new Handler(fx, e._fxEffectId, f);
  *
  * @example
  * ```ts
- * class Ask<const Scope extends string>
+ * class Ask<const S extends Scope>
  *   extends ScopedEffect('app/Ask')<Scope, void, string> { }
  *
  * const program = fx(function* () {
- *   return yield* new Ask('user', undefined)
+ *   return yield* new Ask(UserScope, undefined)
  * })
  *
  * const result = program.pipe(
- *   handleScoped(Ask, 'user', () => ok('Ada')),
+ *   handleScoped(Ask, UserScope, () => ok('Ada')),
  *   run
  * )
  * ```
  */
 export const handleScoped = (e, scope, f) => (fx) => new Handler(fx, e._fxEffectId, effect => {
-    if (effect.scope === scope) {
+    if (sameScope(effect.scope, scope)) {
         return f(effect);
     }
     return effect;

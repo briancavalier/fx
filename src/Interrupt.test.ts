@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
 import { fail, Fail, returnFail } from './Fail.js'
-import { firstSettled, race, unbounded } from './Concurrent.js'
+import { firstSettled, race, withUnboundedConcurrency } from './Concurrent.js'
 import { andFinally, andFinallyExit, managed, using, usingManaged } from './Finalization.js'
 import { bracket, fx, ok, run, runPromise, runTask, type Fx } from './Fx.js'
 import { control, handle } from './Handler.js'
@@ -464,8 +464,8 @@ describe('Interrupt masking', () => {
     const result = race([ok('winner'), loser]).pipe(
       firstSettled,
       withScope(TestScope),
+      withUnboundedConcurrency,
       returnFail,
-      unbounded,
       runPromise
     ).then(value => {
       settled = true

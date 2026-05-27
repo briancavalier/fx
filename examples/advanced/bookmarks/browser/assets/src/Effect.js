@@ -46,10 +46,10 @@ export const Effect = (id) => class {
  *
  * @example
  * ```ts
- * class Stop<const Scope extends string>
+ * class Stop<const S extends Scope>
  *   extends ScopedEffect('app/Stop')<Scope, void, never> { }
  *
- * const stop = <const Scope extends string>(scope: Scope) =>
+ * const stop = <const S extends Scope>(scope: S) =>
  *   new Stop(scope, undefined)
  * ```
  */

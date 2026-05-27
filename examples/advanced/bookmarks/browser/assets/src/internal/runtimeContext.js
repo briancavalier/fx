@@ -45,7 +45,10 @@ export const interruptionReason = (context = activeRuntimeContext) => context?.i
 export const withInterruptionReason = (context, reason) => reason === undefined ? context : { ...context, interruptionReason: reason };
 export const withActiveScope = (scope, fx) => {
     const scopes = activeScopes();
-    const nextScopes = scopes.at(-1) === scope ? scopes : [...scopes, scope];
+    const previousScope = scopes.at(-1);
+    const nextScopes = previousScope?.id === scope.id
+        ? scopes
+        : [...scopes, scope];
     return withRuntimeContext({ activeScopes: nextScopes }, fx);
 };
 const mergeRuntimeContext = (previous, next) => ({

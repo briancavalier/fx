@@ -1,37 +1,30 @@
 import { at, indexed } from './Breadcrumb.js';
 import { Effect } from './Effect.js';
 import { flatMap, flatten, fx, ok } from './Fx.js';
+import { handle } from './Handler.js';
 import { handleCaptured, mapCapturedHandlers, withCapturedHandlers } from './HandlerCapture.js';
 import { Task, wait as waitTask } from './Task.js';
 import { captureTrace } from './Trace.js';
 import { Semaphore } from './internal/Semaphore.js';
+import { CooperativeRuntime } from './internal/withCoopConcurrency.js';
 import { acquireAndRunFork } from './internal/runFork.js';
 import { currentRuntimeContext } from './internal/runtimeContext.js';
 /**
  * Request that a computation be started concurrently.
  *
  * A `Fork` request returns a {@link Task} handle. The scheduling policy is
- * supplied by handlers such as {@link bounded} or {@link unbounded}.
+ * supplied by handlers such as {@link withBoundedConcurrency} or {@link withUnboundedConcurrency}.
  */
 export class Fork extends Effect('fx/Concurrent/Fork') {
 }
+export const allPolicy = { tag: 'all' };
+export const firstSettledPolicy = { tag: 'firstSettled' };
+export const firstSuccessPolicy = { tag: 'firstSuccess' };
 /**
- * Request that a group of computations be run concurrently in a structured
- * scope, returning all results directly.
- *
- * The request describes structured concurrency. A handler decides how the
- * children are scheduled and how failures cancel siblings.
+ * Request that a group of computations run concurrently with a structured
+ * settlement policy.
  */
-export class All extends Effect('fx/Concurrent/All') {
-}
-/**
- * Request that a group of computations be raced in a structured scope,
- * returning the first settled result directly.
- *
- * The request describes structured concurrency. A handler decides how the
- * children are scheduled and how losing children are cancelled.
- */
-export class Race extends Effect('fx/Concurrent/Race') {
+export class Concurrently extends Effect('fx/Concurrent/Concurrently') {
 }
 /**
  * Start an Fx concurrently and return a {@link Task} handle.
@@ -68,72 +61,56 @@ export const forkEach = (fxs, options) => fx(function* () {
  * Request that a tuple of Fx computations run concurrently in a structured
  * scope, returning the tuple of child results directly.
  *
- * Pair `all` with {@link defaultAll} and a fork scheduler such as
- * {@link bounded} or {@link unbounded}.
- *
  * @example
  * const [user, posts] = yield* all([fetchUser, fetchPosts])
  */
-export const all = (fxs, options) => {
-    const trace = traceOrigin(options, 'fx/Concurrent/all', all, 'all');
-    return mapCapturedHandlers('fx/Concurrent/All', fxs).pipe(flatMap(fxs => new All({
-        fxs: fxs,
-        ...trace
-    })));
+export const all = (fxs, options) => concurrently(allPolicy, fxs, traceOrigin(options, 'fx/Concurrent/all', all, 'all'));
+/**
+ * Map an iterable to child computations and run them concurrently in input
+ * order.
+ *
+ * @example
+ * const users = yield* mapAll(userIds, id => fetchUser(id))
+ */
+export const mapAll = (items, f, options) => {
+    const trace = traceOrigin(options, 'fx/Concurrent/mapAll', mapAll, 'all');
+    return all(Array.from(items, f), trace);
 };
 /**
  * Request that a tuple of Fx computations race in a structured scope.
  *
- * Pair `race` with {@link firstSettled} for first-settled semantics or
- * {@link firstSuccess} when failed children should be ignored until all fail.
- *
  * @example
  * const value = yield* race([primary, fallback])
  */
-export const race = (fxs, options) => {
-    const trace = traceOrigin(options, 'fx/Concurrent/race', race, 'race');
-    return mapCapturedHandlers('fx/Concurrent/Race', fxs).pipe(flatMap(fxs => new Race({
+export const race = (fxs, options) => concurrently(firstSettledPolicy, fxs, traceOrigin(options, 'fx/Concurrent/race', race, 'race'));
+/**
+ * Request that a group of computations run concurrently with the supplied
+ * built-in policy.
+ */
+export const concurrently = (policy, fxs, options) => {
+    const trace = traceOrigin(options, 'fx/Concurrent/concurrently', concurrently, policyFrameKind(policy));
+    return mapCapturedHandlers('fx/Concurrent/Concurrently', fxs).pipe(flatMap(fxs => new Concurrently({
+        policy,
         fxs: fxs,
         ...trace
     })));
 };
 /**
- * Handle All by running all child computations concurrently in a structured
- * scope. The first child failure fails the parent and cancels siblings.
- *
- * @example
- * await all([fetchUser, fetchPosts]).pipe(
- *   defaultAll,
- *   unbounded,
- *   runPromise
- * )
+ * Provide cooperative concurrency for built-in structured concurrency policies.
  */
-export const defaultAll = (f) => f.pipe(handleCaptured('fx/Concurrent/All', All, runAll));
+export const withCoopConcurrency = (options = {}) => {
+    const normalized = normalizeCoopOptions(options, 'withCoopConcurrency');
+    const runtime = new CooperativeRuntime(normalized);
+    return (f) => withCapturedHandlers('fx/Concurrent/Concurrently', f).pipe(flatMap(fx => withCapturedHandlers('fx/Concurrent/Fork', fx.pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, runtime.runConcurrently)))), flatMap(fx => ok(fx.pipe(handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)))), flatten);
+};
 /**
- * Handle Race by running child computations concurrently in a structured scope.
- * The first child to settle wins and all losers are cancelled.
- *
- * @example
- * await race([primary, fallback]).pipe(
- *   firstSettled,
- *   unbounded,
- *   runPromise
- * )
+ * Retag a structured concurrency request for first-settled race semantics.
  */
-export const firstSettled = (f) => f.pipe(handleCaptured('fx/Concurrent/Race', Race, runRace));
+export const firstSettled = (f) => f.pipe(handle(Concurrently, retagConcurrently(firstSettledPolicy)));
 /**
- * Handle Race by running child computations concurrently and returning the
- * first successful result. Child failures are ignored until every child has
- * failed, at which point the parent fails with {@link RaceAllFailed}.
- *
- * @example
- * await race([primary, replica, cache]).pipe(
- *   firstSuccess,
- *   unbounded,
- *   runPromise
- * )
+ * Retag a structured concurrency request for first-success race semantics.
  */
-export const firstSuccess = (f) => f.pipe(handleCaptured('fx/Concurrent/Race', Race, runFirstSuccessRace));
+export const firstSuccess = (f) => f.pipe(handle(Concurrently, retagConcurrently(firstSuccessPolicy)));
 /**
  * Failure returned by {@link firstSuccess} when every raced child fails.
  */
@@ -159,22 +136,20 @@ export class RaceAllFailed extends Error {
 /**
  * Handle Fork by running at most `maxConcurrency` forked computations at once.
  *
- * Structured handlers such as {@link defaultAll} and {@link firstSettled}
- * elaborate into Fork requests, so `bounded` also limits their child
- * concurrency.
- *
- * @example
- * ```ts
- * program.pipe(defaultAll, bounded(4), runPromise)
- * ```
+ * Structured concurrency policies are interpreted by forking child tasks, so
+ * `withBoundedConcurrency` also limits structured child concurrency.
  */
-export const bounded = (maxConcurrency) => (f) => withCapturedHandlers('fx/Concurrent/Fork', f).pipe(flatMap(fx => ok(fx.pipe(handleCaptured('fx/Concurrent/Fork', Fork, runForkWith(new Semaphore(maxConcurrency)))))), flatten);
+export const withBoundedConcurrency = (maxConcurrency) => (f) => {
+    const semaphore = new Semaphore(maxConcurrency);
+    return withCapturedHandlers('fx/Concurrent/Fork', f).pipe(flatMap(fx => ok(fx.pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, runConcurrently), handleCaptured('fx/Concurrent/Fork', Fork, runForkWith(semaphore))))), flatten);
+};
 /**
  * Handle Fork by running forked computations without a concurrency limit.
  */
-export const unbounded = bounded(Infinity);
+export const withUnboundedConcurrency = withBoundedConcurrency(Infinity);
 const runForkWith = (s) => (fork) => ok(acquireAndRunFork(fork.arg, s));
 const childFrameKind = (trace) => trace?.frame.kind === 'all' || trace?.frame.kind === 'race' ? trace.frame.kind : 'fork';
+const policyFrameKind = (policy) => policy.tag === 'all' ? 'all' : 'race';
 const traceOrigin = (options, message, caller, kind) => {
     const origin = options?.origin ?? at(message, caller);
     const trace = options?.trace ?? captureTrace(origin, undefined, { kind });
@@ -184,9 +159,19 @@ const childTraceOrigin = (parent, index, kind) => {
     const origin = indexed(parent.origin, index);
     return { origin, trace: captureTrace(origin, parent.trace, { kind, index }) };
 };
-const runAll = (all) => forkEach(all.arg.fxs, all.arg).pipe(flatMap(tasks => waitTask(taskAll(tasks))));
-const runRace = (race) => forkEach(race.arg.fxs, race.arg).pipe(flatMap(tasks => waitTask(taskRace(tasks))));
-const runFirstSuccessRace = (race) => forkEach(race.arg.fxs, race.arg).pipe(flatMap(tasks => waitTask(taskFirstSuccess(tasks))));
+const runConcurrently = (group) => forkEach(group.arg.fxs, group.arg).pipe(flatMap(tasks => waitTask(taskForPolicy(group.arg.policy, tasks))));
+const retagConcurrently = (policy) => (group) => mapCapturedHandlers('fx/Concurrent/Concurrently', group.arg.fxs).pipe(flatMap(fxs => new Concurrently({
+    ...group.arg,
+    policy,
+    fxs: fxs
+})));
+const taskForPolicy = (policy, tasks) => {
+    switch (policy.tag) {
+        case 'all': return taskAll(tasks);
+        case 'firstSettled': return taskRace(tasks);
+        case 'firstSuccess': return taskFirstSuccess(tasks);
+    }
+};
 const taskAll = (tasks) => {
     tasks.forEach(t => t._markHandled());
     const d = new InterruptAll(tasks);
@@ -202,6 +187,20 @@ const taskAll = (tasks) => {
         throw failure;
     });
     return new Task(p, reason => { void d.interrupt(reason); }, currentRuntimeContext(), d.interrupted);
+};
+const normalizeCoopOptions = (options, handlerName) => {
+    const concurrency = options.concurrency ?? Infinity;
+    const yieldBudget = options.yieldBudget ?? 64;
+    if (concurrency <= 0 || (concurrency !== Infinity && !Number.isInteger(concurrency))) {
+        throw new RangeError(`${handlerName} concurrency must be a positive integer or Infinity, got ${concurrency}`);
+    }
+    if (yieldBudget <= 0 || !Number.isInteger(yieldBudget)) {
+        throw new RangeError(`${handlerName} yieldBudget must be a positive integer, got ${yieldBudget}`);
+    }
+    return {
+        concurrency,
+        yieldBudget
+    };
 };
 const taskRace = (tasks) => {
     tasks.forEach(t => t._markHandled());

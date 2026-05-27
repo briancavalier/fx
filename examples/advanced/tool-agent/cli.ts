@@ -1,4 +1,4 @@
-import { bounded, defaultAll } from '@briancavalier/fx/concurrent'
+import { withBoundedConcurrency } from '@briancavalier/fx/concurrent'
 import { consoleLog, defaultConsole, fx, handleScoped, provide, returnAll, runPromise } from '@briancavalier/fx'
 
 import { w3cFetch } from '@briancavalier/fx/http-client'
@@ -29,8 +29,7 @@ const main = fx(function* ({ openAIApiKey }: OpenAIModelContext) {
       withFakeModel(),
       withConsoleLog,
       defaultTime,
-      defaultAll,
-      bounded(4),
+      withBoundedConcurrency(4),
       withScope(AgentSessionScope),
       logAgentEvents,
       returnAll
@@ -41,8 +40,7 @@ const main = fx(function* ({ openAIApiKey }: OpenAIModelContext) {
       withOpenAIModel,
       withConsoleLog,
       defaultTime,
-      defaultAll,
-      bounded(4),
+      withBoundedConcurrency(4),
       withScope(AgentSessionScope),
       logAgentEvents,
       w3cFetch(),

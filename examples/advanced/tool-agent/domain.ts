@@ -1,4 +1,4 @@
-import { type All, mapAll } from '@briancavalier/fx/concurrent'
+import { type Concurrently, mapAll } from '@briancavalier/fx/concurrent'
 import { Effect, fail, type Fail, fx, type Fx, type HandlerCapture, type Interrupt } from '@briancavalier/fx'
 
 import { scope, type Finally, type Managed, usingManaged, type YieldFrom, type Yielding } from '@briancavalier/fx/scope'
@@ -70,7 +70,7 @@ export type ToolAgentEffects =
   | Log
   | Time
   | Interrupt
-  | HandlerCapture<'fx/Concurrent/All'>
+  | HandlerCapture<'fx/Concurrent/Concurrently'>
   | Finally<typeof AgentSessionScope, YieldFrom<typeof AgentEvents>>
   | Fail<AgentError>
 
@@ -98,7 +98,7 @@ export const startAgentSession = (task: string) => new StartAgentSession(task)
 
 export const runAgent = (
   task: string
-): Fx<ToolAgentEffects | All<any>, AgentAnswer> => fx(function* () {
+): Fx<ToolAgentEffects | Concurrently<any, any>, AgentAnswer> => fx(function* () {
   const session = yield* usingManaged(AgentSessionScope, startAgentSession(task))
   yield* info('agent session started', { session: session.id, task })
 

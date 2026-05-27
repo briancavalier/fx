@@ -3,7 +3,7 @@ import { arch, platform, release } from 'node:os'
 import { execFileSync } from 'node:child_process'
 
 import { assertPromise } from '../src/Async.js'
-import { all, defaultAll, firstSettled, fork, forkEach, race, unbounded } from '../src/Concurrent.js'
+import { all, firstSettled, fork, forkEach, race, withUnboundedConcurrency } from '../src/Concurrent.js'
 import { fail, returnFail } from '../src/Fail.js'
 import { flatMap, fx, ok, run, runPromise } from '../src/Fx.js'
 import { wait } from '../src/Task.js'
@@ -76,39 +76,39 @@ const cases: readonly BenchmarkCase[] = [
   }),
   benchmark('nested fork failure', 'runtime', FailureIterations, 100, async () => {
     try {
-      await nestedForkFailure(4).pipe(unbounded, runPromise)
+      await nestedForkFailure(4).pipe(withUnboundedConcurrency, runPromise)
     } catch { }
   }),
   benchmark('nested fork success', 'runtime', FailureIterations, 100, async () => {
-    await nestedForkSuccess(4).pipe(unbounded, runPromise)
+    await nestedForkSuccess(4).pipe(withUnboundedConcurrency, runPromise)
   }),
   benchmark('nested fork failure labels', 'runtime', FailureIterations, 100, async () => {
     try {
-      await nestedForkFailure(4).pipe(unbounded, runPromise)
+      await nestedForkFailure(4).pipe(withUnboundedConcurrency, runPromise)
     } catch { }
   }, 'labels'),
   benchmark('nested fork failure off', 'runtime', FailureIterations, 100, async () => {
     try {
-      await nestedForkFailure(4).pipe(unbounded, runPromise)
+      await nestedForkFailure(4).pipe(withUnboundedConcurrency, runPromise)
     } catch { }
   }, 'off'),
   benchmark('all structured failure', 'runtime', FailureIterations, 100, async () => {
     try {
-      await all(structuredChildren()).pipe(defaultAll, unbounded, runPromise)
+      await all(structuredChildren()).pipe(withUnboundedConcurrency, runPromise)
     } catch { }
   }),
   benchmark('forkEach structured failure', 'runtime', FailureIterations, 100, async () => {
     try {
       await forkEach(structuredChildren()).pipe(
         flatMap(([, failed]) => wait(failed)),
-        unbounded,
+        withUnboundedConcurrency,
         runPromise
       )
     } catch { }
   }),
   benchmark('race structured failure', 'runtime', FailureIterations, 100, async () => {
     try {
-      await race(structuredChildren()).pipe(firstSettled, unbounded, runPromise)
+      await race(structuredChildren()).pipe(firstSettled, withUnboundedConcurrency, runPromise)
     } catch { }
   }),
   benchmark('plain breadcrumb object', 'capture', TraceIterations, 1_000, () => {

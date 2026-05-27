@@ -1,6 +1,6 @@
 import { Async } from '../Async.js'
 import { at, indexed } from '../Breadcrumb.js'
-import { Concurrently, Fork, RaceAllFailed, allPolicy, firstSettledPolicy, firstSuccessPolicy } from '../Concurrent.js'
+import { Concurrently, Fork, RaceAllFailed } from '../Concurrent.js'
 import type { ConcurrentPolicy, ConcurrentResult, EffectsOf, ErrorsOf } from '../Concurrent.js'
 import { Fail, fail } from '../Fail.js'
 import { Fx, fx, runPromise } from '../Fx.js'
@@ -393,10 +393,11 @@ const childFrameKind = (trace: TraceOrigin['trace'] | undefined) =>
   trace?.frame.kind === 'all' || trace?.frame.kind === 'race' ? trace.frame.kind : 'fork'
 
 const groupPolicy = (policy: ConcurrentPolicy): GroupPolicy<any> => {
-  if (policy === allPolicy) return allGroupPolicy
-  if (policy === firstSettledPolicy) return raceGroupPolicy
-  if (policy === firstSuccessPolicy) return firstSuccessGroupPolicy
-  throw new TypeError('Unknown concurrency policy')
+  switch (policy.tag) {
+    case 'all': return allGroupPolicy
+    case 'firstSettled': return raceGroupPolicy
+    case 'firstSuccess': return firstSuccessGroupPolicy
+  }
 }
 
 const allGroupPolicy: GroupPolicy<{ readonly results: unknown[], completed: number }> = {

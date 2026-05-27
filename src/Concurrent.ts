@@ -366,11 +366,15 @@ const taskAll = <Tasks extends readonly Task<unknown, unknown>[]>(tasks: Tasks) 
 const normalizeCoopOptions = (options: CoopConcurrencyOptions, handlerName: string): CooperativeConfig => {
   const concurrency = options.concurrency ?? Infinity
   const yieldBudget = options.yieldBudget ?? 64
-  if (concurrency <= 0) throw new RangeError(`${handlerName} concurrency must be > 0, got ${concurrency}`)
-  if (yieldBudget <= 0) throw new RangeError(`${handlerName} yieldBudget must be > 0, got ${yieldBudget}`)
+  if (concurrency <= 0 || (concurrency !== Infinity && !Number.isInteger(concurrency))) {
+    throw new RangeError(`${handlerName} concurrency must be a positive integer or Infinity, got ${concurrency}`)
+  }
+  if (yieldBudget <= 0 || !Number.isInteger(yieldBudget)) {
+    throw new RangeError(`${handlerName} yieldBudget must be a positive integer, got ${yieldBudget}`)
+  }
   return {
-    concurrency: Math.floor(concurrency),
-    yieldBudget: Math.floor(yieldBudget)
+    concurrency,
+    yieldBudget
   }
 }
 

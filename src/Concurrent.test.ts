@@ -1216,7 +1216,9 @@ describe('Fork', () => {
   describe('withCoopConcurrency', () => {
     it('rejects invalid options', () => {
       assert.throws(() => withCoopConcurrency({ concurrency: 0 }), RangeError)
+      assert.throws(() => withCoopConcurrency({ concurrency: 0.5 }), RangeError)
       assert.throws(() => withCoopConcurrency({ yieldBudget: 0 }), RangeError)
+      assert.throws(() => withCoopConcurrency({ yieldBudget: 0.5 }), RangeError)
     })
 
     it('returns all and mapAll child values directly in input order', async () => {
@@ -1231,6 +1233,17 @@ describe('Fork', () => {
 
       assert.deepEqual(tuple, [1, 'two'])
       assert.deepEqual(mapped, [6, 2, 4])
+    })
+
+    it('dispatches structurally equivalent policies by tag', async () => {
+      const policy = { tag: 'all' } as const satisfies typeof allPolicy
+
+      const result = await concurrently(policy, [ok(1), ok(2)]).pipe(
+        withCoopConcurrency(),
+        runPromise
+      )
+
+      assert.deepEqual(result, [1, 2])
     })
 
     it('uses tagged first-settled race semantics and cancels losers', async () => {

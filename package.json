@@ -92,7 +92,7 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^25.9.0",
-    "oxfmt": "^0.50.0",
+    "oxfmt": "^0.52.0",
     "oxlint": "^1.67.0",
     "oxlint-tsgolint": "^0.22.1",
     "tsx": "^4.22.1",

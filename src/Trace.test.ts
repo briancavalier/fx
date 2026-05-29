@@ -9,7 +9,7 @@ import { fx, runPromise } from './Fx.js'
 import { control } from './Handler.js'
 import { InterruptFrom } from './InterruptFrom.js'
 import { defaultRetry, retry } from './Retry.js'
-import { ScopeTypeId, scope, withScope } from './Scope.js'
+import { ScopeTypeId, scope, scopeId, withScope } from './Scope.js'
 import { wait } from './Task.js'
 import { sleep, withClock } from './Time.js'
 import { TimeoutInterrupt, timeout } from './Timeout.js'
@@ -154,31 +154,29 @@ describe('Trace', () => {
       runPromise(f as never),
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [
-          { id: 'http/request', label: 'http/request', description: undefined },
-          { id: 'db/transaction', label: 'db/transaction', description: undefined }
+          { id: 'http/request', label: 'http/request' },
+          { id: 'db/transaction', label: 'db/transaction' }
         ])
         return true
       }
     )
   })
 
-  it('keeps the scope token marker non-enumerable', () => {
+  it('keeps scope ids symbol-keyed and non-enumerable', () => {
     const TestScope = scope('test/Trace/non-enumerable', { label: 'non-enumerable' })
 
     assert.equal(Object.getOwnPropertyDescriptor(TestScope, ScopeTypeId)?.enumerable, false)
-    assert.deepEqual(Object.keys(TestScope), ['label', 'name'])
+    assert.deepEqual(Object.keys(TestScope), ['label'])
+    assert.equal(scopeId(TestScope), 'test/Trace/non-enumerable')
+    assert.equal(TestScope.label, 'non-enumerable')
   })
 
-  it('preserves the explicit scope identity when metadata contains a name', () => {
-    const metadata: { readonly name: string, readonly label: string } = {
-      name: 'test/Trace/metadata-name',
-      label: 'metadata name'
-    }
-    const TestScope = scope('test/Trace/explicit-name', metadata)
+  it('supports symbol scope ids with labels', () => {
+    const id = Symbol('test/Trace/symbol-id')
+    const TestScope = scope(id, { label: 'symbol scope' })
 
-    assert.equal(TestScope.name, 'test/Trace/explicit-name')
-    assert.equal(TestScope[ScopeTypeId], 'test/Trace/explicit-name')
-    assert.equal(TestScope.label, 'metadata name')
+    assert.equal(scopeId(TestScope), id)
+    assert.equal(TestScope.label, 'symbol scope')
   })
 
   it('uses scope labels in active-scope diagnostics', async () => {
@@ -192,8 +190,7 @@ describe('Trace', () => {
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'test/Trace/request',
-          label: 'request',
-          description: undefined
+          label: 'request'
         }])
         assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: request/)
         return true
@@ -201,40 +198,12 @@ describe('Trace', () => {
     )
   })
 
-  it('uses scope descriptions in diagnostic active-scope details', async () => {
-    const RequestScope = scope('test/Trace/request-description', {
-      label: 'request',
-      description: 'Handles one HTTP request from accept through response write'
-    })
-    const f = fx(function* () {
-      yield* fail(new Error('described scope'))
-    }).pipe(withScope(RequestScope))
-
-    await assert.rejects(
-      runPromise(f as never),
-      e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
-          id: 'test/Trace/request-description',
-          label: 'request',
-          description: 'Handles one HTTP request from accept through response write'
-        }])
-        const diagnostic = formatDiagnostic(e, { colors: 'never' })
-        assert.match(diagnostic, /Active scopes: request/)
-        assert.match(diagnostic, /Active scope details:\n  request: Handles one HTTP request from accept through response write/)
-        assert.doesNotMatch(formatError(e), /Active scope details:/)
-        return true
-      }
-    )
-  })
-
   it('keeps distinct active scopes with the same diagnostic text', async () => {
     const OuterRequest = scope('test/Trace/outer-request', {
-      label: 'request',
-      description: 'Shared request description'
+      label: 'request'
     })
     const InnerRequest = scope('test/Trace/inner-request', {
-      label: 'request',
-      description: 'Shared request description'
+      label: 'request'
     })
     const f = fx(function* () {
       yield* fail(new Error('same diagnostic text'))
@@ -248,8 +217,8 @@ describe('Trace', () => {
       e => {
         const activeScopes = snapshotError(e).trace?.activeScopes
         assert.deepEqual(activeScopes, [
-          { id: 'test/Trace/outer-request', label: 'request', description: 'Shared request description' },
-          { id: 'test/Trace/inner-request', label: 'request', description: 'Shared request description' }
+          { id: 'test/Trace/outer-request', label: 'request' },
+          { id: 'test/Trace/inner-request', label: 'request' }
         ])
         assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: request > request/)
         return true
@@ -278,31 +247,6 @@ describe('Trace', () => {
       e => {
         assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: http\/request > db\/transaction/)
         assert.match(formatError(e), /Active scopes: http\/request > db\/transaction/)
-        assert.doesNotMatch(formatDiagnostic(e, { colors: 'never' }), /Active scope details:/)
-        return true
-      }
-    )
-  })
-
-  it('formats active-scope details for described visible scopes only', async () => {
-    const DbTransaction = scope('db/transaction', {
-      description: 'Owns transaction commit and rollback finalization'
-    })
-    const HttpRequest = scope('http/request')
-    const f = fx(function* () {
-      yield* fail(new Error('mixed scope descriptions'))
-    }).pipe(
-      withScope(DbTransaction),
-      withScope(HttpRequest)
-    )
-
-    await assert.rejects(
-      runPromise(f as never),
-      e => {
-        const diagnostic = formatDiagnostic(e, { colors: 'never' })
-        assert.match(diagnostic, /Active scopes: http\/request > db\/transaction/)
-        assert.match(diagnostic, /Active scope details:\n  db\/transaction: Owns transaction commit and rollback finalization/)
-        assert.doesNotMatch(diagnostic, /http\/request:/)
         return true
       }
     )
@@ -325,31 +269,6 @@ describe('Trace', () => {
     )
   })
 
-  it('compacts deep active-scope details with the active-scope line', async () => {
-    const scoped = [
-      scope('a', { description: 'visible first scope' }),
-      scope('b', { description: 'hidden middle scope' }),
-      scope('c'),
-      scope('d', { description: 'visible second-to-last scope' }),
-      scope('e', { description: 'visible last scope' })
-    ].reduceRight(
-      (f, name) => f.pipe(withScope(name)),
-      fx(function* () {
-        yield* fail(new Error('deep scope descriptions'))
-      })
-    )
-
-    await assert.rejects(
-      runPromise(scoped as never),
-      e => {
-        const diagnostic = formatDiagnostic(e, { colors: 'never' })
-        assert.match(diagnostic, /Active scopes: a > \.\.\. > c > d > e/)
-        assert.match(diagnostic, /Active scope details:\n  a: visible first scope\n  \.\.\.\n  d: visible second-to-last scope\n  e: visible last scope/)
-        assert.doesNotMatch(diagnostic, /hidden middle scope/)
-        return true
-      }
-    )
-  })
 
   it('does not rewrite traces captured before entering a region', async () => {
     const prebuilt = fail(new Error('prebuilt'))
@@ -520,8 +439,7 @@ describe('Trace', () => {
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'http/request',
-          label: 'http/request',
-          description: undefined
+          label: 'http/request'
         }])
         return true
       }
@@ -542,8 +460,7 @@ describe('Trace', () => {
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'http/request',
-          label: 'http/request',
-          description: undefined
+          label: 'http/request'
         }])
         return true
       }
@@ -553,8 +470,7 @@ describe('Trace', () => {
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'http/request',
-          label: 'http/request',
-          description: undefined
+          label: 'http/request'
         }])
         return true
       }
@@ -572,8 +488,7 @@ describe('Trace', () => {
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'http/request',
-          label: 'http/request',
-          description: undefined
+          label: 'http/request'
         }])
         return true
       }
@@ -592,8 +507,7 @@ describe('Trace', () => {
         const formatted = formatDiagnostic(e, { colors: 'never' })
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'db/transaction',
-          label: 'db/transaction',
-          description: undefined
+          label: 'db/transaction'
         }])
         assert.match(formatted, /AggregateError: Resource release failed/)
         assert.match(formatted, /Active scopes: db\/transaction/)

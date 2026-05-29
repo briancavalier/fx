@@ -25,8 +25,7 @@ export function timeout<const Options extends AnyTimeoutOptions>(
   options: Options
 ): <const E, const A>(f: Fx<E, A>) => Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<AnyScope, TimeoutReasonOf<Options>>, A> {
   const { ms, label } = options
-  const timeoutScope = scope('fx/Timeout', {
-    identity: Symbol('fx/Timeout'),
+  const timeoutScope = scope(Symbol('fx/Timeout'), {
     label: label ?? 'timeout',
     diagnostic: false
   })

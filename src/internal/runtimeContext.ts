@@ -18,7 +18,6 @@ export interface RuntimeContext {
 export interface ActiveScopeDiagnostic {
   readonly id: PropertyKey
   readonly label: string
-  readonly description?: string
 }
 
 export const RuntimeContextTypeId = Symbol('fx/RuntimeContext')

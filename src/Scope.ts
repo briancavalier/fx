@@ -11,61 +11,46 @@ import { Fork } from './internal/concurrent/effects.js'
 import { drainIteratorReturn, isInterpretingReturn, isInterruptedReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { interruptionReason, withActiveScope, type ActiveScopeDiagnostic } from './internal/runtimeContext.js'
-import { ScopeTypeId, sameScope, type ScopeIdentity } from './internal/scopeIdentity.js'
+import { ScopeTypeId, sameScope, scopeId, type ScopeIdentity } from './internal/scopeIdentity.js'
 import { ScopedFork } from './internal/scopedFork.js'
 import type { ScopedForkContext } from './internal/scopedFork.js'
 import type { Task } from './Task.js'
 
-export { ScopeTypeId, sameScope }
+export { ScopeTypeId, sameScope, scopeId }
 
-export interface ScopeMetadata<Identity extends PropertyKey = string> {
+export interface ScopeMetadata {
   readonly label?: string
-  readonly description?: string
-  readonly diagnostic?: boolean
-  readonly identity?: Identity
-}
-
-export interface Scope<
-  Name extends string = string,
-  Identity extends PropertyKey = Name
-> extends ScopeIdentity<Identity> {
-  readonly name: Name
-  readonly label?: string
-  readonly description?: string
   readonly diagnostic?: boolean
 }
 
-export type AnyScope = Scope<string, PropertyKey>
+export interface Scope<Id extends PropertyKey = PropertyKey> extends ScopeIdentity<Id> {
+  readonly label?: string
+  readonly diagnostic?: boolean
+}
 
-export function scope<Brand>(): <const Name extends string, const Identity extends PropertyKey = Name>(name: Name, metadata?: ScopeMetadata<Identity>) => Scope<Name, Identity> & Brand
-export function scope<const Name extends string, const Identity extends PropertyKey = Name>(name: Name, metadata?: ScopeMetadata<Identity>): Scope<Name, Identity>
-export function scope(name?: string, metadata: ScopeMetadata<PropertyKey> = {}) {
-  if (name === undefined) return scope
-  const { identity = name, ...scopeMetadata } = metadata
+export type AnyScope = Scope<PropertyKey>
 
-  const token = {
-    ...scopeMetadata,
-    name
-  }
-
+export function scope<Brand>(): <const Id extends PropertyKey>(id: Id, metadata?: ScopeMetadata) => Scope<Id> & Brand
+export function scope<const Id extends PropertyKey>(id: Id, metadata?: ScopeMetadata): Scope<Id>
+export function scope(id?: PropertyKey, metadata: ScopeMetadata = {}): any {
+  if (id === undefined) return scope
+  const token = { ...metadata }
   Object.defineProperty(token, ScopeTypeId, {
-    value: identity,
+    value: id,
     enumerable: false,
     writable: false,
     configurable: false
   })
-
   return token
 }
 
 export const scopeLabel = (scope: AnyScope): string =>
-  scope.label ?? scope.name
+  scope.label ?? String(scopeId(scope))
 
 const scopeDiagnostic = (scope: AnyScope): ActiveScopeDiagnostic => {
   return {
-    id: scope[ScopeTypeId],
-    label: scopeLabel(scope),
-    description: scope.description
+    id: scopeId(scope),
+    label: scopeLabel(scope)
   }
 }
 

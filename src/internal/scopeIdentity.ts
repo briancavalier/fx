@@ -6,5 +6,8 @@ export interface ScopeIdentity<Identity extends PropertyKey = PropertyKey> {
 
 export type AnyScopeIdentity = ScopeIdentity<PropertyKey>
 
+export const scopeId = <const Scope extends AnyScopeIdentity>(scope: Scope): Scope[typeof ScopeTypeId] =>
+  scope[ScopeTypeId]
+
 export const sameScope = (a: AnyScopeIdentity, b: AnyScopeIdentity): boolean =>
-  a[ScopeTypeId] === b[ScopeTypeId]
+  scopeId(a) === scopeId(b)

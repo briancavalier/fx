@@ -19,7 +19,7 @@ export class Semaphore {
   }
 
   release(): void {
-    if (this.waiters.length) this.waiters.shift()!()
+    if (this.waiters.length) queueMicrotask(this.waiters.shift()!)
     else this.available++
   }
 }
@@ -36,9 +36,13 @@ const acquired = (): Acquiring => ({
 
 const acquire = (waiters: Waiter[]): Acquiring => {
   let waiter: Waiter
+  let cancelled = false
   return {
-    promise: new Promise<void>(r => waiters.push(waiter = r)),
+    promise: new Promise<void>(r => waiters.push(waiter = () => {
+      if (!cancelled) r()
+    })),
     [Symbol.dispose]: () => {
+      cancelled = true
       const i = waiters.indexOf(waiter!)
       if (i >= 0) waiters.splice(i, 1)
     }

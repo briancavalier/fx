@@ -1,5 +1,12 @@
 let interpretingReturn = false
 
+export class InterruptedReturn {
+  readonly _tag = 'fx/InterruptedReturn'
+}
+
+export const isInterruptedReturn = (e: unknown): e is InterruptedReturn =>
+  e instanceof InterruptedReturn
+
 export function* drainIteratorReturn<Y, A, R>(
   iterator: Iterator<Y, A, unknown>,
   step: (ir: IteratorResult<Y, A>) => Generator<Y, R, unknown>

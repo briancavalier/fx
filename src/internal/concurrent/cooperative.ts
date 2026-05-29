@@ -1,15 +1,14 @@
 import { Async } from '../../Async.js'
-import { at, indexed } from '../../Breadcrumb.js'
-import { Concurrently, Fork, RaceAllFailed } from './effects.js'
-import type { ConcurrentPolicy, ConcurrentResult, EffectsOf, ErrorsOf } from './effects.js'
-import { Fail, fail } from '../../Fail.js'
+import { at } from '../../Breadcrumb.js'
+import { Fork } from './effects.js'
+import { Fail } from '../../Fail.js'
 import { flatMap, flatten, Fx, fx, ok, runPromise } from '../../Fx.js'
 import { Handle } from '../../Handler.js'
 import { HandlerCapture, handleCaptured, withCapturedHandlers } from '../../HandlerCapture.js'
 import { Task } from '../../Task.js'
-import type { TraceFrameKind, TraceOrigin } from '../../Trace.js'
+import type { TraceOrigin } from '../../Trace.js'
 import { captureTrace, getTrace } from '../../Trace.js'
-import { ForkError, capturePrependTraceWithContext, captureTraceWithContext, forkFrameMetadata, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from '../forkDiagnostics.js'
+import { ForkError, capturePrependTraceWithContext, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from '../forkDiagnostics.js'
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from '../interrupt.js'
 import { withInterpretedReturn } from '../iteratorClose.js'
 import { currentRuntimeContext, getRuntimeContext, withActiveRuntimeContext } from '../runtimeContext.js'
@@ -25,20 +24,13 @@ export interface CoopConcurrencyOptions {
 }
 
 /**
- * Provide cooperative concurrency for built-in structured concurrency policies
- * and explicit or nested Fork requests.
+ * Provide cooperative scheduling for explicit or scoped Fork requests.
  */
 export const withCoopConcurrency = (options: CoopConcurrencyOptions = {}) => {
   const normalized = normalizeCoopOptions(options, 'withCoopConcurrency')
   const runtime = new CooperativeRuntime(normalized)
   return <const E, const A>(f: Fx<E, A>): Fx<CoopConcurrencyHandledEffects<E>, A> =>
-    withCapturedHandlers('fx/Concurrent/Concurrently', f).pipe(
-      flatMap(fx =>
-        withCapturedHandlers(
-          'fx/Concurrent/Fork',
-          fx.pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, runtime.runConcurrently))
-        )
-      ),
+    withCapturedHandlers('fx/Concurrent/Fork', f).pipe(
       flatMap(fx =>
         ok(fx.pipe(
           handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)
@@ -48,31 +40,8 @@ export const withCoopConcurrency = (options: CoopConcurrencyOptions = {}) => {
     ) as Fx<CoopConcurrencyHandledEffects<E>, A>
 }
 
-export type CooperativeConcurrentlyEffects<E> = E extends Concurrently<infer Policy, infer Fxs>
-  ? Policy['tag'] extends 'firstSuccess' ? Async | FirstSuccessFailure<Fxs> : Async | ErrorsOf<EffectsOf<Fxs[number]>>
-  : never
-type AnyConcurrently = Concurrently<any, any>
-type ConcurrentEffects<E> = E extends Concurrently<infer Policy, infer Fxs> ? CooperativeConcurrentlyEffects<Concurrently<Policy, Fxs>> : never
 type CoopConcurrencyHandledEffects<E> =
-  Handle<Handle<Handle<E, AnyConcurrently, ConcurrentEffects<E>>, Fork>, HandlerCapture<'fx/Concurrent/Fork'> | HandlerCapture<'fx/Concurrent/Concurrently'>>
-type FirstSuccessFailure<Fxs extends readonly Fx<unknown, unknown>[]> =
-  EveryFxCanFail<Fxs> extends true ? Fail<RaceAllFailed<FailuresOfFxs<Fxs>>> : never
-type EveryFxCanFail<Fxs extends readonly Fx<unknown, unknown>[]> = Fxs extends readonly []
-  ? true
-  : number extends Fxs['length']
-  ? true
-  : Fxs extends readonly [infer F, ...infer Rest]
-  ? F extends Fx<unknown, unknown>
-  ? [FailuresOfFx<F>] extends [never]
-  ? false
-  : Rest extends readonly Fx<unknown, unknown>[] ? EveryFxCanFail<Rest> : true
-  : false
-  : true
-type FailuresOfFxs<Fxs extends readonly Fx<unknown, unknown>[]> = {
-  readonly [K in keyof Fxs]: FailuresOfFx<Fxs[K]>
-}
-type FailuresOfFx<F> = FailureOf<ErrorsOf<EffectsOf<F>>>
-type FailureOf<E> = E extends Fail<infer F> ? F : never
+  Handle<Handle<E, Fork>, HandlerCapture<'fx/Concurrent/Fork'>>
 
 type Resume =
   | { readonly type: 'next', readonly value: unknown }
@@ -96,19 +65,6 @@ interface Fiber {
 type PrimaryFailure =
   | { readonly error: unknown }
 
-type GroupDecision<S> =
-  | { readonly type: 'continue', readonly state: S }
-  | { readonly type: 'pending', readonly state: S }
-  | { readonly type: 'succeed', readonly state: S, readonly value: unknown, readonly cancelRest: boolean }
-  | { readonly type: 'fail', readonly state: S, readonly error: unknown, readonly cancelRest: boolean }
-
-interface GroupPolicy<S> {
-  readonly init: (size: number) => S
-  readonly onEmpty?: (state: S) => GroupDecision<S>
-  readonly onSuccess: (state: S, index: number, value: unknown) => GroupDecision<S>
-  readonly onFailure: (state: S, index: number, error: unknown) => GroupDecision<S>
-}
-
 export class CooperativeRuntime {
   private slotWaiters = [] as (() => void)[]
   private availableSlots: number
@@ -116,17 +72,6 @@ export class CooperativeRuntime {
   constructor(readonly config: CooperativeConfig) {
     this.availableSlots = Math.floor(config.concurrency)
   }
-
-  readonly runConcurrently = <const Policy extends ConcurrentPolicy, const Fxs extends readonly Fx<unknown, unknown>[]>(
-    group: Concurrently<Policy, Fxs>
-  ): Fx<CooperativeConcurrentlyEffects<Concurrently<Policy, Fxs>>, ConcurrentResult<Policy, Fxs>> =>
-    cooperativeGroupFx(this, group, groupPolicy(group.arg.policy)) as Fx<CooperativeConcurrentlyEffects<Concurrently<Policy, Fxs>>, ConcurrentResult<Policy, Fxs>>
-
-  readonly runNestedConcurrently = <const Policy extends ConcurrentPolicy, const Fxs extends readonly Fx<unknown, unknown>[]>(
-    group: Concurrently<Policy, Fxs>,
-    parent: Fiber
-  ): Fx<CooperativeConcurrentlyEffects<Concurrently<Policy, Fxs>>, ConcurrentResult<Policy, Fxs>> =>
-    cooperativeGroupFx(this, group, groupPolicy(group.arg.policy), parent) as Fx<CooperativeConcurrentlyEffects<Concurrently<Policy, Fxs>>, ConcurrentResult<Policy, Fxs>>
 
   readonly runFork = (fork: Fork): Fx<never, Task<unknown, unknown>> =>
     fx(function* (this: CooperativeRuntime) {
@@ -136,7 +81,7 @@ export class CooperativeRuntime {
   startFork(fork: Fork, onUnhandled?: (error: unknown) => void): Task<unknown, unknown> {
     const context = getRuntimeContext(fork) ?? currentRuntimeContext()
     const origin = fork.arg.origin
-    const trace = capturePrependTraceWithContext(context, origin, fork.arg.trace, forkFrameMetadata(fork.arg.trace))
+    const trace = fork.arg.trace
     const fiber: Fiber = {
       index: -1,
       iterator: fork.arg.fx[Symbol.iterator](),
@@ -159,7 +104,7 @@ export class CooperativeRuntime {
       done.promise,
       reason => {
         fiber.cancelRequested = true
-        fiber.abort?.abort(reason)
+        if (fiber.masks.canInterrupt) fiber.abort?.abort(reason)
         this.notifySlotWaiters()
         if (!running) {
           cleanup = this.drainFork(fiber, done)
@@ -203,7 +148,11 @@ export class CooperativeRuntime {
         if (fiber.cancelRequested && fiber.masks.canInterrupt) {
           await runPromise(fx(function* (this: CooperativeRuntime) { yield* closeFiber(this, fiber) }.bind(this)) as Fx<any, void>)
           finishDetachedFiber(this, fiber)
-          if (fiber.cleanupFailures.length > 0) done.reject(resourceReleaseFailed(fiber.cleanupFailures))
+          if (fiber.cleanupFailures.length > 0) {
+            const failure = resourceReleaseFailed(fiber.cleanupFailures)
+            done.reject(failure)
+            throw failure
+          }
           return
         }
         const step = stepFiber(this, fiber, wake, {
@@ -225,6 +174,7 @@ export class CooperativeRuntime {
     } catch (error) {
       finishDetachedFiber(this, fiber)
       done.reject(error)
+      throw error
     }
   }
 
@@ -260,172 +210,6 @@ export class CooperativeRuntime {
   }
 }
 
-const cooperativeGroupFx = <const Fxs extends readonly Fx<unknown, unknown>[], S>(
-  runtime: CooperativeRuntime,
-  group: Concurrently<ConcurrentPolicy, Fxs>,
-  policy: GroupPolicy<S>,
-  borrowedSlotFrom?: Fiber
-) => fx(function* () {
-  const fxs = group.arg.fxs
-  const fibers = [] as Fiber[]
-  const ready = [] as Fiber[]
-  let readyIndex = 0
-  const wake = new Wake()
-  const context = getRuntimeContext(group)
-  const parentTraceOrigin = {
-    origin: group.arg.origin,
-    trace: group.arg.trace ?? captureTraceWithContext(context, group.arg.origin, undefined, { kind: groupKind(group) })
-  }
-  const childKind = childFrameKind(parentTraceOrigin.trace)
-  let state = policy.init(fxs.length)
-  let next = 0
-  let active = 0
-  let done = 0
-  let completed = false
-  let outcome: Exclude<GroupDecision<S>, { readonly type: 'continue' }> | undefined = emptyOutcome(policy, state, fxs.length)
-
-  const startNext = () => {
-    while (outcome === undefined && next < fxs.length) {
-      const fiber: Fiber = {
-        index: next,
-        iterator: fxs[next][Symbol.iterator](),
-        traceOrigin: childTraceOriginWithContext(context, parentTraceOrigin, next, childKind),
-        runtimeContext: context,
-        masks: new InterruptMaskState(),
-        slotAcquired: false,
-        status: 'ready',
-        resume: { type: 'next', value: undefined },
-        cancelRequested: false,
-        cleanupFailures: [],
-        releaseSlotBeforeResume: false
-      }
-      if (borrowedSlotFrom?.slotAcquired) {
-        borrowedSlotFrom.slotAcquired = false
-        fiber.slotAcquired = true
-      } else if (!runtime.tryAcquireSlot(fiber)) break
-      next++
-      active++
-      fibers.push(fiber)
-      ready.push(fiber)
-    }
-  }
-
-  const finish = (fiber: Fiber) => {
-    if (fiber.status === 'done') return
-    fiber.status = 'done'
-    fiber.abort?.abort()
-    runtime.releaseSlot(fiber)
-    active--
-    done++
-  }
-
-  const settle = (decision: GroupDecision<S>) => {
-    state = decision.state
-    if (decision.type === 'continue') return
-    outcome ??= decision
-    if (decision.type !== 'pending' && decision.cancelRest) cancelActiveFibers(fibers)
-  }
-
-  const succeedFiber = (fiber: Fiber, value: unknown) => {
-    finish(fiber)
-    settle(policy.onSuccess(state, fiber.index, value))
-  }
-
-  const failFiber = (fiber: Fiber, failure: PrimaryFailure) => {
-    finish(fiber)
-    settle(policy.onFailure(state, fiber.index, failure.error))
-  }
-
-  try {
-    while (done < fxs.length || next < fxs.length) {
-      startNext()
-
-      if (readyIndex >= ready.length) {
-        ready.length = 0
-        readyIndex = 0
-        if (active === 0 && next < fxs.length) {
-          yield* runtime.waitForSlot()
-          continue
-        }
-        if (active === 0) break
-        appendReady(ready, yield* wake.wait())
-        continue
-      }
-
-      const fiber = ready[readyIndex++]!
-      if (readyIndex > 64 && readyIndex * 2 > ready.length) {
-        ready.splice(0, readyIndex)
-        readyIndex = 0
-      }
-      if (fiber.status !== 'ready') continue
-      if (fiber.cancelRequested && fiber.masks.canInterrupt) {
-        yield* closeFiber(runtime, fiber)
-        finish(fiber)
-        continue
-      }
-
-      yield* stepFiber(runtime, fiber, wake, {
-        succeed: value => succeedFiber(fiber, value),
-        fail: error => failFiber(fiber, { error }),
-        cancel: () => finish(fiber)
-      })
-
-      if (fiber.status === 'ready') ready.push(fiber)
-    }
-
-    completed = true
-
-    if (outcome !== undefined) {
-      cancelActiveFibers(fibers)
-      for (const fiber of fibers) {
-        if (fiber.status !== 'done') {
-          yield* closeFiber(runtime, fiber)
-          finish(fiber)
-        }
-      }
-
-      const cleanupFailures = fibers.flatMap(fiber => fiber.cleanupFailures)
-      if (cleanupFailures.length > 0) {
-        const failures = outcome.type === 'fail'
-          ? [outcome.error, ...cleanupFailures]
-          : cleanupFailures
-        return (yield* fail(resourceReleaseFailed(failures))) as never
-      }
-      if (outcome.type === 'pending') return yield* waitForInterruption()
-      if (outcome.type === 'fail') return (yield* fail(outcome.error)) as never
-      return outcome.value
-    }
-
-    return state
-  } finally {
-    if (!completed) {
-      cancelActiveFibers(fibers)
-      for (const fiber of fibers) {
-        if (fiber.status !== 'done') {
-          yield* closeFiber(runtime, fiber)
-          finish(fiber)
-        }
-      }
-    }
-  }
-})
-
-const emptyOutcome = <S>(
-  policy: GroupPolicy<S>,
-  state: S,
-  size: number
-): Exclude<GroupDecision<S>, { readonly type: 'continue' }> | undefined => {
-  if (size !== 0) return undefined
-  const decision = policy.onEmpty?.(state)
-  return decision?.type === 'continue' ? undefined : decision
-}
-
-const groupKind = (group: Concurrently<ConcurrentPolicy, any>): TraceFrameKind =>
-  group.arg.policy.tag === 'all' ? 'all' : 'race'
-
-const childFrameKind = (trace: TraceOrigin['trace'] | undefined) =>
-  trace?.frame.kind === 'all' || trace?.frame.kind === 'race' ? trace.frame.kind : 'fork'
-
 const normalizeCoopOptions = (options: CoopConcurrencyOptions, handlerName: string): CooperativeConfig => {
   const concurrency = options.concurrency ?? Infinity
   const yieldBudget = options.yieldBudget ?? 64
@@ -439,57 +223,6 @@ const normalizeCoopOptions = (options: CoopConcurrencyOptions, handlerName: stri
     concurrency,
     yieldBudget
   }
-}
-
-const groupPolicy = (policy: ConcurrentPolicy): GroupPolicy<any> => {
-  switch (policy.tag) {
-    case 'all': return allGroupPolicy
-    case 'firstSettled': return raceGroupPolicy
-    case 'firstSuccess': return firstSuccessGroupPolicy
-  }
-}
-
-const allGroupPolicy: GroupPolicy<{ readonly results: unknown[], completed: number }> = {
-  init: size => ({ results: sparseArray(size), completed: 0 }),
-  onEmpty: state => ({ type: 'succeed', state, value: state.results, cancelRest: false }),
-  onSuccess: (state, index, value) => {
-    state.results[index] = value
-    state.completed++
-    return state.completed === state.results.length
-      ? { type: 'succeed', state, value: state.results, cancelRest: false }
-      : { type: 'continue', state }
-  },
-  onFailure: (state, _index, error) => ({ type: 'fail', state, error, cancelRest: true })
-}
-
-const raceGroupPolicy: GroupPolicy<void> = {
-  init: () => undefined,
-  onEmpty: state => ({ type: 'pending', state }),
-  onSuccess: (_state, _index, value) => ({ type: 'succeed', state: undefined, value, cancelRest: true }),
-  onFailure: (_state, _index, error) => ({ type: 'fail', state: undefined, error, cancelRest: true })
-}
-
-const firstSuccessGroupPolicy: GroupPolicy<{ readonly size: number, readonly failures: unknown[], failed: number }> = {
-  init: size => ({ size, failures: sparseArray(size), failed: 0 }),
-  onEmpty: state => ({ type: 'fail', state, error: new RaceAllFailed(state.failures), cancelRest: false }),
-  onSuccess: (state, _index, value) => ({ type: 'succeed', state, value, cancelRest: true }),
-  onFailure: (state, index, error) => {
-    state.failures[index] = error
-    state.failed++
-    return state.failed === state.size
-      ? { type: 'fail', state, error: new RaceAllFailed(state.failures), cancelRest: true }
-      : { type: 'continue', state }
-  }
-}
-
-const appendReady = (ready: Fiber[], fibers: readonly Fiber[]) => {
-  for (const fiber of fibers) ready.push(fiber)
-}
-
-const sparseArray = (length: number): unknown[] => {
-  const array = [] as unknown[]
-  array.length = length
-  return array
 }
 
 const startCooperativeAsync = (
@@ -573,15 +306,6 @@ function* stepFiber(
       break
     }
 
-    if (Concurrently.is(ir.value)) {
-      try {
-        fiber.resume = { type: 'next', value: yield* runtime.runNestedConcurrently(ir.value as Concurrently<ConcurrentPolicy, readonly Fx<unknown, unknown>[]>, fiber) }
-      } finally {
-        yield* reacquireSlot(runtime, fiber)
-      }
-      continue
-    }
-
     if (Fork.is(ir.value)) {
       fiber.resume = {
         type: 'next',
@@ -652,12 +376,6 @@ function* closeFiber(
     try {
       if (Async.is(ir.value)) {
         ir = fiber.iterator.next(yield ir.value as any)
-      } else if (Concurrently.is(ir.value)) {
-        try {
-          ir = fiber.iterator.next(yield* runtime.runNestedConcurrently(ir.value as Concurrently<ConcurrentPolicy, readonly Fx<unknown, unknown>[]>, fiber))
-        } finally {
-          yield* reacquireSlot(runtime, fiber)
-        }
       } else if (Fork.is(ir.value)) {
         ir = fiber.iterator.next(runtime.startFork(ir.value))
       } else if (Fail.is(ir.value)) {
@@ -692,15 +410,9 @@ const runCleanupEffect = (
   fiber: Fiber,
   effect: unknown
 ) =>
-  withCapturedHandlers('fx/Concurrent/Concurrently', fx(function* () {
+  withCapturedHandlers('fx/Concurrent/Fork', fx(function* () {
     return yield effect as any
   })).pipe(
-    flatMap(fx =>
-      withCapturedHandlers(
-        'fx/Concurrent/Fork',
-        fx.pipe(handleCaptured('fx/Concurrent/Concurrently', Concurrently, group => runtime.runNestedConcurrently(group, fiber)))
-      )
-    ),
     flatMap(fx =>
       ok(fx.pipe(
         handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)
@@ -714,16 +426,6 @@ const finishDetachedFiber = (runtime: CooperativeRuntime, fiber: Fiber) => {
   fiber.status = 'done'
   fiber.abort?.abort()
   runtime.releaseSlot(fiber)
-}
-
-const cancelActiveFibers = (fibers: readonly Fiber[], except?: Fiber) => {
-  for (const fiber of fibers) {
-    if (fiber === except || fiber.status === 'done') continue
-    fiber.cancelRequested = true
-    if (fiber.masks.canInterrupt) {
-      fiber.abort?.abort()
-    }
-  }
 }
 
 const wrapFiberFailure = (fiber: Fiber, failure: Fail<unknown>): ForkError => {
@@ -743,16 +445,6 @@ const wrapAsyncFiberError = (fiber: Fiber, async: Async, error: unknown, fallbac
   const context = runtimeContextOfEffect(error, fallbackContext)
   const asyncTrace = capturePrependTraceWithContext(context, async.arg.origin, fiber.traceOrigin.trace, { kind: 'async' })
   return new ForkError('FX_AWAITED_ASYNC_FAILED', 'Awaited Async task failed', async.arg.origin, traceWithCause(asyncTrace, error, context, getTrace(error)), context, { cause: error })
-}
-
-const childTraceOriginWithContext = (
-  context: ReturnType<typeof getRuntimeContext>,
-  parent: TraceOrigin,
-  index: number,
-  kind: TraceFrameKind
-): TraceOrigin => {
-  const origin = indexed(parent.origin, index)
-  return { origin, trace: captureTraceWithContext(context, origin, parent.trace, { kind, index }) }
 }
 
 const throwIntoMissingIterator = (error: unknown): never => {
@@ -798,15 +490,6 @@ const AsyncWait = (waiters: (() => void)[]) =>
     origin: at('fx/Concurrent/withCoopConcurrency/wait', AsyncWait),
     trace: captureTrace(at('fx/Concurrent/withCoopConcurrency/wait', AsyncWait), undefined, { kind: 'async' })
   }) as Fx<Async, void>
-
-const waitForInterruption = () =>
-  new Async({
-    run: signal => new Promise<never>((_resolve, reject) => {
-      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
-    }),
-    origin: at('fx/Concurrent/withCoopConcurrency/pending', waitForInterruption),
-    trace: captureTrace(at('fx/Concurrent/withCoopConcurrency/pending', waitForInterruption), undefined, { kind: 'async' })
-  }) as Fx<Async, never>
 
 const resourceReleaseFailed = (failures: readonly unknown[]) =>
   new AggregateError(failures, 'Resource release failed')

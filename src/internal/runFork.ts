@@ -13,7 +13,7 @@ import { Semaphore } from './Semaphore.js'
 import { DisposableSet } from './disposable.js'
 import { ForkError, capturePrependTraceWithContext, captureTraceWithContext, forkFrameMetadata, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from './forkDiagnostics.js'
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './interrupt.js'
-import { withInterpretedReturn } from './iteratorClose.js'
+import { isInterruptedReturn, withInterpretedReturn } from './iteratorClose.js'
 import type { RuntimeContext } from './runtimeContext.js'
 import { currentRuntimeContext, getRuntimeContext, withActiveRuntimeContext, withInterruptionReason } from './runtimeContext.js'
 
@@ -132,6 +132,10 @@ const closeInterruptedIterator = async <const E, const A>(
     await runIterator(ir, i, context, semaphore, cleanup, origin, trace, unhandled, rejectUnhandled, cleanupContext)
     disposed.resolve()
   } catch (e) {
+    if (isInterruptedReturn(e)) {
+      disposed.resolve()
+      return
+    }
     disposed.reject(e)
     throw e
   } finally {
@@ -330,6 +334,10 @@ const acquire = async <A>(s: Semaphore, scope: InterruptState, disposed: Promise
   scope.remove(acquisition)
 
   if (!acquired) {
+    disposed.resolve()
+    return await never()
+  }
+  if (scope.interruptRequested) {
     disposed.resolve()
     return await never()
   }

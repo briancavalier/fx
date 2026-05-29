@@ -33,7 +33,7 @@ export interface TraceFrame {
 }
 
 export interface ActiveScopeDiagnostic {
-  readonly id: string
+  readonly id: PropertyKey
   readonly label: string
   readonly description?: string
 }

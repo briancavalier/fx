@@ -2,7 +2,6 @@ import { fail, Fail, fx, returnFail, runPromise, wait } from '@briancavalier/fx'
 import {
   RaceAllFailed,
   all,
-  firstSettled,
   firstSuccess,
   fork,
   race,
@@ -16,7 +15,7 @@ import { formatDiagnostic, formatError, snapshotError } from '@briancavalier/fx/
 import { nodeSourceLookup } from '@briancavalier/fx/platform-node'
 
 // This example shows two kinds of concurrency handler swaps:
-// - `firstSettled` and `firstSuccess` choose the result policy for one `race`.
+// - `race` and `firstSuccess` choose the settlement policy for the same work.
 // - `withBoundedConcurrency` and `withCoopConcurrency` choose the execution
 //   strategy for one program that uses both `all` and explicit `fork`.
 
@@ -35,25 +34,23 @@ const sourceLookup = nodeSourceLookup()
 
 console.log('\nresult policy handlers')
 
-const firstSettledResult = await request.pipe(
+const raceResult = await request.pipe(
   // First-settled semantics: the fast failure wins and cancels the slow success.
-  firstSettled,
   withUnboundedConcurrency,
   returnFail,
   defaultTime,
   runPromise
 )
 
-if (Fail.is(firstSettledResult)) {
-  console.log('firstSettled:', 'failed with the first settled child')
-  printFailure(firstSettledResult.arg)
+if (Fail.is(raceResult)) {
+  console.log('race:', 'failed with the first settled child')
+  printFailure(raceResult.arg)
 } else {
-  console.log('firstSettled:', firstSettledResult)
+  console.log('race:', raceResult)
 }
 
-const firstOk = await request.pipe(
+const firstOk = await firstSuccess([fastFailure, slowSuccess]).pipe(
   // First-success semantics: the fast failure is ignored, so the slower success wins.
-  firstSuccess,
   withUnboundedConcurrency,
   returnFail,
   defaultTime,
@@ -62,7 +59,7 @@ const firstOk = await request.pipe(
 
 console.log('firstSuccess:', firstOk)
 
-const allFailed = await race([
+const allFailed = await firstSuccess([
   fx(function* () {
     yield* fail(new Error('primary failed'))
   }),
@@ -71,7 +68,6 @@ const allFailed = await race([
   })
 ]).pipe(
   // If every child fails, firstSuccess fails with input-ordered child errors.
-  firstSuccess,
   withUnboundedConcurrency,
   returnFail,
   defaultTime,

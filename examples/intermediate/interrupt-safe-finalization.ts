@@ -1,5 +1,5 @@
 import { assert as assertNoFail, consoleLog, defaultConsole, fx, runPromise } from '@briancavalier/fx'
-import { firstSettled, race, withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
+import { race, withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 
 import { scope, withScope, using } from '@briancavalier/fx/scope'
 
@@ -9,7 +9,7 @@ import { defaultTime, sleep } from '@briancavalier/fx/time'
  * Interrupt-safe finalization with `race`.
  *
  * The cache branch wins quickly while the database branch is still running.
- * `firstSettled` interrupts the losing database branch and waits for its
+ * `race` interrupts the losing database branch and waits for its
  * scoped async finalizer before the program logs the result.
  *
  * The example shows exit-aware cleanup with `using`, named finalization
@@ -57,7 +57,6 @@ const main = fx(function* () {
 })
 
 await main.pipe(
-  firstSettled,
   withScope(RequestScope),
   defaultTime,
   withUnboundedConcurrency,

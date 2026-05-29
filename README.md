@@ -105,16 +105,17 @@ how to recover:
 import {
   assert as assertNoFail,
   consoleLog,
+  control,
   defaultConsole,
   fx,
   runPromise
 } from "@briancavalier/fx"
 import { withUnboundedConcurrency } from "@briancavalier/fx/concurrent"
-import { andFinallyExit, recoverInterrupt, scope } from "@briancavalier/fx/scope"
+import { andFinallyExit, InterruptFrom, scope, withScope } from "@briancavalier/fx/scope"
 import { defaultTime, sleep } from "@briancavalier/fx/time"
 import { timeout } from "@briancavalier/fx/timeout"
 
-const RequestScope = "request" as const
+const RequestScope = scope("request")
 
 const loadUser = fx(function* () {
   yield* andFinallyExit(RequestScope, exit =>
@@ -127,15 +128,15 @@ const loadUser = fx(function* () {
 
 const program = fx(function* () {
   const user = yield* loadUser.pipe(
-    timeout(RequestScope, { ms: 500 })
+    timeout({ ms: 500, label: "load user" })
   )
 
   yield* consoleLog("loaded user", user)
 })
 
 await program.pipe(
-  scope(RequestScope),
-  recoverInterrupt(RequestScope, () => consoleLog("request timed out")),
+  withScope(RequestScope),
+  control(InterruptFrom, () => consoleLog("request timed out")),
   defaultTime,
   withUnboundedConcurrency,
   defaultConsole,

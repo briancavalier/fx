@@ -16,7 +16,7 @@ import { ScopedFork } from './internal/scopedFork.js'
 import type { ScopedForkContext } from './internal/scopedFork.js'
 import type { Task } from './Task.js'
 
-export { ScopeTypeId, sameScope, scopeId }
+export { sameScope, scopeId }
 
 export interface ScopeMetadata {
   readonly label?: string

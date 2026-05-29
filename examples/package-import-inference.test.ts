@@ -1,12 +1,71 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Effect, fx, ScopedEffect, type Fx } from '@briancavalier/fx'
-import { scope, type AnyScope } from '@briancavalier/fx/scope'
+import * as concurrentApi from '@briancavalier/fx/concurrent'
+import * as scopeApi from '@briancavalier/fx/scope'
+import * as timeoutApi from '@briancavalier/fx/timeout'
+import {
+  RaceAllFailed,
+  all,
+  firstSuccess,
+  fork,
+  forkEach,
+  forkIn,
+  mapAll,
+  race,
+  withBoundedConcurrency,
+  withCoopConcurrency,
+  withUnboundedConcurrency
+} from '@briancavalier/fx/concurrent'
+import { sameScope, scope, scopeId, scopeLabel, withScope, type AnyScope } from '@briancavalier/fx/scope'
+import { TimeoutInterrupt, timeout, timeoutIn } from '@briancavalier/fx/timeout'
 
 type EffectOf<T> = T extends Fx<infer E, unknown> ? E : never
 type IsAny<T> = 0 extends 1 & T ? true : false
+type HasExport<Module, Name extends PropertyKey> = Name extends keyof Module ? true : false
 
 describe('package import inference', () => {
+  it('exposes the intended curated concurrency, scope, and timeout names', () => {
+    assert.equal(typeof fork, 'function')
+    assert.equal(typeof forkEach, 'function')
+    assert.equal(typeof forkIn, 'function')
+    assert.equal(typeof all, 'function')
+    assert.equal(typeof mapAll, 'function')
+    assert.equal(typeof race, 'function')
+    assert.equal(typeof firstSuccess, 'function')
+    assert.equal(typeof withBoundedConcurrency, 'function')
+    assert.equal(typeof withUnboundedConcurrency, 'function')
+    assert.equal(typeof withCoopConcurrency, 'function')
+    assert.equal(typeof RaceAllFailed, 'function')
+
+    assert.equal(typeof scope, 'function')
+    assert.equal(typeof scopeId, 'function')
+    assert.equal(typeof scopeLabel, 'function')
+    assert.equal(typeof sameScope, 'function')
+    assert.equal(typeof withScope, 'function')
+
+    assert.equal(typeof timeout, 'function')
+    assert.equal(typeof timeoutIn, 'function')
+    assert.equal(typeof TimeoutInterrupt, 'function')
+
+    const noConcurrentEffect: HasExport<typeof concurrentApi, `Con${'currently'}`> = false
+    const noConcurrentConstructor: HasExport<typeof concurrentApi, `con${'currently'}`> = false
+    const noFirstSettled: HasExport<typeof concurrentApi, `first${'Settled'}`> = false
+    const noAllPolicy: HasExport<typeof concurrentApi, `all${'Policy'}`> = false
+    const noFirstSettledPolicy: HasExport<typeof concurrentApi, `first${'Settled'}Policy`> = false
+    const noFirstSuccessPolicy: HasExport<typeof concurrentApi, `first${'Success'}Policy`> = false
+    const noScopeTypeId: HasExport<typeof scopeApi, `Scope${'Type'}Id`> = false
+    const noTimeoutInScope: HasExport<typeof timeoutApi, `timeout${'In'}Scope`> = false
+    assert.equal(noConcurrentEffect, false)
+    assert.equal(noConcurrentConstructor, false)
+    assert.equal(noFirstSettled, false)
+    assert.equal(noAllPolicy, false)
+    assert.equal(noFirstSettledPolicy, false)
+    assert.equal(noFirstSuccessPolicy, false)
+    assert.equal(noScopeTypeId, false)
+    assert.equal(noTimeoutInScope, false)
+  })
+
   it('preserves Effect instance types through package declarations', () => {
     class AskName extends Effect('test/package-import-inference/AskName')<string, string> { }
 

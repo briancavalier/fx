@@ -60,9 +60,9 @@ describe('YieldFrom', () => {
     assert.deepEqual(result, ['done', [1, 2]])
   })
 
-  it('collects yields from a same-name scope token', () => {
-    const FirstScope = scope<Yielding<'item'>>()('test/YieldFrom/same-name')
-    const SecondScope = scope<Yielding<'item'>>()('test/YieldFrom/same-name')
+  it('collects yields from a same-id scope token', () => {
+    const FirstScope = scope<Yielding<'item'>>()('test/YieldFrom/same-id')
+    const SecondScope = scope<Yielding<'item'>>()('test/YieldFrom/same-id')
     const result = fx(function* () {
       yield* yieldFrom(SecondScope, 'item')
       return 'done'

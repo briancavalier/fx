@@ -17,7 +17,7 @@ export class Semaphore {
     }
     release() {
         if (this.waiters.length)
-            this.waiters.shift()();
+            queueMicrotask(this.waiters.shift());
         else
             this.available++;
     }
@@ -28,9 +28,14 @@ const acquired = () => ({
 });
 const acquire = (waiters) => {
     let waiter;
+    let cancelled = false;
     return {
-        promise: new Promise(r => waiters.push(waiter = r)),
+        promise: new Promise(r => waiters.push(waiter = () => {
+            if (!cancelled)
+                r();
+        })),
         [Symbol.dispose]: () => {
+            cancelled = true;
             const i = waiters.indexOf(waiter);
             if (i >= 0)
                 waiters.splice(i, 1);

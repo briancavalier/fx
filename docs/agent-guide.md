@@ -164,10 +164,9 @@ named boundary is real and useful for the application.
 
 ## Concurrency and resources
 
-Use `all` and `race` to describe structured concurrency. Use `firstSettled` or
-`firstSuccess` to choose race result policy, then choose an execution strategy
-with `withBoundedConcurrency`, `withUnboundedConcurrency`, or
-`withCoopConcurrency`.
+Use `all`, `race`, and `firstSuccess` as structured concurrency operators.
+Then choose a scheduling strategy with `withBoundedConcurrency`,
+`withUnboundedConcurrency`, or `withCoopConcurrency`.
 
 Use named scopes and finalization helpers when resources need cleanup. Keep
 acquire/register critical sections small and explicit.

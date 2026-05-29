@@ -16,7 +16,8 @@ const loadDashboard = fx(function* () {
 })
 ```
 
-`all` describes the request. The handler chooses the execution strategy:
+`all` describes the structured operator. The scheduler handler chooses the
+execution strategy:
 `withBoundedConcurrency`, `withUnboundedConcurrency`, or `withCoopConcurrency`.
 
 Handler pipeline:
@@ -28,9 +29,9 @@ loadDashboard.pipe(
 )
 ```
 
-Use `race` with `firstSettled` for first-settled semantics, or `firstSuccess`
-when failures should be ignored until every child fails. Then choose an
-execution strategy handler for the race.
+Use `race` for first-settled semantics, or `firstSuccess` when failures should
+be ignored until every child fails. Then choose an execution strategy handler
+for the race.
 
 Common mistake: using raw promises for child work that should be cancelled or
 disposed when the parent fails.

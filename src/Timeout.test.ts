@@ -4,9 +4,10 @@ import { Fail, fail, returnFail } from './Fail.js'
 import { forkIn, withBoundedConcurrency, withUnboundedConcurrency } from './Concurrent.js'
 import { fx, ok, run, runPromise } from './Fx.js'
 import { andFinallyExit } from './Finalization.js'
+import type { Fx } from './Fx.js'
 import { control } from './Handler.js'
 import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
-import { scope, withScope, type Exit } from './Scope.js'
+import { scope, withScope, type AnyScope, type Exit } from './Scope.js'
 import { TimeoutInterrupt, timeout, timeoutIn } from './Timeout.js'
 import { sleep, withClock } from './Time.js'
 import { getTrace } from './Trace.js'
@@ -192,6 +193,18 @@ describe('Timeout', () => {
     }, /Unhandled effect in run/)
   })
 
+  it('preserves timeout result inference and exposes typed interruption reason', () => {
+    const reason = { type: 'typed-timeout' } as const
+    const program = ok('ok' as const).pipe(
+      timeout({ ms: 1, reason: () => reason })
+    )
+
+    const value: ResultOf<typeof program> = 'ok'
+    const hasTimeoutInterrupt: HasEffect<typeof program, InterruptFrom<AnyScope, typeof reason>> = true
+    void value
+    void hasTimeoutInterrupt
+  })
+
   it('timeoutIn can interrupt a caller-owned scope while non-daemon work keeps it alive', async () => {
     const c = new VirtualClock(0)
     const reason = { type: 'scope-timeout' }
@@ -324,3 +337,7 @@ const traceMessages = (e: unknown) => {
   }
   return messages
 }
+
+type EffectOf<T> = T extends Fx<infer E, unknown> ? E : never
+type ResultOf<T> = T extends Fx<unknown, infer A> ? A : never
+type HasEffect<T, E> = [Extract<EffectOf<T>, E>] extends [never] ? false : true

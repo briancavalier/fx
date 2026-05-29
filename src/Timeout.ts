@@ -36,12 +36,14 @@ export function timeout<const Options extends AnyTimeoutOptions>(
     fx(function* () {
       yield* timeoutInWithTrace(timeoutScope, options, { origin, trace })
 
-      yield* forkIn(timeoutScope, attempt(f as Fx<Fail<ErrorsOf<E>>, A>).pipe(
+      yield* forkIn(timeoutScope, attempt(f).pipe(
         flatMap(result => returnFrom(timeoutScope, result))
       ), { origin, trace })
     }).pipe(
       withScope(timeoutScope),
-      flatMap(unwrapAttempt)
+      // The private timeout scope token cannot be named by callers, but
+      // TypeScript cannot prove a generic E has no matching ReturnFrom.
+      flatMap(result => unwrapAttempt(result as AttemptResult<ErrorsOf<E>, A> | void))
     ) as Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<AnyScope, TimeoutReasonOf<Options>>, A>
 }
 
@@ -118,11 +120,11 @@ export interface TimeoutExpired extends TraceOrigin {
 
 export type ErrorsOf<E> = UnwrapFail<Extract<E, Fail<any>>>
 
-const attempt = <const E, const A>(f: Fx<Fail<E>, A>): Fx<never, AttemptResult<E, A>> =>
+const attempt = <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>>, AttemptResult<ErrorsOf<E>, A>> =>
   f.pipe(
-    map(value => ({ type: 'success', value }) as const),
-    catchAll(failure => ok({ type: 'failure', failure }) as Fx<never, Failure<E>>)
-  ) as Fx<never, AttemptResult<E, A>>
+    map(value => ({ type: 'success', value } satisfies Success<A>)),
+    catchAll(failure => ok({ type: 'failure', failure } satisfies Failure<ErrorsOf<E>>))
+  )
 
 type UnwrapFail<F> = F extends Fail<infer E> ? E : never
 

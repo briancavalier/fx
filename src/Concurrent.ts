@@ -50,7 +50,7 @@ export const fork = <const E, const A>(
   const trace = traceOrigin(options, 'fx/Concurrent/fork', fork, 'fork')
   return withCapturedHandlers('fx/Concurrent/Fork', f).pipe(
     flatMap(fx => new Fork({ fx, ...trace }) as Fx<Fork, Task<A, ErrorsOf<E>>>)
-  ) as Fx<Exclude<E, Async | Fail<any>> | Fork | HandlerCapture<'fx/Concurrent/Fork'>, Task<A, ErrorsOf<E>>>
+  )
 }
 
 /**
@@ -68,7 +68,7 @@ export const forkIn = <const Scope extends AnyScope, const E, const A>(
   const trace = traceOrigin(options, 'fx/Concurrent/forkIn', forkIn, 'fork')
   return withCapturedHandlers('fx/Concurrent/ForkIn', f).pipe(
     flatMap(fx => new ScopedFork(scope, { fx, ...trace }) as Fx<ScopedFork<Scope>, Task<A, ErrorsOf<E>>>)
-  ) as Fx<Exclude<E, Async> | ScopedFork<Scope> | HandlerCapture<'fx/Concurrent/ForkIn'>, Task<A, ErrorsOf<E>>>
+  )
 }
 
 /**
@@ -89,6 +89,7 @@ export const forkEach = <const Fxs extends readonly Fx<unknown, unknown>[]>(
     ps.push(yield* fork(fxs[i], childTraceOrigin(parent, i, kind)))
   }
   return ps
+// TypeScript cannot derive the mapped task tuple from indexed pushes.
 }) as Fx<Exclude<EffectsOf<Fxs[number]>, Async | Fail<any>> | Fork, {
   readonly [K in keyof Fxs]: Task<ResultOf<Fxs[K]>, ErrorsOf<EffectsOf<Fxs[K]>>>
 }>
@@ -106,6 +107,8 @@ export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(
     const tasks = yield* forkEachScoped(concurrentScope, fxs, trace)
     const results = yield* waitAllTasks(tasks)
     return results as { readonly [K in keyof Fxs]: ResultOf<Fxs[K]> }
+  // The internal scope is private, so its ReturnFrom branch is not observable
+  // through the public all result type.
   }).pipe(withScope(concurrentScope)) as Fx<StructuredEffects<Fxs>, { readonly [K in keyof Fxs]: ResultOf<Fxs[K]> }>
 }
 
@@ -118,7 +121,7 @@ export const mapAll = <const A, const E, const B>(
   f: (item: A, index: number) => Fx<E, B>,
   options?: TraceOptions
 ): Fx<Exclude<E, Async> | Fork | Async | ErrorsOf<E>, readonly B[]> =>
-  all(Array.from(items, f), traceOrigin(options, 'fx/Concurrent/mapAll', mapAll, 'all')) as Fx<Exclude<E, Async> | Fork | Async | ErrorsOf<E>, readonly B[]>
+  all(Array.from(items, f), traceOrigin(options, 'fx/Concurrent/mapAll', mapAll, 'all'))
 
 /**
  * Race a tuple of computations and return the first settled result.
@@ -136,6 +139,8 @@ export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(
     if (result.type === 'failure') return yield* fail(result.failure)
     if (result.value === undefined && tasks.some(task => task._interrupted)) throw new InterruptedReturn()
     return yield* returnFrom(concurrentScope, result.value)
+  // The internal scope is private, so its ReturnFrom branch is exactly the race
+  // result value.
   }).pipe(withScope(concurrentScope))) as Fx<StructuredEffects<Fxs>, ResultOf<Fxs[number]>>
 }
 
@@ -155,6 +160,8 @@ export const firstSuccess = <const Fxs extends readonly Fx<unknown, unknown>[]>(
     if (result.type === 'failure') return yield* fail(new RaceAllFailed(result.failures))
     if (result.value === undefined && tasks.some(task => task._interrupted)) throw new InterruptedReturn()
     return yield* returnFrom(concurrentScope, result.value)
+  // The internal scope is private, so its ReturnFrom branch is exactly the
+  // first successful result value.
   }).pipe(withScope(concurrentScope))) as Fx<FirstSuccessEffects<Fxs>, ResultOf<Fxs[number]>>
 }
 
@@ -170,6 +177,7 @@ const forkEachScoped = <const Scope extends AnyScope, const Fxs extends readonly
     ps.push(yield* forkIn(concurrentScope, fxs[i], childTraceOrigin(parent, i, kind)))
   }
   return ps
+// TypeScript cannot derive the mapped task tuple from indexed pushes.
 }) as Fx<Exclude<EffectsOf<Fxs[number]>, Async> | ScopedFork<Scope> | HandlerCapture<'fx/Concurrent/ForkIn'>, {
   readonly [K in keyof Fxs]: Task<ResultOf<Fxs[K]>, ErrorsOf<EffectsOf<Fxs[K]>>>
 }>
@@ -249,6 +257,8 @@ const waitAllTasks = <const Tasks extends readonly Task<unknown, unknown>[]>(
   return results.length === tasks.length
     ? results as { readonly [K in keyof Tasks]: TaskResult<Tasks[K]> }
     : yield* never()
+// TypeScript cannot connect rejected task promises back to the task error row
+// after Promise.race over an indexed array.
 }) as Fx<Async | TaskErrors<Tasks[number]>, { readonly [K in keyof Tasks]: TaskResult<Tasks[K]> }>
 
 const waitFirstSettled = <const Tasks extends readonly Task<unknown, unknown>[]>(

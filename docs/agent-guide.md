@@ -171,6 +171,10 @@ Then choose a scheduling strategy with `withBoundedConcurrency`,
 Use named scopes and finalization helpers when resources need cleanup. Keep
 acquire/register critical sections small and explicit.
 
+Use `timeout(options)` for a private operation timeout. Use
+`timeoutIn(scope, options)` when installing a deadline for a caller-owned scope;
+the caller must still handle that scope with `withScope`.
+
 ```ts
 import { fx, runPromise } from "@briancavalier/fx"
 import { all, withBoundedConcurrency } from "@briancavalier/fx/concurrent"

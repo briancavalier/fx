@@ -97,9 +97,9 @@ const program =
   )
 ```
 
-Scopes let lifecycle semantics stay explicit too. A timeout interrupts the named
-scope, scoped finalizers observe how the scope exited, and the caller chooses
-how to recover:
+Scopes let lifecycle semantics stay explicit too. An operation timeout uses a
+private scope for the operation, scoped finalizers observe how the operation
+exited, and the caller chooses how to recover:
 
 ```ts
 import {
@@ -113,7 +113,7 @@ import {
 import { withUnboundedConcurrency } from "@briancavalier/fx/concurrent"
 import { andFinallyExit, InterruptFrom, scope, withScope } from "@briancavalier/fx/scope"
 import { defaultTime, sleep } from "@briancavalier/fx/time"
-import { timeout } from "@briancavalier/fx/timeout"
+import { timeout, timeoutIn } from "@briancavalier/fx/timeout"
 
 const RequestScope = scope("request")
 
@@ -143,6 +143,16 @@ await program.pipe(
   assertNoFail,
   runPromise
 )
+```
+
+Use `timeoutIn(scope, options)` when the deadline belongs to a caller-owned
+scope rather than one operation:
+
+```ts
+const request = fx(function* () {
+  yield* timeoutIn(RequestScope, { ms: 500, label: "request deadline" })
+  return yield* loadUser
+})
 ```
 
 Core primitives are exported from `@briancavalier/fx`. Optional features are

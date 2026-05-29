@@ -10,5 +10,9 @@ export class ScopedFork<
 
 export interface ScopedForkContext extends TraceOrigin {
   readonly fx: Fx<unknown, unknown>
-  readonly keepAlive?: boolean
+  /**
+   * Internal daemon scoped forks are still owned by their scope, but do not
+   * hold the scope open on normal completion.
+   */
+  readonly daemon?: boolean
 }

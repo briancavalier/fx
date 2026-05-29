@@ -49,8 +49,9 @@ export function timeout<const Options extends AnyTimeoutOptions>(
  * Schedule a delayed interruption for a caller-owned scope.
  *
  * `timeoutIn` does not install a scope boundary. The caller must handle the
- * same scope with {@link withScope}; when the scope exits before the delay, the
- * scope finalizes the timer fork.
+ * same scope with {@link withScope}. The timer fork is scope-owned, but it is
+ * internal daemon work: it can interrupt the scope while other scope-owned work
+ * keeps the scope alive, but it does not keep the scope alive by itself.
  */
 export function timeoutIn<const Scope extends AnyScope, const Options extends AnyTimeoutOptions>(
   scope: Scope,
@@ -73,7 +74,7 @@ function timeoutInWithTrace<const Scope extends AnyScope, const Options extends 
     const task = yield* withCapturedHandlers('fx/Concurrent/ForkIn', sleep(options.ms).pipe(
       flatMap(() => interruptFrom(scope, makeTimeoutReason(options, { ms: options.ms, origin: reasonOrigin, trace })))
     )).pipe(
-      flatMap(fx => new ScopedFork(scope, { fx, ...traceOrigin, keepAlive: false }))
+      flatMap(fx => new ScopedFork(scope, { fx, ...traceOrigin, daemon: true }))
     )
     yield* andFinallyExit(scope, exit => assertPromise(() => task.interrupt(exitReason(exit))))
   })

@@ -2117,6 +2117,38 @@ describe('Scope-owned fork lifetime', () => {
     assert.deepEqual(events, ['forkEach done'])
   })
 
+  it('keeps non-daemon forkIn children scope-owned across normal scope exit', async () => {
+    const TestScope = scope('test/ForkIn/non-daemon')
+    const events = [] as string[]
+    let settled = false
+
+    const result = fx(function* () {
+      yield* forkIn(TestScope, fx(function* () {
+        yield* delayFx(10)
+        events.push('forkIn done')
+      }))
+      return 'parent done'
+    }).pipe(
+      withScope(TestScope),
+      withUnboundedConcurrency,
+      returnFail,
+      runPromise
+    ).then(result => {
+      settled = true
+      return result
+    })
+
+    await Promise.resolve()
+    assert.equal(settled, false)
+    assert.deepEqual(events, [])
+
+    const r = await result
+    assert.ok(!Fail.is(r))
+    assert.equal(r, 'parent done')
+    assert.equal(settled, true)
+    assert.deepEqual(events, ['forkIn done'])
+  })
+
   it('interrupts queued bounded forkIn children before they start', async () => {
     const TestScope = scope('test/ForkIn/bounded-queued')
     const reason = { type: 'bounded-interrupt' } as const

@@ -1,11 +1,11 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Fail, fail, returnFail } from './Fail.js'
-import { forkIn, withUnboundedConcurrency } from './Concurrent.js'
+import { forkIn, withBoundedConcurrency, withUnboundedConcurrency } from './Concurrent.js'
 import { fx, ok, run, runPromise } from './Fx.js'
 import { andFinallyExit } from './Finalization.js'
 import { control } from './Handler.js'
-import { InterruptFrom } from './InterruptFrom.js'
+import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
 import { scope, withScope, type Exit } from './Scope.js'
 import { TimeoutInterrupt, timeout, timeoutIn } from './Timeout.js'
 import { sleep, withClock } from './Time.js'
@@ -192,7 +192,7 @@ describe('Timeout', () => {
     }, /Unhandled effect in run/)
   })
 
-  it('timeoutIn interrupts a caller-owned scope after the delay', async () => {
+  it('timeoutIn can interrupt a caller-owned scope while non-daemon work keeps it alive', async () => {
     const c = new VirtualClock(0)
     const reason = { type: 'scope-timeout' }
     const exits = [] as Exit[]
@@ -224,7 +224,7 @@ describe('Timeout', () => {
     assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope, reason }])
   })
 
-  it('timeoutIn timer is finalized when the caller-owned scope exits first', async () => {
+  it('timeoutIn daemon timer does not delay normal scope completion', async () => {
     const c = new VirtualClock(0)
     let reasons = 0
 
@@ -249,6 +249,47 @@ describe('Timeout', () => {
     assert.ok(!Fail.is(r))
     assert.equal(r, 'ok')
     assert.equal(reasons, 0)
+  })
+
+  it('timeoutIn does not start queued daemon timer work after scope interruption', async () => {
+    const c = new VirtualClock(0)
+    const reason = { type: 'manual-interrupt' }
+    let timeoutReasons = 0
+    const events = [] as string[]
+
+    const p = fx(function* () {
+      yield* forkIn(TestScope, fx(function* () {
+        events.push('child:start')
+        yield* andFinallyExit(TestScope, exit => fx(function* () {
+          events.push(`child:finalize:${exit.type}`)
+        }))
+        yield* sleep(100)
+      }))
+
+      yield* timeoutIn(TestScope, {
+        ms: 10,
+        reason: () => void (timeoutReasons += 1)
+      })
+
+      yield* sleep(0)
+      yield* interruptFrom(TestScope, reason)
+    }).pipe(
+      withScope(TestScope),
+      control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
+      withBoundedConcurrency(1),
+      returnFail,
+      withClock(c),
+      runPromise
+    )
+
+    await c.step(0)
+    const result = await p
+    await c.step(100)
+
+    assert.ok(!Fail.is(result))
+    assert.equal(result, reason)
+    assert.equal(timeoutReasons, 0)
+    assert.deepEqual(events, ['child:start', 'child:finalize:interrupted'])
   })
 
   it('uses timeoutIn label in caller-owned scope timer traces', async () => {

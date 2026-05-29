@@ -225,7 +225,7 @@ class ScopeController {
             const exit = this.settled;
             if (exit !== undefined && exit.type !== 'success')
                 break;
-            if (initialExit.type === 'success' && !hasKeepAlive(pending, this.tasks))
+            if (initialExit.type === 'success' && !hasNonDaemonTask(pending, this.tasks))
                 break;
             const result = await Promise.race([...pending].map(task => task.promise.then(value => ({ task, status: 'fulfilled', value }), reason => ({ task, status: 'rejected', reason }))));
             pending.delete(result.task);
@@ -245,9 +245,9 @@ class ScopeController {
         return results.flatMap(result => result.status === 'rejected' ? cleanupFailuresOf(result.reason) : []);
     }
 }
-const hasKeepAlive = (pending, tasks) => {
+const hasNonDaemonTask = (pending, tasks) => {
     for (const task of pending) {
-        if (tasks.get(task)?.keepAlive !== false)
+        if (tasks.get(task)?.daemon !== true)
             return true;
     }
     return false;

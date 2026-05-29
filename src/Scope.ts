@@ -309,7 +309,7 @@ class ScopeController<Scope extends AnyScope> {
     while (pending.size > 0) {
       const exit = this.settled
       if (exit !== undefined && exit.type !== 'success') break
-      if (initialExit.type === 'success' && !hasKeepAlive(pending, this.tasks)) break
+      if (initialExit.type === 'success' && !hasNonDaemonTask(pending, this.tasks)) break
 
       const result = await Promise.race([...pending].map(task =>
         task.promise.then(
@@ -341,12 +341,12 @@ class ScopeController<Scope extends AnyScope> {
   }
 }
 
-const hasKeepAlive = (
+const hasNonDaemonTask = (
   pending: Iterable<Task<unknown, unknown>>,
   tasks: Map<Task<unknown, unknown>, ScopedForkContext>
 ) => {
   for (const task of pending) {
-    if (tasks.get(task)?.keepAlive !== false) return true
+    if (tasks.get(task)?.daemon !== true) return true
   }
   return false
 }

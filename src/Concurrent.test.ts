@@ -17,6 +17,9 @@ import { getTrace, snapshotError } from './Trace.js'
 
 const asyncValue = <A>(a: A) => assertPromise(() => Promise.resolve(a))
 const delayFx = (ms: number) => assertPromise<void>(() => delay(ms))
+type EffectOf<T> = T extends Fx<infer E, unknown> ? E : never
+type ResultOf<T> = T extends Fx<unknown, infer A> ? A : never
+type IsAny<T> = 0 extends 1 & T ? true : false
 
 // @ts-expect-error markHandled is runtime-internal bookkeeping, not public API.
 const noPublicMarkHandled: typeof import('./Task.js').markHandled = undefined
@@ -24,6 +27,40 @@ void noPublicMarkHandled
 
 describe('Fork', () => {
   describe('fork schedulers', () => {
+    it('keeps public concurrency helper inference from degrading to any', () => {
+      const TestScope = scope('test/Fork/NoAnyInference')
+      const forked = fork(ok('value' as const))
+      const forkedIn = forkIn(TestScope, ok('scoped' as const))
+      const forkedEach = forkEach([ok(1), ok('two')] as const)
+      const allValues = all([ok(1), ok('two')] as const)
+      const mappedValues = mapAll([1, 2], n => ok(n + 1))
+      const raced = race([ok(1), ok('two')] as const)
+      const first = firstSuccess([fail(new Error('nope')), ok('yes' as const)] as const)
+      const scoped = fx(function* () {
+        return yield* returnFrom(TestScope, 'early' as const)
+      }).pipe(withScope(TestScope))
+
+      const checks = [
+        false satisfies IsAny<EffectOf<typeof forked>>,
+        false satisfies IsAny<ResultOf<typeof forked>>,
+        false satisfies IsAny<EffectOf<typeof forkedIn>>,
+        false satisfies IsAny<ResultOf<typeof forkedIn>>,
+        false satisfies IsAny<EffectOf<typeof forkedEach>>,
+        false satisfies IsAny<ResultOf<typeof forkedEach>>,
+        false satisfies IsAny<EffectOf<typeof allValues>>,
+        false satisfies IsAny<ResultOf<typeof allValues>>,
+        false satisfies IsAny<EffectOf<typeof mappedValues>>,
+        false satisfies IsAny<ResultOf<typeof mappedValues>>,
+        false satisfies IsAny<EffectOf<typeof raced>>,
+        false satisfies IsAny<ResultOf<typeof raced>>,
+        false satisfies IsAny<EffectOf<typeof first>>,
+        false satisfies IsAny<ResultOf<typeof first>>,
+        false satisfies IsAny<EffectOf<typeof scoped>>,
+        false satisfies IsAny<ResultOf<typeof scoped>>
+      ]
+      assert.deepEqual(checks, Array.from({ length: checks.length }, () => false))
+    })
+
     it('withCoopConcurrency handles explicit Fork and structured concurrency', async () => {
       const program = fx(function* () {
         const task = yield* fork(ok(1))

@@ -201,8 +201,12 @@ describe('Timeout', () => {
 
     const value: ResultOf<typeof program> = 'ok'
     const hasTimeoutInterrupt: HasEffect<typeof program, InterruptFrom<AnyScope, typeof reason>> = true
+    const effectIsNotAny: IsAny<EffectOf<typeof program>> = false
+    const resultIsNotAny: IsAny<ResultOf<typeof program>> = false
     void value
     void hasTimeoutInterrupt
+    void effectIsNotAny
+    void resultIsNotAny
   })
 
   it('timeoutIn can interrupt a caller-owned scope while non-daemon work keeps it alive', async () => {
@@ -341,3 +345,4 @@ const traceMessages = (e: unknown) => {
 type EffectOf<T> = T extends Fx<infer E, unknown> ? E : never
 type ResultOf<T> = T extends Fx<unknown, infer A> ? A : never
 type HasEffect<T, E> = [Extract<EffectOf<T>, E>] extends [never] ? false : true
+type IsAny<T> = 0 extends 1 & T ? true : false

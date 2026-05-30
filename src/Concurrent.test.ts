@@ -2243,6 +2243,55 @@ describe('Scope-owned fork lifetime', () => {
     assert.deepEqual(events, ['forkIn done'])
   })
 
+  it('does not keep manually interrupted forkIn tasks alive across normal scope exit', async () => {
+    const TestScope = scope('test/ForkIn/manually-interrupted')
+    const events = [] as string[]
+    let started!: () => void
+    const startedPromise = new Promise<void>(resolve => { started = resolve })
+
+    const program = fx(function* () {
+      const task = yield* forkIn(TestScope, fx(function* () {
+        started()
+        yield* andFinallyExit(TestScope, exit => fx(function* () {
+          events.push(`finalize ${exit.type}`)
+        }))
+        yield* awaitAbort()
+      }))
+      yield* assertPromise(() => startedPromise)
+      yield* assertPromise(() => task.interrupt('manual'))
+      return 'parent done'
+    }).pipe(
+      withScope(TestScope),
+      withUnboundedConcurrency
+    )
+    const result = await withTimeout(runPromise(program as never), 100)
+
+    assert.equal(result, 'parent done')
+    assert.deepEqual(events, ['finalize success'])
+  })
+
+  it('waits for remaining non-daemon forkIn tasks after ignoring manually interrupted tasks', async () => {
+    const TestScope = scope('test/ForkIn/manually-interrupted-with-running')
+    const events = [] as string[]
+
+    const program = fx(function* () {
+      const interrupted = yield* forkIn(TestScope, awaitAbort())
+      yield* forkIn(TestScope, fx(function* () {
+        yield* delayFx(10)
+        events.push('running done')
+      }))
+      yield* assertPromise(() => interrupted.interrupt('manual'))
+      return 'parent done'
+    }).pipe(
+      withScope(TestScope),
+      withUnboundedConcurrency
+    )
+    const result = await withTimeout(runPromise(program as never), 100)
+
+    assert.equal(result, 'parent done')
+    assert.deepEqual(events, ['running done'])
+  })
+
   it('interrupts queued bounded forkIn children before they start', async () => {
     const TestScope = scope('test/ForkIn/bounded-queued')
     const reason = { type: 'bounded-interrupt' } as const

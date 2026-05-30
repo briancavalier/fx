@@ -309,6 +309,7 @@ class ScopeController<Scope extends AnyScope> {
     const pending = new Set(this.tasks.keys())
 
     while (pending.size > 0) {
+      removeInterruptedTasks(pending)
       const exit = this.settled
       if (exit !== undefined && exit.type !== 'success') break
       if (initialExit.type === 'success' && !hasNonDaemonTask(pending, this.tasks)) break
@@ -328,6 +329,7 @@ class ScopeController<Scope extends AnyScope> {
     }
 
     const exit = this.settled ?? initialExit
+    removeInterruptedTasks(pending)
     if (pending.size > 0 || exit.type !== 'success') {
       failures.push(...await this.interruptPending(pending, interruptReason(exit)))
     }
@@ -351,6 +353,12 @@ const hasNonDaemonTask = (
     if (tasks.get(task)?.daemon !== true) return true
   }
   return false
+}
+
+const removeInterruptedTasks = (pending: Set<Task<unknown, unknown>>) => {
+  for (const task of pending) {
+    if (task._interrupted) pending.delete(task)
+  }
 }
 
 interface ScopeRelease<Scope extends AnyScope> {

@@ -7,7 +7,7 @@ import type { TraceOrigin } from '../../Trace.js'
 /**
  * Request that a computation be started concurrently.
  *
- * A `Fork` request returns a {@link Task} handle. The scheduling policy is
+ * A `Fork` request returns a {@link Task} handle. The scheduling strategy is
  * supplied by handlers such as `withBoundedConcurrency` or `withUnboundedConcurrency`.
  */
 export class Fork extends Effect('fx/Concurrent/Fork')<ForkContext, Task<unknown, unknown>> { }

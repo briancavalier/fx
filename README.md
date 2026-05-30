@@ -98,8 +98,8 @@ const program =
 ```
 
 Scopes let lifecycle semantics stay explicit too. An operation timeout uses a
-private scope for the operation, scoped finalizers observe how the operation
-exited, and the caller chooses how to recover:
+private diagnostic-hidden scope for the operation, scoped finalizers observe how
+the operation exited, and the caller chooses how to recover:
 
 ```ts
 import {
@@ -145,15 +145,23 @@ await program.pipe(
 )
 ```
 
-Use `timeoutIn(scope, options)` when the deadline belongs to a caller-owned
-scope rather than one operation:
+Use `timeoutIn(scope, options)` when the deadline is a delayed interruption of a
+caller-owned scope rather than a timeout for one operation. The caller still
+owns the scope boundary, and a fork scheduler outside that boundary schedules
+the internal timer:
 
 ```ts
 const request = fx(function* () {
   yield* timeoutIn(RequestScope, { ms: 500, label: "request deadline" })
   return yield* loadUser
-})
+}).pipe(
+  withScope(RequestScope),
+  withUnboundedConcurrency
+)
 ```
+
+That timer is daemon scoped work: it can interrupt the scope while other scoped
+work keeps the scope alive, but it does not keep the scope alive by itself.
 
 Core primitives are exported from `@briancavalier/fx`. Optional features are
 exported from named subpaths, so effect signatures stay concise:

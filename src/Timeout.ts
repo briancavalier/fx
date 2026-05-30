@@ -50,10 +50,12 @@ export function timeout<const Options extends AnyTimeoutOptions>(
 /**
  * Schedule a delayed interruption for a caller-owned scope.
  *
- * `timeoutIn` does not install a scope boundary. The caller must handle the
- * same scope with {@link withScope}. The timer fork is scope-owned, but it is
- * internal daemon work: it can interrupt the scope while other scope-owned work
- * keeps the scope alive, but it does not keep the scope alive by itself.
+ * `timeoutIn` does not install a scope boundary and does not schedule the timer
+ * by itself. The caller must handle the same scope with {@link withScope} and
+ * place a fork scheduler outside that scope boundary. The timer fork is
+ * scope-owned, but it is internal daemon work: it can interrupt the scope while
+ * other scope-owned work keeps the scope alive, but it does not keep the scope
+ * alive by itself.
  */
 export function timeoutIn<const Scope extends AnyScope, const Options extends AnyTimeoutOptions>(
   scope: Scope,

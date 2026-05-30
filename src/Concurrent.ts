@@ -58,7 +58,13 @@ export const fork = <const E, const A>(
  *
  * `forkIn` separates lifetime from scheduling: the matching scope owns the
  * returned task's lifetime, while the nearest fork concurrency handler decides
- * when the task is allowed to start.
+ * when the task is allowed to start. Apply the matching {@link withScope}
+ * inside an outer fork scheduler, for example
+ * `program.pipe(withScope(scope), withUnboundedConcurrency)`.
+ *
+ * The types follow normal effect elimination: `forkIn` introduces a
+ * `ScopedFork<Scope>`, `withScope(scope)` handles it and may introduce `Fork`,
+ * and a fork scheduler handles `Fork` before execution.
  */
 export const forkIn = <const Scope extends AnyScope, const E, const A>(
   scope: Scope,
@@ -152,7 +158,7 @@ export const firstSuccess = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   options?: TraceOptions
 ) => {
   const concurrentScope = scope(`fx/Concurrent/firstSuccess/${nextScopeId++}`, { diagnostic: false })
-  const trace = traceOrigin(options, 'fx/Concurrent/race', firstSuccess, 'race')
+  const trace = traceOrigin(options, 'fx/Concurrent/firstSuccess', firstSuccess, 'race')
   return new RuntimeCloseBoundary(fx(function* () {
     if (fxs.length === 0) return yield* fail(new RaceAllFailed([]))
     const tasks = yield* forkEachScoped(concurrentScope, fxs, trace)

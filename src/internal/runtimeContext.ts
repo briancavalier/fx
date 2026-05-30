@@ -13,11 +13,24 @@ export interface RuntimeContext {
   readonly traceCapturePolicy?: TraceCapturePolicy
   readonly activeScopes?: readonly ActiveScopeDiagnostic[]
   readonly interruptionReason?: unknown
+  readonly scopeExitSources?: readonly RuntimeScopeExitSource[]
+  readonly clearScopeExitSources?: boolean
 }
 
 export interface ActiveScopeDiagnostic {
   readonly id: PropertyKey
   readonly label: string
+}
+
+export interface RuntimeScopeExitSource {
+  readonly promise: Promise<RuntimeScopeExit>
+}
+
+export class RuntimeScopeExit {
+  constructor(
+    readonly exit: unknown,
+    readonly reason?: unknown
+  ) { }
 }
 
 export const RuntimeContextTypeId = Symbol('fx/RuntimeContext')
@@ -96,13 +109,29 @@ export const withActiveScope = <E, A>(scope: ActiveScopeDiagnostic, fx: Fx<E, A>
   return withRuntimeContext({ activeScopes: nextScopes }, fx)
 }
 
+export const withScopeExitSource = <E, A>(source: RuntimeScopeExitSource, fx: Fx<E, A>): Fx<E, A> =>
+  withRuntimeContext({ scopeExitSources: [source] }, fx)
+
+export const withoutScopeExitSources = <E, A>(fx: Fx<E, A>): Fx<E, A> =>
+  withRuntimeContext({ scopeExitSources: [], clearScopeExitSources: true }, fx)
+
 const mergeRuntimeContext = (
   previous: RuntimeContext | undefined,
   next: RuntimeContext
-): RuntimeContext => ({
-  ...previous,
-  ...next
-})
+): RuntimeContext => {
+  const scopeExitSources = next.clearScopeExitSources === true
+    ? next.scopeExitSources
+    : previous?.scopeExitSources === undefined
+    ? next.scopeExitSources
+    : next.scopeExitSources === undefined
+      ? previous.scopeExitSources
+      : [...previous.scopeExitSources, ...next.scopeExitSources]
+  return {
+    ...previous,
+    ...next,
+    scopeExitSources
+  }
+}
 
 class RuntimeContextFx<E, A> implements Fx<E, A>, Pipeable {
   public readonly pipe = pipeThis as Pipeable['pipe']

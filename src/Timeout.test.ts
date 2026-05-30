@@ -260,6 +260,31 @@ describe('Timeout', () => {
     assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope, reason }])
   })
 
+  it('timeoutIn interrupts the owning scope while the parent body is parked', async () => {
+    const c = new VirtualClock(0)
+    const reason = { type: 'scope-timeout' }
+    let completed = false
+
+    const p = fx(function* () {
+      yield* timeoutIn(TestScope, { ms: 10, reason: () => reason })
+      yield* sleep(60_000)
+      completed = true
+    }).pipe(
+      withScope(TestScope),
+      control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
+      withUnboundedConcurrency,
+      returnFail,
+      withClock(c),
+      runPromise
+    )
+
+    await c.step(10)
+    const r = await p
+
+    assert.equal(r, reason)
+    assert.equal(completed, false)
+  })
+
   it('timeoutIn daemon timer does not delay normal scope completion', async () => {
     const c = new VirtualClock(0)
     let reasons = 0

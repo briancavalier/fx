@@ -16,6 +16,7 @@ import { cooperativeAssertPromise } from './internal/concurrent/cooperativeAsync
 import { InterruptedReturn, isInterpretingReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { ScopedFork } from './internal/scopedFork.js'
+import type { ScopedForkContext } from './internal/scopedFork.js'
 import type { AnyScope } from './Scope.js'
 
 export {
@@ -162,7 +163,7 @@ export const firstSuccess = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   const trace = traceOrigin(options, 'fx/Concurrent/firstSuccess', firstSuccess, 'race')
   return new RuntimeCloseBoundary(fx(function* () {
     if (fxs.length === 0) return yield* fail(new RaceAllFailed([]))
-    const tasks = yield* forkEachScoped(concurrentScope, fxs, trace)
+    const tasks = yield* forkEachScoped(concurrentScope, fxs, trace, 'task')
     const result = yield* waitFirstSuccess(tasks)
     if (result.type === 'failure') return yield* fail(new RaceAllFailed(result.failures))
     if (result.value === undefined && tasks.some(task => task._interrupted)) throw new InterruptedReturn()
@@ -175,19 +176,30 @@ export const firstSuccess = <const Fxs extends readonly Fx<unknown, unknown>[]>(
 const forkEachScoped = <const Scope extends AnyScope, const Fxs extends readonly Fx<unknown, unknown>[]>(
   concurrentScope: Scope,
   fxs: readonly [...Fxs],
-  options: TraceOrigin
+  options: TraceOrigin,
+  failure: ScopedForkContext['failure'] = 'join'
 ) => fx(function* () {
   const parent = traceOrigin(options, 'fx/Concurrent/forkEach', forkEachScoped, 'fork')
   const ps = [] as Task<unknown, unknown>[]
   const kind = childFrameKind(parent.trace)
   for (let i = 0; i < fxs.length; i++) {
-    ps.push(yield* forkIn(concurrentScope, fxs[i], childTraceOrigin(parent, i, kind)))
+    ps.push(yield* forkInScoped(concurrentScope, fxs[i], childTraceOrigin(parent, i, kind), failure))
   }
   return ps
 // TypeScript cannot derive the mapped task tuple from indexed pushes.
 }) as Fx<Exclude<EffectsOf<Fxs[number]>, Async> | ScopedFork<Scope> | HandlerCapture<'fx/Concurrent/ForkIn'>, {
   readonly [K in keyof Fxs]: Task<ResultOf<Fxs[K]>, ErrorsOf<EffectsOf<Fxs[K]>>>
 }>
+
+const forkInScoped = <const Scope extends AnyScope, const E, const A>(
+  scope: Scope,
+  f: Fx<E, A>,
+  trace: TraceOrigin,
+  failure: ScopedForkContext['failure']
+): Fx<Exclude<E, Async | Fail<any>> | ScopedFork<Scope> | HandlerCapture<'fx/Concurrent/ForkIn'>, Task<A, ErrorsOf<E>>> =>
+    withCapturedHandlers('fx/Concurrent/ForkIn', f).pipe(
+      flatMap(fx => new ScopedFork(scope, { fx, ...trace, failure }) as Fx<ScopedFork<Scope>, Task<A, ErrorsOf<E>>>)
+    )
 
 const childFrameKind = (trace: Trace | undefined) =>
   trace?.frame.kind === 'all' || trace?.frame.kind === 'race' ? trace.frame.kind : 'fork'

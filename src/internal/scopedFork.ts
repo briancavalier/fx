@@ -15,4 +15,5 @@ export interface ScopedForkContext extends TraceOrigin {
    * hold the scope open on normal completion.
    */
   readonly daemon?: boolean
+  readonly failure?: 'scope' | 'task' | 'join'
 }

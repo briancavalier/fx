@@ -2140,6 +2140,30 @@ describe('Scope-owned fork lifetime', () => {
     assert.deepEqual(exits, ['failure'])
   })
 
+  it('fails the owning scope when a forkIn child fails while the parent body is parked', async () => {
+    const TestScope = scope('test/ForkIn/child-failure-while-parent-parked')
+    const primary = new Error('child failed')
+    let completed = false
+
+    const result = await withTimeout(fx(function* () {
+      yield* forkIn(TestScope, fx(function* () {
+        yield* delayFx(0)
+        yield* fail(primary)
+      }))
+      yield* awaitAbort()
+      completed = true
+    }).pipe(
+      withScope(TestScope),
+      withUnboundedConcurrency,
+      returnFail,
+      runPromise
+    ), 100)
+
+    assert.ok(Fail.is(result))
+    assert.equal(snapshotError(result.arg).cause?.message, 'child failed')
+    assert.equal(completed, false)
+  })
+
   it('aggregates forkIn child failure before sibling cleanup failures', async () => {
     const TestScope = scope('test/ForkIn/failure-cleanup-aggregate')
     const primary = new Error('primary child failed')

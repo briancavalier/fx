@@ -1,7 +1,7 @@
 import { Async } from './Async.js'
 import { at } from './Breadcrumb.js'
 import { Abort } from './Abort.js'
-import { isEffect } from './Effect.js'
+import { isEffect, type AnyEffect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { Finalizer, Finally } from './Finalization.js'
 import { Fx, fx, ok } from './Fx.js'
@@ -12,7 +12,7 @@ import { Fork } from './internal/concurrent/effects.js'
 import { cooperativeAssertPromise } from './internal/concurrent/cooperativeAsync.js'
 import { drainIteratorReturn, isInterpretingReturn, isInterruptedReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
-import { interruptionReason, withActiveScope, type ActiveScopeDiagnostic } from './internal/runtimeContext.js'
+import { interruptionReason, RuntimeScopeExit, withActiveScope, withScopeExitSource, withoutScopeExitSources, type ActiveScopeDiagnostic } from './internal/runtimeContext.js'
 import { ScopeTypeId, sameScope, scopeId, type ScopeIdentity } from './internal/scopeIdentity.js'
 import { ScopedFork } from './internal/scopedFork.js'
 import type { ScopedForkContext } from './internal/scopedFork.js'
@@ -166,7 +166,8 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
     const activeScope = root && scope.diagnostic !== false ? scopeDiagnostic(scope) : undefined
     const withMaybeActiveScope = <E, A>(fx: Fx<E, A>): Fx<E, A> =>
       activeScope === undefined ? fx : withActiveScope(activeScope, fx)
-    const i = withMaybeActiveScope(this.fx)[Symbol.iterator]()
+    const scopedFx = root ? controller.withExitSource(this.fx) : this.fx
+    const i = withMaybeActiveScope(scopedFx)[Symbol.iterator]()
     const captured: CapturedHandler = {
       wrap: fx => new ScopeBoundary(fx, scope)
     }
@@ -177,9 +178,25 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
     const release = function* (exit: Exit<Scope>): Generator<unknown, ScopeRelease<Scope>> {
       if (released) return { exit, failures: [] }
       released = true
-      const { exit: finalExit, failures: taskFailures } = yield* withMaybeActiveScope(controller.join(exit))
-      const finalizerFailures = yield* withMaybeActiveScope(releaseSafely(controller.finalizers, finalExit))
+      const { exit: finalExit, failures: taskFailures } = yield* withMaybeActiveScope(withoutScopeExitSources(controller.join(exit)))
+      const finalizerFailures = yield* withMaybeActiveScope(withoutScopeExitSources(releaseSafely(controller.finalizers, finalExit)))
       return { exit: finalExit, failures: [...taskFailures, ...finalizerFailures] }
+    }
+    const finishRoot = function* (exit: Exit<Scope>, unhandledEffect?: AnyEffect): Generator<unknown, A> {
+      const { exit: finalExit, failures } = yield* release(exit)
+      if (finalExit.type === 'failure') {
+        const cleanupFailures = failures.flatMap(cleanupFailuresOf)
+        if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup([finalExit.failure.arg, ...cleanupFailures]))) as A
+        return (yield finalExit.failure) as A
+      }
+      const cleanupFailures = failures.flatMap(cleanupFailuresOf)
+      if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup(cleanupFailures))) as A
+      if (finalExit.type === 'returnFrom') return finalExit.value as A
+      if (finalExit.type === 'abort') return (yield (Abort.is(unhandledEffect) ? unhandledEffect : new Abort(finalExit.scope, undefined))) as A
+      if (finalExit.type === 'interrupted') {
+        return (yield (InterruptFrom.is(unhandledEffect) ? unhandledEffect : new InterruptFrom(finalExit.scope, finalExit.reason))) as A
+      }
+      return finalExit.value as A
     }
     const step = function* (ir: IteratorResult<unknown, A>): Generator<unknown, A, unknown> {
       while (!ir.done) {
@@ -200,44 +217,34 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
               controller.requestExit(exit)
               return effect.arg as A
             }
-            const { failures } = yield* release(exit)
-            const cleanupFailures = failures.flatMap(cleanupFailuresOf)
-            if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup(cleanupFailures))) as A
-            return effect.arg as A
+            return yield* finishRoot(exit)
           } else if (matchesScope && Abort.is(effect)) {
             const exit = { type: 'abort', scope } satisfies Exit<Scope>
             if (!root) {
               controller.requestExit(exit)
               return undefined as A
             }
-            const { failures } = yield* release(exit)
-            const cleanupFailures = failures.flatMap(cleanupFailuresOf)
-            if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup(cleanupFailures))) as A
-            return (yield effect) as A
+            return yield* finishRoot(exit, effect)
           } else if (matchesScope && InterruptFrom.is(effect)) {
             const exit = interruptedExit(scope, effect.arg)
             if (!root) {
               controller.requestExit(exit)
               return undefined as A
             }
-            const { failures } = yield* release(exit)
-            const cleanupFailures = failures.flatMap(cleanupFailuresOf)
-            if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup(cleanupFailures))) as A
-            return (yield effect) as A
+            return yield* finishRoot(exit, effect)
           } else if (Fail.is(effect)) {
             const exit = { type: 'failure', failure: effect } satisfies Exit
             if (!root) {
               return (yield effect) as A
             }
-            const { failures } = yield* release(exit)
-            const cleanupFailures = failures.flatMap(cleanupFailuresOf)
-            if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup([effect.arg, ...cleanupFailures]))) as A
-            return (yield effect) as A
+            return yield* finishRoot(exit)
           } else if (HandlerCapture.is(effect)) {
             const local = effect.arg === 'fx/Concurrent/ForkIn' ? capturedShared : captured
             ir = i.next([local, ...(yield effect) as any])
           } else {
-            ir = i.next(yield effect)
+            const result = yield effect
+            if (result instanceof RuntimeScopeExit) return yield* finishRoot(result.exit as Exit<Scope>)
+            ir = i.next(result)
           }
         } else {
           throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
@@ -246,18 +253,7 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
 
       const exit = { type: 'success', value: ir.value } satisfies Exit<Scope, A>
       if (!root) return ir.value
-      const result = yield* release(exit)
-      if (result.exit.type === 'failure') {
-        const cleanupFailures = result.failures.flatMap(cleanupFailuresOf)
-        if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup([result.exit.failure.arg, ...cleanupFailures]))) as A
-        return (yield result.exit.failure) as A
-      }
-      const cleanupFailures = result.failures.flatMap(cleanupFailuresOf)
-      if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup(cleanupFailures))) as A
-      if (result.exit.type === 'returnFrom') return result.exit.value as A
-      if (result.exit.type === 'abort') return (yield new Abort(result.exit.scope, undefined)) as A
-      if (result.exit.type === 'interrupted') return (yield new InterruptFrom(result.exit.scope, result.exit.reason)) as A
-      return ir.value
+      return yield* finishRoot(exit)
     }
 
     let completed = false
@@ -279,6 +275,10 @@ class ScopeController<Scope extends AnyScope> {
   readonly finalizers = [] as Finalizer<unknown>[]
   private readonly tasks = new Map<Task<unknown, unknown>, ScopedForkContext>()
   private settled?: Exit<Scope>
+  private readonly exitRequested = Promise.withResolvers<Exit<Scope>>()
+  private readonly exitSource = {
+    promise: this.exitRequested.promise.then(exit => new RuntimeScopeExit(exit, interruptReason(exit)))
+  }
 
   constructor(readonly scope: Scope) { }
 
@@ -290,19 +290,27 @@ class ScopeController<Scope extends AnyScope> {
     this.finalizers.push(finalizer)
   }
 
+  withExitSource<E, A>(fx: Fx<E, A>): Fx<E, A> {
+    return withScopeExitSource(this.exitSource, fx)
+  }
+
   *fork(context: ScopedForkContext): Generator<unknown, Task<unknown, unknown>, unknown> {
-    const task = (yield new Fork(context)) as Task<unknown, unknown>
+    const task = yield* withoutScopeExitSources(new Fork(context) as Fx<Fork, Task<unknown, unknown>>)
     task._markHandled()
     this.tasks.set(task, context)
+    this.watchTask(task)
     return task
   }
 
   requestExit(exit: Exit<Scope>) {
-    this.settled ??= exit
+    if (this.settled === undefined) {
+      this.settle(exit)
+      this.exitRequested.resolve(exit)
+    }
   }
 
   join(exit: Exit<Scope>): Fx<Async, { readonly exit: Exit<Scope>, readonly failures: readonly unknown[] }> {
-    if (exit.type !== 'success') this.requestExit(exit)
+    if (exit.type !== 'success' && this.settled === undefined) this.settle(exit)
     if (this.tasks.size === 0) return ok({ exit: this.settled ?? exit, failures: [] })
     return cooperativeAssertPromise(() => this.joinTasks(exit), at('fx/Scope/withScope/join', withScope))
   }
@@ -326,7 +334,7 @@ class ScopeController<Scope extends AnyScope> {
       pending.delete(result.task)
 
       if (result.status === 'rejected') {
-        this.settled = { type: 'failure', failure: new Fail(result.reason) }
+        this.settle({ type: 'failure', failure: new Fail(result.reason) })
         break
       }
     }
@@ -345,6 +353,20 @@ class ScopeController<Scope extends AnyScope> {
     return results.flatMap(result =>
       result.status === 'rejected' ? cleanupFailuresOf(result.reason) : []
     )
+  }
+
+  private watchTask(task: Task<unknown, unknown>) {
+    const failure = this.tasks.get(task)?.failure
+    if (failure === 'task' || failure === 'join') return
+    task.promise.catch(reason => {
+      if (!task._interrupted) {
+        this.requestExit({ type: 'failure', failure: new Fail(reason) })
+      }
+    })
+  }
+
+  private settle(exit: Exit<Scope>) {
+    this.settled = exit
   }
 }
 

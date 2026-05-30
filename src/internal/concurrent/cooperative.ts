@@ -11,7 +11,8 @@ import { captureTrace, getTrace } from '../../Trace.js'
 import { ForkError, capturePrependTraceWithContext, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from '../forkDiagnostics.js'
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from '../interrupt.js'
 import { withInterpretedReturn } from '../iteratorClose.js'
-import { currentRuntimeContext, getRuntimeContext, withActiveRuntimeContext } from '../runtimeContext.js'
+import { currentRuntimeContext, getRuntimeContext, RuntimeScopeExit, withActiveRuntimeContext } from '../runtimeContext.js'
+import type { RuntimeContext } from '../runtimeContext.js'
 import { shouldReleaseSlotForAsync } from './cooperativeAsync.js'
 
 export interface CooperativeConfig {
@@ -244,6 +245,7 @@ const startCooperativeAsync = (
   const context = getRuntimeContext(async)
   const run = () => async.arg.run(abort.signal)
   const promise = context === undefined ? run() : withActiveRuntimeContext(context, run)
+  const scopeExit = fiber.masks.canInterrupt ? raceScopeExits(context) : undefined
   const wakeOnAbort = () => {
     if (fiber.status !== 'waiting') return
     fiber.abort = undefined
@@ -251,11 +253,12 @@ const startCooperativeAsync = (
     wake.ready(fiber)
   }
   abort.signal.addEventListener('abort', wakeOnAbort, { once: true })
-  promise.then(
+  Promise.race(scopeExit === undefined ? [promise] : [promise, scopeExit]).then(
     value => {
       if (fiber.status !== 'waiting') return
       abort.signal.removeEventListener('abort', wakeOnAbort)
       fiber.abort = undefined
+      if (value instanceof RuntimeScopeExit) abort.abort(value.reason)
       fiber.resume = { type: 'next', value }
       fiber.status = 'ready'
       wake.ready(fiber)
@@ -268,6 +271,13 @@ const startCooperativeAsync = (
       wake.notify()
     }
   )
+}
+
+const raceScopeExits = (context: RuntimeContext | undefined): Promise<RuntimeScopeExit> | undefined => {
+  if (context?.clearScopeExitSources === true) return undefined
+  const sources = context?.scopeExitSources
+  if (sources === undefined || sources.length === 0) return undefined
+  return Promise.race(sources.map(source => source.promise))
 }
 
 interface FiberCallbacks {

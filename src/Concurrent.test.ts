@@ -2077,6 +2077,39 @@ describe('Scope-owned fork lifetime', () => {
     assert.deepEqual(events, ['returnFrom'])
   })
 
+  it('propagates child returns to an outer owning scope while an inner scope is parked', async () => {
+    const OuterScope = scope('test/ForkIn/nested-outer-return')
+    const InnerScope = scope('test/ForkIn/nested-inner-parked')
+    const events = [] as string[]
+
+    const result = await withTimeout(fx(function* () {
+      yield* forkIn(OuterScope, fx(function* () {
+        yield* delayFx(0)
+        return yield* returnFrom(OuterScope, 'outer')
+      }))
+
+      yield* fx(function* () {
+        yield* andFinally(InnerScope, fx(function* () {
+          events.push('inner cleanup')
+        }))
+        yield* awaitAbort()
+        events.push('inner after await')
+      }).pipe(withScope(InnerScope))
+
+      events.push('outer after inner')
+      return 'parent'
+    }).pipe(
+      withScope(OuterScope),
+      withUnboundedConcurrency,
+      returnFail,
+      runPromise
+    ), 100)
+
+    assert.ok(!Fail.is(result))
+    assert.equal(result, 'outer')
+    assert.deepEqual(events, ['inner cleanup'])
+  })
+
   it('lets a forkIn child interrupt the owning scope and finalize siblings', async () => {
     const TestScope = scope('test/ForkIn/child-interrupt')
     const reason = { type: 'child-interrupt' } as const

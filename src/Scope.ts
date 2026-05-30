@@ -182,14 +182,19 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
       const finalizerFailures = yield* withMaybeActiveScope(withoutScopeExitSources(releaseSafely(controller.finalizers, finalExit)))
       return { exit: finalExit, failures: [...taskFailures, ...finalizerFailures] }
     }
-    const finishRoot = function* (exit: Exit<Scope>, unhandledEffect?: AnyEffect): Generator<unknown, A> {
+    const finishRoot = function* (
+      exit: Exit<Scope>,
+      unhandledEffect?: AnyEffect,
+      extraFailures: readonly unknown[] = []
+    ): Generator<unknown, A> {
       const { exit: finalExit, failures } = yield* release(exit)
+      const allFailures = [...extraFailures, ...failures]
       if (finalExit.type === 'failure') {
-        const cleanupFailures = failures.flatMap(cleanupFailuresOf)
+        const cleanupFailures = allFailures.flatMap(cleanupFailuresOf)
         if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup([finalExit.failure.arg, ...cleanupFailures]))) as A
         return (yield finalExit.failure) as A
       }
-      const cleanupFailures = failures.flatMap(cleanupFailuresOf)
+      const cleanupFailures = allFailures.flatMap(cleanupFailuresOf)
       if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup(cleanupFailures))) as A
       if (finalExit.type === 'returnFrom') return finalExit.value as A
       if (finalExit.type === 'abort') return (yield (Abort.is(unhandledEffect) ? unhandledEffect : new Abort(finalExit.scope, undefined))) as A
@@ -243,7 +248,20 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
             ir = i.next([local, ...(yield effect) as any])
           } else {
             const result = yield effect
-            if (result instanceof RuntimeScopeExit) return yield* finishRoot(result.exit as Exit<Scope>)
+            if (result instanceof RuntimeScopeExit) {
+              if (sameScope(result.scope, scope)) {
+                const exit = result.exit as Exit<Scope>
+                const cleanup = exit.type === 'failure' ? undefined : yield* returnFail(fx(function* () {
+                  return yield* drainIteratorReturn(i, step)
+                }))
+                const failures = cleanup !== undefined && Fail.is(cleanup) ? cleanupFailuresOf(cleanup.arg) : []
+                return yield* finishRoot(exit, undefined, failures)
+              }
+              const { failures } = yield* release(interruptedExit(scope, result.reason))
+              const cleanupFailures = failures.flatMap(cleanupFailuresOf)
+              if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup(cleanupFailures))) as A
+              return yield* propagateRuntimeScopeExit(result)
+            }
             ir = i.next(result)
           }
         } else {
@@ -277,7 +295,7 @@ class ScopeController<Scope extends AnyScope> {
   private settled?: Exit<Scope>
   private readonly exitRequested = Promise.withResolvers<Exit<Scope>>()
   private readonly exitSource = {
-    promise: this.exitRequested.promise.then(exit => new RuntimeScopeExit(exit, interruptReason(exit)))
+    promise: this.exitRequested.promise.then(exit => new RuntimeScopeExit(this.scope, exit, interruptReason(exit)))
   }
 
   constructor(readonly scope: Scope) { }
@@ -442,6 +460,15 @@ const interruptedExit = <Scope extends AnyScope>(scope: Scope, reason: unknown):
   reason === undefined
     ? { type: 'interrupted', scope }
     : { type: 'interrupted', scope, reason }
+
+const propagateRuntimeScopeExit = function* <A>(result: RuntimeScopeExit): Generator<unknown, A> {
+  const exit = result.exit as Exit<AnyScope>
+  if (exit.type === 'returnFrom') return (yield new ReturnFrom(result.scope, exit.value)) as A
+  if (exit.type === 'abort') return (yield new Abort(result.scope, undefined)) as A
+  if (exit.type === 'interrupted') return (yield new InterruptFrom(result.scope, exit.reason)) as A
+  if (exit.type === 'failure') return (yield exit.failure) as A
+  return exit.value as A
+}
 
 const collectCleanupFailures = function* (
   failures: unknown[],

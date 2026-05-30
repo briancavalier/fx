@@ -1,4 +1,5 @@
 import type { Fx } from '../Fx.js'
+import type { AnyScope } from '../Scope.js'
 import { isEffect } from '../Effect.js'
 import type { TraceCapturePolicy } from './tracePolicy.js'
 import { getTraceCapturePolicy } from './tracePolicy.js'
@@ -28,6 +29,7 @@ export interface RuntimeScopeExitSource {
 
 export class RuntimeScopeExit {
   constructor(
+    readonly scope: AnyScope,
     readonly exit: unknown,
     readonly reason?: unknown
   ) { }

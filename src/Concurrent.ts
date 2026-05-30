@@ -107,7 +107,7 @@ export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   fxs: readonly [...Fxs],
   options?: TraceOptions
 ) => {
-  const concurrentScope = scope(`fx/Concurrent/all/${nextScopeId++}`, { diagnostic: false })
+  const concurrentScope = scope(Symbol('fx/Concurrent/all'), { diagnostic: false })
   const trace = traceOrigin(options, 'fx/Concurrent/all', all, 'all')
   return fx(function* () {
     const tasks = yield* forkEachScoped(concurrentScope, fxs, trace)
@@ -136,7 +136,7 @@ export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   fxs: readonly [...Fxs],
   options?: TraceOptions
 ) => {
-  const concurrentScope = scope(`fx/Concurrent/race/${nextScopeId++}`, { diagnostic: false })
+  const concurrentScope = scope(Symbol('fx/Concurrent/race'), { diagnostic: false })
   const trace = traceOrigin(options, 'fx/Concurrent/race', race, 'race')
   return new RuntimeCloseBoundary(fx(function* () {
     if (fxs.length === 0) return yield* never()
@@ -157,7 +157,7 @@ export const firstSuccess = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   fxs: readonly [...Fxs],
   options?: TraceOptions
 ) => {
-  const concurrentScope = scope(`fx/Concurrent/firstSuccess/${nextScopeId++}`, { diagnostic: false })
+  const concurrentScope = scope(Symbol('fx/Concurrent/firstSuccess'), { diagnostic: false })
   const trace = traceOrigin(options, 'fx/Concurrent/firstSuccess', firstSuccess, 'race')
   return new RuntimeCloseBoundary(fx(function* () {
     if (fxs.length === 0) return yield* fail(new RaceAllFailed([]))
@@ -234,8 +234,6 @@ type TaskErrors<P> = P extends Task<unknown, infer E> ? E : never
 type TaskErrorsOf<Tasks extends readonly Task<unknown, unknown>[]> = {
   readonly [K in keyof Tasks]: TaskErrors<Tasks[K]>
 }
-
-let nextScopeId = 0
 
 const never = <A>(): Fx<Async, A> =>
   new Async({ run: () => new Promise<A>(() => { }), origin: at('fx/Concurrent/never', never) }) as Fx<Async, A>

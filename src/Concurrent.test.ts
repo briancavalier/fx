@@ -10,7 +10,7 @@ import { handle } from './Handler.js'
 import { type HandlerCapture } from './HandlerCapture.js'
 import { interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible } from './Interrupt.js'
-import { returnFrom } from './ReturnFrom.js'
+import { ReturnFrom, returnFrom } from './ReturnFrom.js'
 import { scope, withScope, type Exit } from './Scope.js'
 import { Task, wait } from './Task.js'
 import { getTrace, snapshotError } from './Trace.js'
@@ -70,6 +70,41 @@ describe('Fork', () => {
 
       const runnable: Promise<readonly number[]> = program.pipe(runPromise)
       assert.deepEqual(await runnable, [1, 2, 3])
+    })
+
+    it('keeps internal operator scope identities private from caller string scope ids', async () => {
+      const allScope = scope('fx/Concurrent/all/0')
+      const raceScope = scope('fx/Concurrent/race/0')
+      const firstSuccessScope = scope('fx/Concurrent/firstSuccess/0')
+
+      const allProgram = all([fx(function* () {
+        return yield* returnFrom(allScope, 'collided' as const)
+      })]).pipe(
+        withUnboundedConcurrency,
+        returnFail
+      )
+      const raceProgram = race([fx(function* () {
+        return yield* returnFrom(raceScope, 'collided' as const)
+      })]).pipe(
+        withUnboundedConcurrency,
+        returnFail
+      )
+      const firstSuccessProgram = firstSuccess([fx(function* () {
+        return yield* returnFrom(firstSuccessScope, 'collided' as const)
+      })]).pipe(
+        withUnboundedConcurrency,
+        returnFail
+      )
+      const allResult = await runPromise(allProgram as never)
+      const raceResult = await runPromise(raceProgram as never)
+      const firstSuccessResult = await runPromise(firstSuccessProgram as never)
+
+      assertUnhandledReturnFrom(allResult)
+      assertUnhandledReturnFrom(raceResult)
+      assert.ok(Fail.is(firstSuccessResult))
+      assert.ok(firstSuccessResult.arg instanceof RaceAllFailed)
+      assert.equal(firstSuccessResult.arg.errors.length, 1)
+      assertUnhandledReturnFrom(new Fail(firstSuccessResult.arg.errors[0]))
     })
   })
 
@@ -2584,6 +2619,13 @@ const traceMessages = (e: unknown) => {
     trace = trace.parent
   }
   return messages
+}
+
+const assertUnhandledReturnFrom = (result: unknown) => {
+  assert.ok(Fail.is(result))
+  assert.ok(result.arg instanceof Error)
+  assert.equal(snapshotError(result.arg).code, 'FX_UNHANDLED_FAILURE')
+  assert.ok(result.arg.cause instanceof ReturnFrom)
 }
 
 const awaitAbort = () => assertPromise<void>(signal => new Promise(resolve => {

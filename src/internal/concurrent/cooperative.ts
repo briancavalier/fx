@@ -12,6 +12,7 @@ import { ForkError, capturePrependTraceWithContext, originOfUnhandledFail, runti
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from '../interrupt.js'
 import { withInterpretedReturn } from '../iteratorClose.js'
 import { currentRuntimeContext, getRuntimeContext, withActiveRuntimeContext } from '../runtimeContext.js'
+import { shouldReleaseSlotForAsync } from './cooperativeAsync.js'
 
 export interface CooperativeConfig {
   readonly concurrency: number
@@ -145,6 +146,10 @@ export class CooperativeRuntime {
           await runPromise(wake.wait())
           continue
         }
+        while (!fiber.slotAcquired) {
+          if (this.tryAcquireSlot(fiber)) break
+          await this.waitForSlotPromise()
+        }
         if (fiber.cancelRequested && fiber.masks.canInterrupt) {
           await runPromise(fx(function* (this: CooperativeRuntime) { yield* closeFiber(this, fiber) }.bind(this)) as Fx<any, void>)
           finishDetachedFiber(this, fiber)
@@ -226,6 +231,7 @@ const normalizeCoopOptions = (options: CoopConcurrencyOptions, handlerName: stri
 }
 
 const startCooperativeAsync = (
+  runtime: CooperativeRuntime,
   fiber: Fiber,
   async: Async,
   wake: Wake,
@@ -234,6 +240,7 @@ const startCooperativeAsync = (
   const abort = new AbortController()
   fiber.abort = abort
   fiber.status = 'waiting'
+  if (shouldReleaseSlotForAsync(async)) runtime.releaseSlot(fiber)
   const context = getRuntimeContext(async)
   const run = () => async.arg.run(abort.signal)
   const promise = context === undefined ? run() : withActiveRuntimeContext(context, run)
@@ -300,7 +307,7 @@ function* stepFiber(
     }
 
     if (Async.is(ir.value)) {
-      startCooperativeAsync(fiber, ir.value, wake, (_fiber, failure) => {
+      startCooperativeAsync(runtime, fiber, ir.value, wake, (_fiber, failure) => {
         callbacks.fail(failure.error)
       })
       break

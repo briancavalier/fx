@@ -1,17 +1,19 @@
-import { Async, assertPromise } from './Async.js'
+import { Async } from './Async.js'
 import { at, indexed } from './Breadcrumb.js'
+import type { Breadcrumb } from './Breadcrumb.js'
 import { Fail, fail } from './Fail.js'
 import { Fx, flatMap, fx } from './Fx.js'
 import { HandlerCapture, withCapturedHandlers } from './HandlerCapture.js'
 import { returnFrom } from './ReturnFrom.js'
 import { scope, withScope } from './Scope.js'
-import { Task, wait as waitTask } from './Task.js'
+import { Task } from './Task.js'
 import type { TraceFrameKind, TraceOptions, TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
 import { withCoopConcurrency } from './internal/concurrent/cooperative.js'
 import { Fork, RaceAllFailed } from './internal/concurrent/effects.js'
 import type { EffectsOf, ErrorsOf, ResultOf } from './internal/concurrent/effects.js'
 import { withBoundedConcurrency, withUnboundedConcurrency } from './internal/concurrent/fork.js'
+import { markReleaseSlotAsync } from './internal/concurrent/cooperativeAsync.js'
 import { InterruptedReturn, isInterpretingReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { ScopedFork } from './internal/scopedFork.js'
@@ -268,7 +270,7 @@ const waitAllTasks = <const Tasks extends readonly Task<unknown, unknown>[]>(
 const waitFirstSettled = <const Tasks extends readonly Task<unknown, unknown>[]>(
   tasks: Tasks
 ): Fx<Async | Fail<unknown>, FirstSettledResult<TaskResult<Tasks[number]>>> =>
-  waitTask(new Task<FirstSettledResult<TaskResult<Tasks[number]>>, never>((async () => {
+  cooperativeAssertPromise(async () => {
     const pending = tasks.map((task, index) =>
       task.promise.then(
         value => ({ type: 'success' as const, index, value: value as TaskResult<Tasks[number]> }),
@@ -288,12 +290,12 @@ const waitFirstSettled = <const Tasks extends readonly Task<unknown, unknown>[]>
     }
 
     return await pendingPromise()
-  })(), () => { }))
+  }, at('fx/Concurrent/waitFirstSettled', waitFirstSettled))
 
 const waitFirstSuccess = <const Tasks extends readonly Task<unknown, unknown>[]>(
   tasks: Tasks
 ): Fx<Async | Fail<unknown>, FirstSuccessResult<TaskResult<Tasks[number]>, TaskErrorsOf<Tasks>>> =>
-  waitTask(new Task<FirstSuccessResult<TaskResult<Tasks[number]>, TaskErrorsOf<Tasks>>, never>((async () => {
+  cooperativeAssertPromise(async () => {
     const pending = tasks.map((task, index) =>
       task.promise.then(
         value => ({ type: 'success' as const, index, value: value as TaskResult<Tasks[number]> }),
@@ -316,7 +318,7 @@ const waitFirstSuccess = <const Tasks extends readonly Task<unknown, unknown>[]>
     return failures.length === 0
       ? await pendingPromise()
       : { type: 'failure', failures: failures as TaskErrorsOf<Tasks> }
-  })(), () => { }))
+  }, at('fx/Concurrent/waitFirstSuccess', waitFirstSuccess))
 
 type FirstSettledResult<A> =
   | { readonly type: 'success', readonly value: A }
@@ -331,9 +333,18 @@ const pendingPromise = <A>(): Promise<A> => new Promise(() => { })
 const waitSettled = <A>(
   pending: readonly Promise<A>[]
 ): Fx<Async, { readonly position: number, readonly result: A }> =>
-  assertPromise(() => Promise.race(pending.map((p, position) =>
+  cooperativeAssertPromise(() => Promise.race(pending.map((p, position) =>
     p.then(result => ({ position, result }))
-  )))
+  )), at('fx/Concurrent/waitSettled', waitSettled))
+
+const cooperativeAssertPromise = <const A>(
+  run: (signal: AbortSignal) => Promise<A>,
+  origin: Breadcrumb
+) => markReleaseSlotAsync(new Async({
+  run,
+  origin,
+  trace: captureTrace(origin, undefined, { kind: 'async' })
+})) as Fx<Async, A>
 
 class RuntimeCloseBoundary<E, A> implements Fx<E, A>, Pipeable {
   public readonly pipe = pipeThis as Pipeable['pipe']

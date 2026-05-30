@@ -1202,6 +1202,28 @@ describe('Fork', () => {
       assert.deepEqual(result, ['forked', ['nested', 'all']])
     })
 
+    it('releases cooperative slots while a forked operator waits for nested children', async () => {
+      const result = await withTimeout(fx(function* () {
+        const task = yield* fork(all([
+          fx(function* () {
+            return yield* all([ok('all')])
+          }),
+          fx(function* () {
+            return yield* race([ok('race')])
+          }),
+          fx(function* () {
+            return yield* firstSuccess([ok('firstSuccess')])
+          })
+        ]))
+        return yield* wait(task)
+      }).pipe(
+        withCoopConcurrency({ concurrency: 1 }),
+        runPromise
+      ), 100)
+
+      assert.deepEqual(result, [['all'], 'race', 'firstSuccess'])
+    })
+
     it('wraps rejected async work inside an explicit cooperative fork', async () => {
       const cause = new Error('cooperative fork async rejected')
 

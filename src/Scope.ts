@@ -448,7 +448,7 @@ const cleanupFailuresOf = (failure: unknown): readonly unknown[] => {
     ? failure.cause
     : undefined
 
-  if (cleanupFailure === undefined && (isInterruptedReturn(failure) || isInterruptedUndefinedResumeFailure(failure))) return []
+  if (cleanupFailure === undefined && isInterruptedReturn(failure)) return []
 
   return cleanupFailure === undefined
     ? [failure]
@@ -460,6 +460,3 @@ const isResourceReleaseFailure = (failure: unknown): failure is AggregateError =
   || typeof failure === 'object' && failure !== null
     && 'message' in failure && failure.message === 'Resource release failed'
     && 'errors' in failure && Array.isArray(failure.errors)
-
-const isInterruptedUndefinedResumeFailure = (failure: unknown): boolean =>
-  failure instanceof TypeError && failure.message.startsWith('Cannot read properties of undefined ')

@@ -2496,6 +2496,32 @@ describe('Task interruption finalization', () => {
     assert.deepEqual(result.arg.errors, [innerFailure, scopeFailure])
   })
 
+  it('preserves interrupted scoped cleanup TypeError failures', async () => {
+    const TestScope = scope('test/Fork/InterruptedCleanupTypeError')
+
+    const slow = fx(function* () {
+      yield* andFinally(TestScope, fx(function* () {
+        const value = undefined as any
+        return value.property
+      }))
+      yield* awaitAbort()
+    })
+
+    const result = await race([ok('winner'), slow]).pipe(
+      withScope(TestScope),
+      withUnboundedConcurrency,
+      returnFail,
+      runPromise
+    )
+
+    assert.ok(Fail.is(result))
+    assert.ok(result.arg instanceof AggregateError)
+    assert.equal(result.arg.message, 'Resource release failed')
+    assert.equal(result.arg.errors.length, 1)
+    assert.ok(result.arg.errors[0] instanceof TypeError)
+    assert.match(result.arg.errors[0].message, /Cannot read properties of undefined/)
+  })
+
   it('runs interrupted finalizers through outer handlers', async () => {
     const TestScope = scope('test/Fork/InterruptedOuterHandler')
     class Release extends Effect('test/Fork/InterruptedOuterHandler/Release')<void, void> { }

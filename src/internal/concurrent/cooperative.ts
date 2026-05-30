@@ -4,14 +4,15 @@ import { Fork } from './effects.js'
 import { Fail } from '../../Fail.js'
 import { flatMap, flatten, Fx, fx, ok, runPromise } from '../../Fx.js'
 import { Handle } from '../../Handler.js'
-import { HandlerCapture, handleCaptured, withCapturedHandlers } from '../../HandlerCapture.js'
+import { HandlerCapture, captureHandlers, handleCaptured, withCapturedHandlers, withHandlerContext } from '../../HandlerCapture.js'
+import type { CapturedHandler } from '../../HandlerCapture.js'
 import { Task } from '../../Task.js'
 import type { TraceOrigin } from '../../Trace.js'
 import { captureTrace, getTrace } from '../../Trace.js'
 import { ForkError, capturePrependTraceWithContext, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from '../forkDiagnostics.js'
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from '../interrupt.js'
 import { withInterpretedReturn } from '../iteratorClose.js'
-import { currentRuntimeContext, getRuntimeContext, RuntimeScopeExit, withActiveRuntimeContext } from '../runtimeContext.js'
+import { attachRuntimeContext, currentRuntimeContext, getRuntimeContext, RuntimeScopeExit, withActiveRuntimeContext } from '../runtimeContext.js'
 import type { RuntimeContext } from '../runtimeContext.js'
 import { shouldReleaseSlotForAsync } from './cooperativeAsync.js'
 
@@ -30,14 +31,14 @@ export interface CoopConcurrencyOptions {
  */
 export const withCoopConcurrency = (options: CoopConcurrencyOptions = {}) => {
   const normalized = normalizeCoopOptions(options, 'withCoopConcurrency')
-  const runtime = new CooperativeRuntime(normalized)
   return <const E, const A>(f: Fx<E, A>): Fx<CoopConcurrencyHandledEffects<E>, A> =>
-    withCapturedHandlers('fx/Concurrent/Fork', f).pipe(
-      flatMap(fx =>
-        ok(fx.pipe(
+    captureHandlers('fx/Concurrent/Fork').pipe(
+      flatMap(handlers => {
+        const runtime = new CooperativeRuntime(normalized, handlers)
+        return ok(withHandlerContext(handlers, f).pipe(
           handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)
         ))
-      ),
+      }),
       flatten
     ) as Fx<CoopConcurrencyHandledEffects<E>, A>
 }
@@ -71,13 +72,16 @@ export class CooperativeRuntime {
   private slotWaiters = [] as (() => void)[]
   private availableSlots: number
 
-  constructor(readonly config: CooperativeConfig) {
+  constructor(
+    readonly config: CooperativeConfig,
+    readonly handlers: readonly CapturedHandler[] = []
+  ) {
     this.availableSlots = Math.floor(config.concurrency)
   }
 
   readonly runFork = (fork: Fork): Fx<never, Task<unknown, unknown>> =>
     fx(function* (this: CooperativeRuntime) {
-      return this.startFork(fork)
+      return this.startFork(this.wrapFork(fork))
     }.bind(this))
 
   startFork(fork: Fork, onUnhandled?: (error: unknown) => void): Task<unknown, unknown> {
@@ -213,6 +217,16 @@ export class CooperativeRuntime {
     const waiters = this.slotWaiters
     this.slotWaiters = []
     for (const waiter of waiters) waiter()
+  }
+
+  wrapFork(fork: Fork): Fork {
+    if (this.handlers.length === 0) return fork
+    const wrapped = new Fork({
+      ...fork.arg,
+      fx: withHandlerContext(this.handlers, fork.arg.fx)
+    })
+    attachRuntimeContext(wrapped, getRuntimeContext(fork))
+    return wrapped
   }
 }
 
@@ -394,7 +408,7 @@ function* closeFiber(
       if (Async.is(ir.value)) {
         ir = fiber.iterator.next(yield ir.value as any)
       } else if (Fork.is(ir.value)) {
-        ir = fiber.iterator.next(runtime.startFork(ir.value))
+        ir = fiber.iterator.next(runtime.startFork(runtime.wrapFork(ir.value)))
       } else if (Fail.is(ir.value)) {
         fiber.cleanupFailures.push(ir.value.arg)
         return

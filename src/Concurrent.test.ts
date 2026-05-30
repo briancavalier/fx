@@ -1043,7 +1043,7 @@ describe('Fork', () => {
       assert.deepEqual(events, ['cleanup before', 'cleanup fork child', 'cleanup after'])
     })
 
-    it.skip('runs cleanup fork children with handlers outside withCoopConcurrency', async () => {
+    it('runs cleanup fork children with handlers outside withCoopConcurrency', async () => {
       const TestScope = scope('test/Fork/CooperativeCleanupForkOuterHandlerScope')
       class CurrentValue extends Effect('test/Fork/CooperativeCleanupForkCurrentValue')<void, string> { }
       const events = [] as string[]

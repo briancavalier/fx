@@ -20,6 +20,7 @@ const delayFx = (ms: number) => assertPromise<void>(() => delay(ms))
 type EffectOf<T> = T extends Fx<infer E, unknown> ? E : never
 type ResultOf<T> = T extends Fx<unknown, infer A> ? A : never
 type IsAny<T> = 0 extends 1 & T ? true : false
+type HasFail<T> = Extract<T, Fail<any>> extends never ? false : true
 
 // @ts-expect-error markHandled is runtime-internal bookkeeping, not public API.
 const noPublicMarkHandled: typeof import('./Task.js').markHandled = undefined
@@ -2350,6 +2351,7 @@ describe('Scope-owned fork lifetime', () => {
 
   it('preserves forkIn result and scoped return inference', () => {
     const TestScope = scope('test/ForkIn/types')
+    const failedFork = forkIn(TestScope, fail('boom' as const))
     const program = fx(function* () {
       const task = yield* forkIn(TestScope, fx(function* () {
         return yield* returnFrom(TestScope, 'early' as const)
@@ -2357,7 +2359,10 @@ describe('Scope-owned fork lifetime', () => {
       return task
     }).pipe(withScope(TestScope))
 
+    false satisfies HasFail<EffectOf<typeof failedFork>>
+    const failedTask: Fx<unknown, Task<never, Fail<'boom'>>> = failedFork
     const _: Fx<unknown, Task<never, never> | 'early'> = program
+    void failedTask
     void _
   })
 })

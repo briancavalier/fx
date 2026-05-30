@@ -71,7 +71,7 @@ export const forkIn = <const Scope extends AnyScope, const E, const A>(
   scope: Scope,
   f: Fx<E, A>,
   options?: TraceOptions
-): Fx<Exclude<E, Async> | ScopedFork<Scope> | HandlerCapture<'fx/Concurrent/ForkIn'>, Task<A, ErrorsOf<E>>> => {
+): Fx<Exclude<E, Async | Fail<any>> | ScopedFork<Scope> | HandlerCapture<'fx/Concurrent/ForkIn'>, Task<A, ErrorsOf<E>>> => {
   const trace = traceOrigin(options, 'fx/Concurrent/forkIn', forkIn, 'fork')
   return withCapturedHandlers('fx/Concurrent/ForkIn', f).pipe(
     flatMap(fx => new ScopedFork(scope, { fx, ...trace }) as Fx<ScopedFork<Scope>, Task<A, ErrorsOf<E>>>)

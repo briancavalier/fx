@@ -34,11 +34,11 @@ export function timeout<const Options extends AnyTimeoutOptions>(
 
   return <const E, const A>(f: Fx<E, A>): Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<AnyScope, TimeoutReasonOf<Options>>, A> =>
     fx(function* () {
-      yield* timeoutInWithTrace(timeoutScope, options, { origin, trace })
-
       yield* forkIn(timeoutScope, attempt(f).pipe(
         flatMap(result => returnFrom(timeoutScope, result))
       ), { origin, trace })
+
+      yield* timeoutInWithTrace(timeoutScope, options, { origin, trace })
     }).pipe(
       withScope(timeoutScope),
       // The private timeout scope token cannot be named by callers, but

@@ -44,6 +44,25 @@ describe('Timeout', () => {
     assert.equal(reasons, 0)
   })
 
+  it('starts the protected computation before the timer under bounded concurrency', async () => {
+    const c = new VirtualClock(0)
+
+    const p = ok('fast').pipe(
+      timeout({ ms: 100 }),
+      control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
+      withBoundedConcurrency(1),
+      returnFail,
+      withClock(c),
+      runPromise
+    )
+
+    await c.step(100)
+    const r = await p
+
+    assert.ok(!Fail.is(r))
+    assert.equal(r, 'fast')
+  })
+
   it('interrupts the scope with the timeout reason when the timeout wins', async () => {
     const c = new VirtualClock(0)
     const reason = { type: 'timeout' }

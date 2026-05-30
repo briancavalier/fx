@@ -98,10 +98,11 @@ export interface Interrupted<Scope extends AnyScope> {
 export function withScope<const Scope extends AnyScope>(
   scope: Scope
 ): <const E, const A>(f: Fx<E, A>) => Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>> {
-  return <const E, const A>(f: Fx<E, A>) =>
+  return <const E, const A>(f: Fx<E, A>) => {
     // ScopeBoundary interprets effects dynamically; this assertion connects the
     // runtime interpreter boundary to the public scoped-effect elimination type.
-    new ScopeBoundary(f, scope) as Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>>
+    return new ScopeBoundary(f, scope) as Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>>
+  }
 }
 
 export type ScopeEffects<E, Scope extends AnyScope> =

@@ -16,10 +16,16 @@ export class Semaphore {
         return acquire(this.waiters);
     }
     release() {
-        if (this.waiters.length)
-            queueMicrotask(this.waiters.shift());
-        else
+        const waiter = this.waiters.shift();
+        if (waiter === undefined) {
             this.available++;
+        }
+        else {
+            queueMicrotask(() => {
+                if (!waiter())
+                    this.release();
+            });
+        }
     }
 }
 const acquired = () => ({
@@ -31,8 +37,10 @@ const acquire = (waiters) => {
     let cancelled = false;
     return {
         promise: new Promise(r => waiters.push(waiter = () => {
-            if (!cancelled)
-                r();
+            if (cancelled)
+                return false;
+            r();
+            return true;
         })),
         [Symbol.dispose]: () => {
             cancelled = true;

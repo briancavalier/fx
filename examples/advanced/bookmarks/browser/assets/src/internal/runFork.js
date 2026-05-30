@@ -267,6 +267,7 @@ const acquire = async (s, scope, disposed, f) => {
         return await never();
     }
     if (scope.interruptRequested) {
+        releaseOnce();
         disposed.resolve();
         return await never();
     }

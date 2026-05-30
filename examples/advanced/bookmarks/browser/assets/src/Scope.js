@@ -1,4 +1,4 @@
-import { assertPromise } from './Async.js';
+import { at } from './Breadcrumb.js';
 import { Abort } from './Abort.js';
 import { isEffect } from './Effect.js';
 import { Fail, fail, returnFail } from './Fail.js';
@@ -8,6 +8,7 @@ import { HandlerCapture } from './HandlerCapture.js';
 import { InterruptFrom } from './InterruptFrom.js';
 import { ReturnFrom } from './ReturnFrom.js';
 import { Fork } from './internal/concurrent/effects.js';
+import { cooperativeAssertPromise } from './internal/concurrent/cooperativeAsync.js';
 import { drainIteratorReturn, isInterpretingReturn, isInterruptedReturn } from './internal/iteratorClose.js';
 import { pipeThis } from './internal/pipe.js';
 import { interruptionReason, withActiveScope } from './internal/runtimeContext.js';
@@ -34,7 +35,11 @@ const scopeDiagnostic = (scope) => {
     };
 };
 export function withScope(scope) {
-    return (f) => new ScopeBoundary(f, scope);
+    return (f) => {
+        // ScopeBoundary interprets effects dynamically; this assertion connects the
+        // runtime interpreter boundary to the public scoped-effect elimination type.
+        return new ScopeBoundary(f, scope);
+    };
 }
 class ScopeBoundary {
     fx;
@@ -216,12 +221,13 @@ class ScopeController {
             this.requestExit(exit);
         if (this.tasks.size === 0)
             return ok({ exit: this.settled ?? exit, failures: [] });
-        return assertPromise(() => this.joinTasks(exit));
+        return cooperativeAssertPromise(() => this.joinTasks(exit), at('fx/Scope/withScope/join', withScope));
     }
     async joinTasks(initialExit) {
         const failures = [];
         const pending = new Set(this.tasks.keys());
         while (pending.size > 0) {
+            removeInterruptedTasks(pending);
             const exit = this.settled;
             if (exit !== undefined && exit.type !== 'success')
                 break;
@@ -235,6 +241,7 @@ class ScopeController {
             }
         }
         const exit = this.settled ?? initialExit;
+        removeInterruptedTasks(pending);
         if (pending.size > 0 || exit.type !== 'success') {
             failures.push(...await this.interruptPending(pending, interruptReason(exit)));
         }
@@ -251,6 +258,12 @@ const hasNonDaemonTask = (pending, tasks) => {
             return true;
     }
     return false;
+};
+const removeInterruptedTasks = (pending) => {
+    for (const task of pending) {
+        if (task._interrupted)
+            pending.delete(task);
+    }
 };
 const collectInterruptedCleanupFailures = function* (scope, release, completed, shouldDrainReturn, iterator, step) {
     const failures = [];
@@ -317,7 +330,7 @@ const cleanupFailuresOf = (failure) => {
         : typeof failure === 'object' && failure !== null && 'cause' in failure && isResourceReleaseFailure(failure.cause)
             ? failure.cause
             : undefined;
-    if (cleanupFailure === undefined && (isInterruptedReturn(failure) || isInterruptedUndefinedResumeFailure(failure)))
+    if (cleanupFailure === undefined && isInterruptedReturn(failure))
         return [];
     return cleanupFailure === undefined
         ? [failure]
@@ -327,4 +340,3 @@ const isResourceReleaseFailure = (failure) => failure instanceof AggregateError 
     || typeof failure === 'object' && failure !== null
         && 'message' in failure && failure.message === 'Resource release failed'
         && 'errors' in failure && Array.isArray(failure.errors);
-const isInterruptedUndefinedResumeFailure = (failure) => failure instanceof TypeError && failure.message.startsWith('Cannot read properties of undefined ');

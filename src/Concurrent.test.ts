@@ -2243,6 +2243,31 @@ describe('Scope-owned fork lifetime', () => {
     assert.deepEqual(events, ['forkIn done'])
   })
 
+  it('releases cooperative slots while joining non-daemon forkIn children', async () => {
+    const TestScope = scope('test/ForkIn/cooperative-join')
+    const events = [] as string[]
+
+    const program = fx(function* () {
+      const task = yield* fork(fx(function* () {
+        yield* forkIn(TestScope, fx(function* () {
+          events.push('child start')
+          yield* asyncValue(undefined)
+          events.push('child done')
+        }))
+        events.push('parent body done')
+        return 'parent done'
+      }).pipe(withScope(TestScope)))
+
+      return yield* wait(task)
+    }).pipe(
+      withCoopConcurrency({ concurrency: 1 })
+    )
+    const result = await withTimeout(runPromise(program as never), 100)
+
+    assert.equal(result, 'parent done')
+    assert.deepEqual(events, ['parent body done', 'child start', 'child done'])
+  })
+
   it('does not keep manually interrupted forkIn tasks alive across normal scope exit', async () => {
     const TestScope = scope('test/ForkIn/manually-interrupted')
     const events = [] as string[]

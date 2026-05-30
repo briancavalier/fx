@@ -1,6 +1,5 @@
 import { Async } from './Async.js'
 import { at, indexed } from './Breadcrumb.js'
-import type { Breadcrumb } from './Breadcrumb.js'
 import { Fail, fail } from './Fail.js'
 import { Fx, flatMap, fx } from './Fx.js'
 import { HandlerCapture, withCapturedHandlers } from './HandlerCapture.js'
@@ -13,7 +12,7 @@ import { withCoopConcurrency } from './internal/concurrent/cooperative.js'
 import { Fork, RaceAllFailed } from './internal/concurrent/effects.js'
 import type { EffectsOf, ErrorsOf, ResultOf } from './internal/concurrent/effects.js'
 import { withBoundedConcurrency, withUnboundedConcurrency } from './internal/concurrent/fork.js'
-import { markReleaseSlotAsync } from './internal/concurrent/cooperativeAsync.js'
+import { cooperativeAssertPromise } from './internal/concurrent/cooperativeAsync.js'
 import { InterruptedReturn, isInterpretingReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { ScopedFork } from './internal/scopedFork.js'
@@ -336,15 +335,6 @@ const waitSettled = <A>(
   cooperativeAssertPromise(() => Promise.race(pending.map((p, position) =>
     p.then(result => ({ position, result }))
   )), at('fx/Concurrent/waitSettled', waitSettled))
-
-const cooperativeAssertPromise = <const A>(
-  run: (signal: AbortSignal) => Promise<A>,
-  origin: Breadcrumb
-) => markReleaseSlotAsync(new Async({
-  run,
-  origin,
-  trace: captureTrace(origin, undefined, { kind: 'async' })
-})) as Fx<Async, A>
 
 class RuntimeCloseBoundary<E, A> implements Fx<E, A>, Pipeable {
   public readonly pipe = pipeThis as Pipeable['pipe']

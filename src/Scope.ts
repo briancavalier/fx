@@ -1,4 +1,5 @@
-import { Async, assertPromise } from './Async.js'
+import { Async } from './Async.js'
+import { at } from './Breadcrumb.js'
 import { Abort } from './Abort.js'
 import { isEffect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
@@ -8,6 +9,7 @@ import { CapturedHandler, HandlerCapture } from './HandlerCapture.js'
 import { InterruptFrom } from './InterruptFrom.js'
 import { ReturnFrom } from './ReturnFrom.js'
 import { Fork } from './internal/concurrent/effects.js'
+import { cooperativeAssertPromise } from './internal/concurrent/cooperativeAsync.js'
 import { drainIteratorReturn, isInterpretingReturn, isInterruptedReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { interruptionReason, withActiveScope, type ActiveScopeDiagnostic } from './internal/runtimeContext.js'
@@ -301,7 +303,7 @@ class ScopeController<Scope extends AnyScope> {
   join(exit: Exit<Scope>): Fx<Async, { readonly exit: Exit<Scope>, readonly failures: readonly unknown[] }> {
     if (exit.type !== 'success') this.requestExit(exit)
     if (this.tasks.size === 0) return ok({ exit: this.settled ?? exit, failures: [] })
-    return assertPromise(() => this.joinTasks(exit))
+    return cooperativeAssertPromise(() => this.joinTasks(exit), at('fx/Scope/withScope/join', withScope))
   }
 
   private async joinTasks(initialExit: Exit<Scope>): Promise<{ readonly exit: Exit<Scope>, readonly failures: readonly unknown[] }> {

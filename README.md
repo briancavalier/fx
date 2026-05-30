@@ -190,7 +190,7 @@ their named subpaths.
 | Time and clock handlers | `@briancavalier/fx/time` |
 | Random effects and handlers | `@briancavalier/fx/random` |
 | Structured logging | `@briancavalier/fx/log` |
-| Retry and timeout policies | `@briancavalier/fx/retry`, `@briancavalier/fx/timeout` |
+| Retry and timeout helpers | `@briancavalier/fx/retry`, `@briancavalier/fx/timeout` |
 | HTTP client and transport-neutral HTTP server routes | `@briancavalier/fx/http-client`, `@briancavalier/fx/http-server` |
 | Node runtime, process, diagnostics, and HTTP transport | `@briancavalier/fx/platform-node` |
 

@@ -55,19 +55,25 @@ BOOKMARKS_URL=http://127.0.0.1:3001/api \
 
 ## Use The Browser UI
 
-Start the server, then open:
+Build the package and browser assets, then start the server:
+
+```sh
+corepack pnpm examples:bookmarks:start
+```
+
+Then open:
 
 ```text
 http://127.0.0.1:3000/
 ```
 
-The server serves `examples/advanced/bookmarks/browser/index.html` and the
-checked-in browser assets under `examples/advanced/bookmarks/browser/assets`.
-If you change the browser source under `examples/advanced/bookmarks/browser`,
-rebuild those assets with:
+The server serves `examples/advanced/bookmarks/browser/index.html` and generated
+browser assets under `examples/advanced/bookmarks/browser/.assets`. Browser
+assets are ignored by git. If you change the browser source under
+`examples/advanced/bookmarks/browser`, rebuild those assets with:
 
 ```sh
-corepack pnpm exec tsc --project examples/advanced/bookmarks/browser/tsconfig.json
+corepack pnpm examples:bookmarks:build
 ```
 
 ## Tests

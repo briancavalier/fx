@@ -3,7 +3,7 @@ import { arch, platform, release } from 'node:os'
 import { performance } from 'node:perf_hooks'
 
 import { assertPromise } from '../src/Async.js'
-import { all, withBoundedConcurrency, firstSettled, fork, race, withUnboundedConcurrency } from '../src/Concurrent.js'
+import { all, withBoundedConcurrency, fork, race, withUnboundedConcurrency } from '../src/Concurrent.js'
 import { Effect } from '../src/Effect.js'
 import { andFinally } from '../src/Finalization.js'
 import { fx, ok, run, runPromise, runTask } from '../src/Fx.js'
@@ -219,7 +219,7 @@ const cases: readonly BenchmarkCase[] = [
     await allFanout16.pipe(withUnboundedConcurrency, runPromise)
   }),
   benchmark('race fanout 16', 'runFork', RunForkIterations, 100, async () => {
-    await raceFanout16.pipe(firstSettled, withUnboundedConcurrency, runPromise)
+    await raceFanout16.pipe(withUnboundedConcurrency, runPromise)
   }),
   benchmark('dispose blocked task', 'interrupt', InterruptIterations, 100, async () => {
     await disposeTask(blocked)

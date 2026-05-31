@@ -2,6 +2,7 @@ node_modules/
 .pnpm-store/
 .benchmarks/
 dist/
+examples/advanced/bookmarks/browser/.assets/
 experiments/
 /AGENT_STATUS.md
 *.code-workspace

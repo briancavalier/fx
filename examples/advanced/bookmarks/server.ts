@@ -96,6 +96,8 @@ const apiRoutes = transformRoutes(withApiCodecs)(routes(
 ))
 
 const browserDir = join(dirname(fileURLToPath(import.meta.url)), 'browser')
+const browserAssetsDir = '.assets'
+const browserAssetsBuildMessage = 'Browser assets are not built. Run `corepack pnpm examples:bookmarks:build`.'
 
 const browserRoutes = routes(
   route('GET', '/', fx(function* () {
@@ -193,7 +195,10 @@ const assetResponse = (path: string): ServerResponse<never> => {
       ? 'application/json'
       : 'application/octet-stream'
 
-  return fileResponse(join('assets', normalized), contentType)
+  const response = fileResponse(join(browserAssetsDir, normalized), contentType)
+  return response.status === 404
+    ? text(browserAssetsBuildMessage, 404)
+    : response
 }
 
 const readStaticFile = (path: string): Uint8Array | undefined => {

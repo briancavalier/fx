@@ -7,7 +7,7 @@
       "DOM.Iterable"
     ],
     "rootDir": "../../../..",
-    "outDir": "assets",
+    "outDir": ".assets",
     "declaration": false,
     "declarationMap": false,
     "sourceMap": false,

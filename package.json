@@ -77,6 +77,8 @@
   "scripts": {
     "build": "tsc --project ./tsconfig.build.json",
     "build:benchmarks": "tsc --project ./tsconfig.benchmarks.json",
+    "examples:bookmarks:build": "tsc --project examples/advanced/bookmarks/browser/tsconfig.json",
+    "examples:bookmarks:start": "tsc --project ./tsconfig.build.json && tsc --project examples/advanced/bookmarks/browser/tsconfig.json && tsx examples/advanced/bookmarks/server.ts",
     "benchmark:trace": "tsx benchmarks/trace.ts",
     "benchmark:cooperative-all": "tsx benchmarks/cooperative-all.ts",
     "benchmark:cooperative-all:js": "tsc --project ./tsconfig.benchmarks.json && node ./.benchmarks/benchmarks/cooperative-all.js",

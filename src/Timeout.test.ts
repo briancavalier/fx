@@ -1,5 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { at } from './Breadcrumb.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { forkIn, withBoundedConcurrency, withCoopConcurrency, withUnboundedConcurrency } from './Concurrent.js'
 import { fx, ok, run, runPromise } from './Fx.js'
@@ -12,6 +13,7 @@ import { TimeoutInterrupt, timeout, timeoutIn } from './Timeout.js'
 import { sleep, withClock } from './Time.js'
 import { getTrace } from './Trace.js'
 import { VirtualClock } from './internal/time.js'
+import type { ScopedForkContext } from './internal/scopedFork.js'
 
 describe('Timeout', () => {
   const TestScope = scope('test/Timeout')
@@ -264,6 +266,15 @@ describe('Timeout', () => {
     void hasTimeoutInterrupt
     void effectIsNotAny
     void resultIsNotAny
+  })
+
+  it('requires daemon scoped forks for unmetered scheduling', () => {
+    const origin = at('test/Timeout/scoped-fork-scheduling', timeout)
+    const valid: ScopedForkContext = { fx: ok(undefined), origin, daemon: true, scheduling: 'unmetered' }
+    // @ts-expect-error Non-daemon scoped forks cannot opt out of concurrency admission.
+    const invalid: ScopedForkContext = { fx: ok(undefined), origin, scheduling: 'unmetered' }
+    void valid
+    void invalid
   })
 
   it('timeoutIn can interrupt a caller-owned scope while non-daemon work keeps it alive', async () => {

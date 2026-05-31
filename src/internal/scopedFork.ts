@@ -8,17 +8,32 @@ export class ScopedFork<
   const Scope extends AnyScope = AnyScope
 > extends ScopedEffect('fx/Scope/ScopedFork')<Scope, ScopedForkContext, Task<unknown, unknown>> { }
 
-export interface ScopedForkContext extends TraceOrigin {
+export type ScopedForkContext = TraceOrigin & {
   readonly fx: Fx<unknown, unknown>
+  readonly failure?: 'scope' | 'task' | 'join'
+} & (
+  | MeteredScopedForkContext
+  | DaemonScopedForkContext
+)
+
+interface MeteredScopedForkContext {
   /**
-   * Internal scheduler work that remains scope-owned but does not consume
-   * concurrency admission.
+   * Non-daemon scoped forks are always metered and keep their scope open on
+   * normal completion.
    */
-  readonly unmetered?: boolean
+  readonly daemon?: false | undefined
+  readonly scheduling?: undefined
+}
+
+interface DaemonScopedForkContext {
   /**
    * Internal daemon scoped forks are still owned by their scope, but do not
    * hold the scope open on normal completion.
    */
-  readonly daemon?: boolean
-  readonly failure?: 'scope' | 'task' | 'join'
+  readonly daemon: true
+  /**
+   * Daemon scoped forks may opt out of concurrency admission for internal
+   * scheduler work such as timeout timers.
+   */
+  readonly scheduling?: 'metered' | 'unmetered'
 }

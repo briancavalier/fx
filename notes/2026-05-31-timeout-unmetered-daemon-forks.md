@@ -64,30 +64,34 @@ independently of the work it is bounding.
 
 ## Proposed Direction
 
-Add an internal scheduling flag for scope-owned timer forks:
+Add an internal scheduling mode for daemon scope-owned timer forks:
 
 ```ts
-interface ForkContext {
-  readonly daemon?: boolean
-  readonly unmetered?: boolean
-}
+type ScopedForkContext = TraceOrigin & {
+  readonly fx: Fx<unknown, unknown>
+  readonly failure?: 'scope' | 'task' | 'join'
+} & (
+  | { readonly daemon?: false | undefined; readonly scheduling?: undefined }
+  | { readonly daemon: true; readonly scheduling?: 'metered' | 'unmetered' }
+)
 ```
 
 The exact name can change, but the semantics should be narrow:
 
 - `daemon: true` means the task does not keep scope success alive.
-- `unmetered: true` means the task does not consume a concurrency permit or
-  cooperative concurrency slot.
+- `scheduling: 'unmetered'` means a daemon task does not consume a concurrency
+  permit or cooperative concurrency slot.
+- non-daemon scoped forks cannot use `scheduling: 'unmetered'`.
 
-`timeoutInWithTrace` should mark only its internal timer fork as both daemon and
-unmetered:
+`timeoutInWithTrace` should mark only its internal timer fork as a daemon with
+unmetered scheduling:
 
 ```ts
 new ScopedFork(scope, {
   fx,
   ...traceOrigin,
   daemon: true,
-  unmetered: true
+  scheduling: 'unmetered'
 })
 ```
 
@@ -110,8 +114,8 @@ Timeout timers need something narrower. They remain scope-owned:
   unexpected failure escapes.
 
 They are only detached from the admission budget. Calling this `detached` would
-overload a lifetime term with a scheduling meaning. Prefer a name such as
-`unmetered`, `system`, or `schedulerUnbounded` internally.
+overload a lifetime term with a scheduling meaning. Use the scoped fork
+`scheduling` mode to make that distinction explicit.
 
 ## Bounded Runtime Changes
 
@@ -125,6 +129,9 @@ const runForkWith = (s: Semaphore) =>
       ? runForkUnmetered(fork.arg)
       : acquireAndRunFork(fork.arg, s))
 ```
+
+`ScopeController` should lower `scheduling: 'unmetered'` to this scheduler-level
+`ForkContext.unmetered` flag only when `daemon: true`.
 
 The unmetered path should still use the same child runtime machinery as normal
 forks:
@@ -241,9 +248,10 @@ exist, they can bypass the user's concurrency limit and reduce the meaning of
 bounded concurrency. Keeping the flag internal and timeout-only controls that
 risk.
 
-The second risk is confusing `daemon` and `unmetered`. They must remain
-orthogonal. A daemon task may still be metered in future use cases, and an
-unmetered internal task is not necessarily detached from lifetime ownership.
+The second risk is confusing lifetime and scheduling. The scoped-fork union
+keeps them related but not independent: only daemon scoped forks may choose a
+non-default scheduling mode, and `scheduling: 'unmetered'` still does not imply
+detached lifetime ownership.
 
 The third risk is duplicated runtime paths. The unmetered bounded path should
 reuse the same underlying fork runner as `acquireAndRunFork`; it should only

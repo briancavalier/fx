@@ -14,7 +14,16 @@ export class Fork extends Effect('fx/Concurrent/Fork')<ForkContext, Task<unknown
 
 export interface ForkContext extends TraceOrigin {
   readonly fx: Fx<unknown, unknown>
+  /**
+   * Advanced scheduling mode. Defaults to `metered`.
+   *
+   * Unmetered forks skip only concurrency admission. They keep normal lifetime,
+   * cleanup, failure, trace, and handler-capture behavior.
+   */
+  readonly scheduling?: ForkScheduling
 }
+
+export type ForkScheduling = 'metered' | 'unmetered'
 
 /**
  * Failure returned by `firstSuccess` when every raced child fails.

@@ -61,6 +61,7 @@ interface Fiber {
   readonly runtimeContext: ReturnType<typeof getRuntimeContext>
   readonly done: PromiseWithResolvers<unknown>
   readonly interrupted: PromiseWithResolvers<void>
+  readonly unmetered: boolean
   iterator?: Iterator<unknown, unknown, unknown>
   slotAcquired: boolean
   status: 'ready' | 'running' | 'waiting' | 'done'
@@ -108,6 +109,7 @@ export class CooperativeRuntime {
       runtimeContext: context,
       done,
       interrupted,
+      unmetered: fork.arg.scheduling === 'unmetered',
       masks: new InterruptMaskState(),
       slotAcquired: false,
       status: 'ready',
@@ -125,7 +127,11 @@ export class CooperativeRuntime {
           fiber.status = 'ready'
           this.enqueue(fiber)
         } else if (fiber.masks.canInterrupt) {
-          fiber.abort?.abort(reason)
+          if (fiber.abort !== undefined) {
+            fiber.abort.abort(reason)
+          } else if (fiber.status === 'running') {
+            void interruptRunningFiber(this, fiber)
+          }
         }
         if (fiber.status === 'ready') this.enqueue(fiber)
         this.schedulePump()
@@ -161,12 +167,12 @@ export class CooperativeRuntime {
   private schedulePump() {
     if (this.pumpScheduled || this.pumping) return
     this.pumpScheduled = true
-    setTimeout(() => {
-      setTimeout(() => {
+    queueMicrotask(() => {
+      queueMicrotask(() => {
         this.pumpScheduled = false
         void this.pump()
-      }, 0)
-    }, 0)
+      })
+    })
   }
 
   private async pump(): Promise<void> {
@@ -176,7 +182,7 @@ export class CooperativeRuntime {
       let fiber: Fiber | undefined
       while ((fiber = this.takeRunnableFiber()) !== undefined) {
         fiber.status = 'running'
-        await this.runFiberTurn(fiber)
+        void this.runFiberTurn(fiber)
       }
     } finally {
       this.pumping = false
@@ -208,7 +214,7 @@ export class CooperativeRuntime {
   private takeRunnableFromQueue(queue: Fiber[]): Fiber | undefined {
     for (let i = 0; i < queue.length; ++i) {
       const fiber = queue[i]
-      if (fiber.slotAcquired || fiber.cancelRequested || this.availableSlots > 0) return this.takeQueuedFiber(queue, i)
+      if (hasSlot(fiber) || fiber.cancelRequested || this.availableSlots > 0) return this.takeQueuedFiber(queue, i)
     }
   }
 
@@ -220,13 +226,13 @@ export class CooperativeRuntime {
 
   private hasRunnableQueuedFiber(queue: Fiber[]): boolean {
     return queue.some(fiber =>
-      fiber.status === 'ready' && (fiber.slotAcquired || this.availableSlots > 0 || fiber.cancelRequested)
+      fiber.status === 'ready' && (hasSlot(fiber) || this.availableSlots > 0 || fiber.cancelRequested)
     )
   }
 
   private async runFiberTurn(fiber: Fiber): Promise<void> {
     try {
-      if (!fiber.slotAcquired) {
+      if (!hasSlot(fiber)) {
         if (fiber.cancelRequested) {
           finishFiber(this, fiber)
           return
@@ -277,6 +283,7 @@ export class CooperativeRuntime {
   }
 
   tryAcquireSlot(fiber: Fiber): boolean {
+    if (fiber.unmetered) return true
     if (fiber.slotAcquired) return true
     if (this.availableSlots <= 0) return false
     this.availableSlots--
@@ -285,6 +292,7 @@ export class CooperativeRuntime {
   }
 
   releaseSlot(fiber: Fiber) {
+    if (fiber.unmetered) return
     if (!fiber.slotAcquired) return
     fiber.slotAcquired = false
     this.availableSlots++
@@ -460,6 +468,7 @@ function* reacquireSlot(
   fiber: Fiber
 ): Generator<unknown, void, unknown> {
   if (fiber.status === 'done') return
+  if (fiber.unmetered) return
   while (!runtime.tryAcquireSlot(fiber)) yield* runtime.waitForSlot()
 }
 
@@ -551,6 +560,18 @@ const finishInterruptedFiber = (runtime: CooperativeRuntime, fiber: Fiber, failu
     fiber.interrupted.reject(failure)
   }
 }
+
+const interruptRunningFiber = async (runtime: CooperativeRuntime, fiber: Fiber): Promise<void> => {
+  await runPromise(fx(function* () { yield* closeFiber(runtime, fiber) }) as Fx<any, void>)
+  if (fiber.cleanupFailures.length > 0) {
+    finishInterruptedFiber(runtime, fiber, resourceReleaseFailed(fiber.cleanupFailures))
+  } else {
+    finishInterruptedFiber(runtime, fiber)
+  }
+}
+
+const hasSlot = (fiber: Fiber): boolean =>
+  fiber.unmetered || fiber.slotAcquired
 
 const wrapFiberFailure = (fiber: Fiber, failure: Fail<unknown>): ForkError => {
   const context = runtimeContextOfEffect(failure, fiber.runtimeContext)

@@ -10,7 +10,7 @@ import type { TraceFrameKind, TraceOptions, TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
 import { withCoopConcurrency } from './internal/concurrent/cooperative.js'
 import { Fork, RaceAllFailed } from './internal/concurrent/effects.js'
-import type { EffectsOf, ErrorsOf, ResultOf } from './internal/concurrent/effects.js'
+import type { EffectsOf, ErrorsOf, ForkScheduling, ResultOf } from './internal/concurrent/effects.js'
 import { withBoundedConcurrency, withUnboundedConcurrency } from './internal/concurrent/fork.js'
 import { cooperativeAssertPromise } from './internal/concurrent/cooperativeAsync.js'
 import { InterruptedReturn, isInterpretingReturn } from './internal/iteratorClose.js'
@@ -31,9 +31,20 @@ export type {
   EffectsOf,
   ErrorsOf,
   ForkContext,
+  ForkScheduling,
   ResultOf
 } from './internal/concurrent/effects.js'
 export type { CoopConcurrencyOptions } from './internal/concurrent/cooperative.js'
+
+export type ForkOptions = TraceOptions & {
+  /**
+   * Advanced scheduling mode. Defaults to `metered`.
+   *
+   * Use `unmetered` only for control-plane work that must not consume bounded
+   * or cooperative concurrency admission.
+   */
+  readonly scheduling?: ForkScheduling
+}
 
 /**
  * Start an Fx concurrently and return a {@link Task} handle.
@@ -42,17 +53,21 @@ export type { CoopConcurrencyOptions } from './internal/concurrent/cooperative.j
  * lifetime. Use {@link all} or {@link race} when the caller only needs the
  * structured result.
  *
+ * Advanced: `scheduling: 'unmetered'` skips only concurrency admission for
+ * control-plane work. It does not change task lifetime, cleanup, failures,
+ * traces, or handler capture.
+ *
  * @example
  * const task = yield* fork(fetchUser)
  * const user = yield* wait(task)
  */
 export const fork = <const E, const A>(
   f: Fx<E, A>,
-  options?: TraceOptions
+  options?: ForkOptions
 ): Fx<Exclude<E, Async | Fail<any>> | Fork | HandlerCapture<'fx/Concurrent/Fork'>, Task<A, ErrorsOf<E>>> => {
   const trace = traceOrigin(options, 'fx/Concurrent/fork', fork, 'fork')
   return withCapturedHandlers('fx/Concurrent/Fork', f).pipe(
-    flatMap(fx => new Fork({ fx, ...trace }) as Fx<Fork, Task<A, ErrorsOf<E>>>)
+    flatMap(fx => new Fork({ fx, ...trace, scheduling: options?.scheduling }) as Fx<Fork, Task<A, ErrorsOf<E>>>)
   )
 }
 
@@ -65,6 +80,9 @@ export const fork = <const E, const A>(
  * inside an outer fork scheduler, for example
  * `program.pipe(withScope(scope), withUnboundedConcurrency)`.
  *
+ * Advanced: `scheduling: 'unmetered'` is passed through to the fork scheduler
+ * without changing scope ownership.
+ *
  * The types follow normal effect elimination: `forkIn` introduces a
  * `ScopedFork<Scope>`, `withScope(scope)` handles it and may introduce `Fork`,
  * and a fork scheduler handles `Fork` before execution.
@@ -72,11 +90,11 @@ export const fork = <const E, const A>(
 export const forkIn = <const Scope extends AnyScope, const E, const A>(
   scope: Scope,
   f: Fx<E, A>,
-  options?: TraceOptions
+  options?: ForkOptions
 ): Fx<Exclude<E, Async | Fail<any>> | ScopedFork<Scope> | HandlerCapture<'fx/Concurrent/ForkIn'>, Task<A, ErrorsOf<E>>> => {
   const trace = traceOrigin(options, 'fx/Concurrent/forkIn', forkIn, 'fork')
   return withCapturedHandlers('fx/Concurrent/ForkIn', f).pipe(
-    flatMap(fx => new ScopedFork(scope, { fx, ...trace }) as Fx<ScopedFork<Scope>, Task<A, ErrorsOf<E>>>)
+    flatMap(fx => new ScopedFork(scope, { fx, ...trace, scheduling: options?.scheduling }) as Fx<ScopedFork<Scope>, Task<A, ErrorsOf<E>>>)
   )
 }
 

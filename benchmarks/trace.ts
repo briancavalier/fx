@@ -3,7 +3,7 @@ import { arch, platform, release } from 'node:os'
 import { execFileSync } from 'node:child_process'
 
 import { assertPromise } from '../src/Async.js'
-import { all, firstSettled, fork, forkEach, race, withUnboundedConcurrency } from '../src/Concurrent.js'
+import { all, fork, forkEach, race, withUnboundedConcurrency } from '../src/Concurrent.js'
 import { fail, returnFail } from '../src/Fail.js'
 import { flatMap, fx, ok, run, runPromise } from '../src/Fx.js'
 import { wait } from '../src/Task.js'
@@ -108,7 +108,7 @@ const cases: readonly BenchmarkCase[] = [
   }),
   benchmark('race structured failure', 'runtime', FailureIterations, 100, async () => {
     try {
-      await race(structuredChildren()).pipe(firstSettled, withUnboundedConcurrency, runPromise)
+      await race(structuredChildren()).pipe(withUnboundedConcurrency, runPromise)
     } catch { }
   }),
   benchmark('plain breadcrumb object', 'capture', TraceIterations, 1_000, () => {

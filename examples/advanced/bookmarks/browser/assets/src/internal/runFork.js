@@ -9,7 +9,7 @@ import { Semaphore } from './Semaphore.js';
 import { DisposableSet } from './disposable.js';
 import { ForkError, capturePrependTraceWithContext, captureTraceWithContext, forkFrameMetadata, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from './forkDiagnostics.js';
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './interrupt.js';
-import { withInterpretedReturn } from './iteratorClose.js';
+import { isInterruptedReturn, withInterpretedReturn } from './iteratorClose.js';
 import { currentRuntimeContext, getRuntimeContext, withActiveRuntimeContext, withInterruptionReason } from './runtimeContext.js';
 export const runFork = (f, options = {}) => {
     const disposables = new InterruptState();
@@ -80,6 +80,10 @@ const closeInterruptedIterator = async (i, context, semaphore, origin, trace, un
         disposed.resolve();
     }
     catch (e) {
+        if (isInterruptedReturn(e)) {
+            disposed.resolve();
+            return;
+        }
         disposed.reject(e);
         throw e;
     }
@@ -259,6 +263,11 @@ const acquire = async (s, scope, disposed, f) => {
     ]);
     scope.remove(acquisition);
     if (!acquired) {
+        disposed.resolve();
+        return await never();
+    }
+    if (scope.interruptRequested) {
+        releaseOnce();
         disposed.resolve();
         return await never();
     }

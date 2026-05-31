@@ -2,19 +2,10 @@ import { Effect } from '../../Effect.js';
 /**
  * Request that a computation be started concurrently.
  *
- * A `Fork` request returns a {@link Task} handle. The scheduling policy is
+ * A `Fork` request returns a {@link Task} handle. The scheduling strategy is
  * supplied by handlers such as `withBoundedConcurrency` or `withUnboundedConcurrency`.
  */
 export class Fork extends Effect('fx/Concurrent/Fork') {
-}
-export const allPolicy = { tag: 'all' };
-export const firstSettledPolicy = { tag: 'firstSettled' };
-export const firstSuccessPolicy = { tag: 'firstSuccess' };
-/**
- * Request that a group of computations run concurrently with a structured
- * settlement policy.
- */
-export class Concurrently extends Effect('fx/Concurrent/Concurrently') {
 }
 /**
  * Failure returned by `firstSuccess` when every raced child fails.

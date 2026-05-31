@@ -1,4 +1,4 @@
-type Waiter = () => void
+type Waiter = () => boolean
 
 export class Semaphore {
   private waiters: Waiter[] = [];
@@ -19,8 +19,14 @@ export class Semaphore {
   }
 
   release(): void {
-    if (this.waiters.length) this.waiters.shift()!()
-    else this.available++
+    const waiter = this.waiters.shift()
+    if (waiter === undefined) {
+      this.available++
+    } else {
+      queueMicrotask(() => {
+        if (!waiter()) this.release()
+      })
+    }
   }
 }
 
@@ -36,9 +42,15 @@ const acquired = (): Acquiring => ({
 
 const acquire = (waiters: Waiter[]): Acquiring => {
   let waiter: Waiter
+  let cancelled = false
   return {
-    promise: new Promise<void>(r => waiters.push(waiter = r)),
+    promise: new Promise<void>(r => waiters.push(waiter = () => {
+      if (cancelled) return false
+      r()
+      return true
+    })),
     [Symbol.dispose]: () => {
+      cancelled = true
       const i = waiters.indexOf(waiter!)
       if (i >= 0) waiters.splice(i, 1)
     }

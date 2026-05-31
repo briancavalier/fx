@@ -13,9 +13,9 @@ describe('Abort', () => {
   const TestScope = scope('test/Abort')
 
   describe('scope', () => {
-    it('handles Abort from a same-name scope token', () => {
-      const FirstScope = scope('test/Abort/same-name')
-      const SecondScope = scope('test/Abort/same-name')
+    it('handles Abort from a same-id scope token', () => {
+      const FirstScope = scope('test/Abort/same-id')
+      const SecondScope = scope('test/Abort/same-id')
       const result = fx(function* () {
         yield* abort(SecondScope)
         return 'done'

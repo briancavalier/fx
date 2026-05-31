@@ -1,10 +1,13 @@
 export const ScopeTypeId = Symbol('fx/Scope')
 
-export interface ScopeIdentity<Name extends string = string> {
-  readonly [ScopeTypeId]: Name
+export interface ScopeIdentity<Identity extends PropertyKey = PropertyKey> {
+  readonly [ScopeTypeId]: Identity
 }
 
-export type AnyScopeIdentity = ScopeIdentity<string>
+export type AnyScopeIdentity = ScopeIdentity<PropertyKey>
+
+export const scopeId = <const Scope extends AnyScopeIdentity>(scope: Scope): Scope[typeof ScopeTypeId] =>
+  scope[ScopeTypeId]
 
 export const sameScope = (a: AnyScopeIdentity, b: AnyScopeIdentity): boolean =>
-  a[ScopeTypeId] === b[ScopeTypeId]
+  scopeId(a) === scopeId(b)

@@ -13,9 +13,9 @@ import { Semaphore } from './Semaphore.js'
 import { DisposableSet } from './disposable.js'
 import { ForkError, capturePrependTraceWithContext, captureTraceWithContext, forkFrameMetadata, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from './forkDiagnostics.js'
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './interrupt.js'
-import { withInterpretedReturn } from './iteratorClose.js'
+import { isInterruptedReturn, withInterpretedReturn } from './iteratorClose.js'
 import type { RuntimeContext } from './runtimeContext.js'
-import { currentRuntimeContext, getRuntimeContext, withActiveRuntimeContext, withInterruptionReason } from './runtimeContext.js'
+import { currentRuntimeContext, getRuntimeContext, RuntimeScopeExit, withActiveRuntimeContext, withInterruptionReason } from './runtimeContext.js'
 
 export type RunForkOptions = TraceOptions & {
   readonly maxConcurrency?: number
@@ -132,6 +132,10 @@ const closeInterruptedIterator = async <const E, const A>(
     await runIterator(ir, i, context, semaphore, cleanup, origin, trace, unhandled, rejectUnhandled, cleanupContext)
     disposed.resolve()
   } catch (e) {
+    if (isInterruptedReturn(e)) {
+      disposed.resolve()
+      return
+    }
     disposed.reject(e)
     throw e
   } finally {
@@ -161,12 +165,18 @@ const runIterator = async <const E, const A>(
       const promise = t.promise.finally(() => disposables.removeTask(t))
       let a
       try {
-        a = await Promise.race([promise, unhandled])
+        const scopeExit = disposables.canDeliverInterrupt ? raceScopeExits(effectContext) : undefined
+        a = await Promise.race(scopeExit === undefined ? [promise, unhandled] : [promise, unhandled, scopeExit])
       } catch (e) {
         if (e instanceof UnhandledForkError) throw e.error
         if (disposables.canInterrupt && interrupt !== undefined) return await disposables.interruptNow(interrupt)
         const asyncTrace = capturePrependTraceWithContext(effectContext, origin, trace, { kind: 'async' })
         throw new ForkError('FX_AWAITED_ASYNC_FAILED', `Awaited Async task failed`, origin, traceWithCause(asyncTrace, e, effectContext, getTrace(e)), effectContext, { cause: e })
+      }
+      if (a instanceof RuntimeScopeExit) {
+        await t.interrupt(a.reason)
+        ir = resumeWithRuntimeContext(i, effectContext, a)
+        continue
       }
       // stop if the scope was interrupted while we were waiting
       if (disposables.canInterrupt && interrupt !== undefined) return await disposables.interruptNow(interrupt)
@@ -235,6 +245,10 @@ class InterruptState {
 
   get canInterrupt() {
     return this.requested && this.masks.canInterrupt
+  }
+
+  get canDeliverInterrupt() {
+    return this.masks.canInterrupt
   }
 
   setInterrupt(interrupt: (masks?: readonly InterruptMaskBegin['arg'][], reason?: unknown) => Promise<unknown>) {
@@ -333,6 +347,11 @@ const acquire = async <A>(s: Semaphore, scope: InterruptState, disposed: Promise
     disposed.resolve()
     return await never()
   }
+  if (scope.interruptRequested) {
+    releaseOnce()
+    disposed.resolve()
+    return await never()
+  }
 
   const interrupted = disposed.promise.then(() => {
     releaseOnce()
@@ -405,6 +424,13 @@ const returnWithRuntimeContext = <E, A>(
       withInterpretedReturn(() => iterator.return?.() ?? { done: true, value: undefined as A }))
 
 const never = <A>(): Promise<A> => new Promise(() => { })
+
+const raceScopeExits = (context: RuntimeContext | undefined): Promise<RuntimeScopeExit> | undefined => {
+  if (context?.clearScopeExitSources === true) return undefined
+  const sources = context?.scopeExitSources
+  if (sources === undefined || sources.length === 0) return undefined
+  return Promise.race(sources.map(source => source.promise))
+}
 
 class DisposableAbortController extends AbortController {
   [Symbol.dispose]() { this.abort() }

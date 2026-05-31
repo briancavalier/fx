@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
 import { fail, Fail, returnFail } from './Fail.js'
-import { firstSettled, race, withUnboundedConcurrency } from './Concurrent.js'
+import { race, withUnboundedConcurrency } from './Concurrent.js'
 import { andFinally, andFinallyExit, managed, using, usingManaged } from './Finalization.js'
 import { bracket, fx, ok, run, runPromise, runTask, type Fx } from './Fx.js'
 import { control, handle } from './Handler.js'
@@ -462,7 +462,6 @@ describe('Interrupt masking', () => {
     })
 
     const result = race([ok('winner'), loser]).pipe(
-      firstSettled,
       withScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
@@ -478,7 +477,7 @@ describe('Interrupt masking', () => {
 
     resolveAcquire('resource')
     assert.equal(await result, 'winner')
-    assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope }])
+    assert.deepEqual(exits, [{ type: 'success', value: 'winner' }])
   })
 
   it('preserves failures inside uninterruptible computations', () => {

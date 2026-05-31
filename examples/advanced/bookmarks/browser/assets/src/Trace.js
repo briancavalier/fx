@@ -310,7 +310,9 @@ const formatDiagnosticError = (error, lines, indent, context, options = {}) => {
     const prefix = ' '.repeat(indent);
     lines.push(`${prefix}${formatDiagnosticHeader(error, context)}`);
     formatDiagnosticFields(error.fields, lines, indent, context);
-    formatDiagnosticActiveScopes(error.trace?.activeScopes, lines, indent, context);
+    const activeScopes = formatActiveScopes(error.trace?.activeScopes, context);
+    if (activeScopes.length > 0)
+        lines.push(`${prefix}${activeScopes[0]}`);
     if (error.trace !== undefined) {
         const omitTraceSuffix = options.omitTraceSuffix ?? 0;
         const frames = omitTraceSuffix === 0 ? error.trace.frames : error.trace.frames.slice(0, -omitTraceSuffix);
@@ -329,31 +331,6 @@ const formatDiagnosticError = (error, lines, indent, context, options = {}) => {
     }
     if (error.aggregate !== undefined) {
         formatDiagnosticAggregate(error, lines, indent, context);
-    }
-};
-const formatDiagnosticActiveScopes = (scopes, lines, indent, context) => {
-    const formatted = formatActiveScopes(scopes, context);
-    if (formatted.length === 0)
-        return;
-    const prefix = ' '.repeat(indent);
-    lines.push(`${prefix}${formatted[0]}`);
-    formatDiagnosticActiveScopeDetails(scopes, lines, indent, context);
-};
-const formatDiagnosticActiveScopeDetails = (scopes, lines, indent, context) => {
-    if (scopes === undefined || scopes.length === 0)
-        return;
-    const compacted = compactActiveScopes(scopes);
-    if (!compacted.some(scope => scope !== '...' && scope.description !== undefined))
-        return;
-    const prefix = ' '.repeat(indent);
-    lines.push(`${prefix}${context.style.section('Active scope details:')}`);
-    for (const scope of compacted) {
-        if (scope === '...') {
-            lines.push(`${prefix}  ...`);
-        }
-        else if (scope.description !== undefined) {
-            lines.push(`${prefix}  ${scope.label}: ${scope.description}`);
-        }
     }
 };
 const formatDiagnosticHeader = (error, context) => {

@@ -1,4 +1,8 @@
 let interpretingReturn = false;
+export class InterruptedReturn {
+    _tag = 'fx/InterruptedReturn';
+}
+export const isInterruptedReturn = (e) => e instanceof InterruptedReturn;
 export function* drainIteratorReturn(iterator, step) {
     const ir = iterator.return?.();
     if (ir === undefined)

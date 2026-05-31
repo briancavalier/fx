@@ -23,7 +23,7 @@ Rules for changes:
   such as `all`, `race`, `ok`, `fail`, `handle`, and `flatMap`. Do not add
   assertions around delegating wrappers unless `corepack pnpm typecheck` proves
   they are necessary.
-- Prefer pipeable constructors for higher-order effects, e.g. `fx.pipe(retry(options))` or `fx.pipe(timeout(RequestScope, options))`.
+- Prefer pipeable constructors for higher-order effects, e.g. `fx.pipe(retry(options))` or `fx.pipe(timeout(options))`.
 - Prefer options objects once an effect constructor has more than one meaningful option or likely future extension point.
 - For higher-order scoped effects, preserve effect typing through the request and handler. If failures cross fork/race/task boundaries, convert them to data before racing unless runtime semantics explicitly preserve typed failures.
 - When default handlers create errors asynchronously or after handler interpretation, preserve request-site diagnostics with `Breadcrumb`/cause chaining rather than overwriting stacks.

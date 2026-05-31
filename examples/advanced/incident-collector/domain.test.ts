@@ -59,14 +59,13 @@ describe('incident collector example', () => {
       collector: 'deploy',
       reason: 'deploy API unavailable'
     })
-    assert.equal(state.bundles[0]?.exit, undefined)
+    assert.equal(state.bundles[0]?.exit, 'failure')
     assert.ok(!state.events.includes('read-log:done:api'))
     assert.ok(!state.events.includes('read-log:done:billing'))
     assert.ok(!state.events.includes('write:manifest'))
-    assert.ok(state.events.includes('collector:logs:interrupted'))
-    assert.ok(state.events.includes('collector:metrics:interrupted'))
+    assert.ok(!state.events.includes('collector:logs:success'))
+    assert.ok(!state.events.includes('collector:metrics:success'))
     assert.ok(state.events.includes('collector:deploy:failure'))
-    assert.ok(state.events.includes('collector:runtime:interrupted'))
   })
 
   it('uses the first successful runtime source when the primary source fails', async () => {

@@ -61,7 +61,7 @@ describe('State', () => {
     assert.equal((next.value as GetState<typeof OtherState>).scope, OtherState)
   })
 
-  it('handles same-name state scope tokens', () => {
+  it('handles same-id state scope tokens', () => {
     const FirstScope = scope<Stateful<number>>()('test/State/SameName')
     const SecondScope = scope<Stateful<number>>()('test/State/SameName')
     const result = getState(SecondScope).pipe(withState(FirstScope, 1), run)

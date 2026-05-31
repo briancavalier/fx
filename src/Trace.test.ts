@@ -2,17 +2,18 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise, tryPromise } from './Async.js'
 import { at } from './Breadcrumb.js'
-import { RaceAllFailed, all, withCoopConcurrency, firstSettled, firstSuccess, fork, mapAll, race, withUnboundedConcurrency } from './Concurrent.js'
+import { RaceAllFailed, all, withCoopConcurrency, firstSuccess, fork, forkIn, mapAll, race, withUnboundedConcurrency } from './Concurrent.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { andFinally } from './Finalization.js'
 import { fx, runPromise } from './Fx.js'
 import { control } from './Handler.js'
 import { InterruptFrom } from './InterruptFrom.js'
 import { defaultRetry, retry } from './Retry.js'
-import { ScopeTypeId, scope, withScope } from './Scope.js'
+import { scope, scopeId, withScope } from './Scope.js'
+import { ScopeTypeId } from './internal/scopeIdentity.js'
 import { wait } from './Task.js'
 import { sleep, withClock } from './Time.js'
-import { TimeoutInterrupt, timeout } from './Timeout.js'
+import { TimeoutInterrupt, timeout, timeoutIn } from './Timeout.js'
 import { MaxTraceDepth, appendTrace, attachTrace, captureTrace, formatDiagnostic, formatError, formatTrace, getTrace, getTraceCapturePolicy, prependTrace, setTraceCapturePolicy, snapshotError, snapshotTrace, withTraceCapture } from './Trace.js'
 import type { Trace, TraceOptions } from './Trace.js'
 import type { Breadcrumb } from './Breadcrumb.js'
@@ -154,31 +155,29 @@ describe('Trace', () => {
       runPromise(f as never),
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [
-          { id: 'http/request', label: 'http/request', description: undefined },
-          { id: 'db/transaction', label: 'db/transaction', description: undefined }
+          { id: 'http/request', label: 'http/request' },
+          { id: 'db/transaction', label: 'db/transaction' }
         ])
         return true
       }
     )
   })
 
-  it('keeps the scope token marker non-enumerable', () => {
+  it('keeps scope ids symbol-keyed and non-enumerable', () => {
     const TestScope = scope('test/Trace/non-enumerable', { label: 'non-enumerable' })
 
     assert.equal(Object.getOwnPropertyDescriptor(TestScope, ScopeTypeId)?.enumerable, false)
-    assert.deepEqual(Object.keys(TestScope), ['label', 'name'])
+    assert.deepEqual(Object.keys(TestScope), ['label'])
+    assert.equal(scopeId(TestScope), 'test/Trace/non-enumerable')
+    assert.equal(TestScope.label, 'non-enumerable')
   })
 
-  it('preserves the explicit scope identity when metadata contains a name', () => {
-    const metadata: { readonly name: string, readonly label: string } = {
-      name: 'test/Trace/metadata-name',
-      label: 'metadata name'
-    }
-    const TestScope = scope('test/Trace/explicit-name', metadata)
+  it('supports symbol scope ids with labels', () => {
+    const id = Symbol('test/Trace/symbol-id')
+    const TestScope = scope(id, { label: 'symbol scope' })
 
-    assert.equal(TestScope.name, 'test/Trace/explicit-name')
-    assert.equal(TestScope[ScopeTypeId], 'test/Trace/explicit-name')
-    assert.equal(TestScope.label, 'metadata name')
+    assert.equal(scopeId(TestScope), id)
+    assert.equal(TestScope.label, 'symbol scope')
   })
 
   it('uses scope labels in active-scope diagnostics', async () => {
@@ -192,8 +191,7 @@ describe('Trace', () => {
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'test/Trace/request',
-          label: 'request',
-          description: undefined
+          label: 'request'
         }])
         assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: request/)
         return true
@@ -201,40 +199,12 @@ describe('Trace', () => {
     )
   })
 
-  it('uses scope descriptions in diagnostic active-scope details', async () => {
-    const RequestScope = scope('test/Trace/request-description', {
-      label: 'request',
-      description: 'Handles one HTTP request from accept through response write'
-    })
-    const f = fx(function* () {
-      yield* fail(new Error('described scope'))
-    }).pipe(withScope(RequestScope))
-
-    await assert.rejects(
-      runPromise(f as never),
-      e => {
-        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
-          id: 'test/Trace/request-description',
-          label: 'request',
-          description: 'Handles one HTTP request from accept through response write'
-        }])
-        const diagnostic = formatDiagnostic(e, { colors: 'never' })
-        assert.match(diagnostic, /Active scopes: request/)
-        assert.match(diagnostic, /Active scope details:\n  request: Handles one HTTP request from accept through response write/)
-        assert.doesNotMatch(formatError(e), /Active scope details:/)
-        return true
-      }
-    )
-  })
-
   it('keeps distinct active scopes with the same diagnostic text', async () => {
     const OuterRequest = scope('test/Trace/outer-request', {
-      label: 'request',
-      description: 'Shared request description'
+      label: 'request'
     })
     const InnerRequest = scope('test/Trace/inner-request', {
-      label: 'request',
-      description: 'Shared request description'
+      label: 'request'
     })
     const f = fx(function* () {
       yield* fail(new Error('same diagnostic text'))
@@ -248,8 +218,8 @@ describe('Trace', () => {
       e => {
         const activeScopes = snapshotError(e).trace?.activeScopes
         assert.deepEqual(activeScopes, [
-          { id: 'test/Trace/outer-request', label: 'request', description: 'Shared request description' },
-          { id: 'test/Trace/inner-request', label: 'request', description: 'Shared request description' }
+          { id: 'test/Trace/outer-request', label: 'request' },
+          { id: 'test/Trace/inner-request', label: 'request' }
         ])
         assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: request > request/)
         return true
@@ -278,31 +248,6 @@ describe('Trace', () => {
       e => {
         assert.match(formatDiagnostic(e, { colors: 'never' }), /Active scopes: http\/request > db\/transaction/)
         assert.match(formatError(e), /Active scopes: http\/request > db\/transaction/)
-        assert.doesNotMatch(formatDiagnostic(e, { colors: 'never' }), /Active scope details:/)
-        return true
-      }
-    )
-  })
-
-  it('formats active-scope details for described visible scopes only', async () => {
-    const DbTransaction = scope('db/transaction', {
-      description: 'Owns transaction commit and rollback finalization'
-    })
-    const HttpRequest = scope('http/request')
-    const f = fx(function* () {
-      yield* fail(new Error('mixed scope descriptions'))
-    }).pipe(
-      withScope(DbTransaction),
-      withScope(HttpRequest)
-    )
-
-    await assert.rejects(
-      runPromise(f as never),
-      e => {
-        const diagnostic = formatDiagnostic(e, { colors: 'never' })
-        assert.match(diagnostic, /Active scopes: http\/request > db\/transaction/)
-        assert.match(diagnostic, /Active scope details:\n  db\/transaction: Owns transaction commit and rollback finalization/)
-        assert.doesNotMatch(diagnostic, /http\/request:/)
         return true
       }
     )
@@ -325,31 +270,6 @@ describe('Trace', () => {
     )
   })
 
-  it('compacts deep active-scope details with the active-scope line', async () => {
-    const scoped = [
-      scope('a', { description: 'visible first scope' }),
-      scope('b', { description: 'hidden middle scope' }),
-      scope('c'),
-      scope('d', { description: 'visible second-to-last scope' }),
-      scope('e', { description: 'visible last scope' })
-    ].reduceRight(
-      (f, name) => f.pipe(withScope(name)),
-      fx(function* () {
-        yield* fail(new Error('deep scope descriptions'))
-      })
-    )
-
-    await assert.rejects(
-      runPromise(scoped as never),
-      e => {
-        const diagnostic = formatDiagnostic(e, { colors: 'never' })
-        assert.match(diagnostic, /Active scopes: a > \.\.\. > c > d > e/)
-        assert.match(diagnostic, /Active scope details:\n  a: visible first scope\n  \.\.\.\n  d: visible second-to-last scope\n  e: visible last scope/)
-        assert.doesNotMatch(diagnostic, /hidden middle scope/)
-        return true
-      }
-    )
-  })
 
   it('does not rewrite traces captured before entering a region', async () => {
     const prebuilt = fail(new Error('prebuilt'))
@@ -390,29 +310,68 @@ describe('Trace', () => {
     }
   })
 
-  it('propagates regional trace policy and frame metadata through all and race handlers', async () => {
+  it('propagates regional trace policy and frame metadata through concurrency operators', async () => {
     const previous = setTraceCapturePolicy('off')
     try {
       const allError = new Error('all failed')
+      const mapAllError = new Error('mapAll failed')
       const raceError = new Error('race failed')
+      const firstSuccessError = new Error('firstSuccess failed')
       const allProgram = fx(function* () {
         return yield* all([fx(function* () { yield* fail(allError) })]).pipe(withTraceCapture('labels'))
       })
+      const mapAllProgram = fx(function* () {
+        return yield* mapAll([mapAllError], error => fx(function* () { yield* fail(error) })).pipe(withTraceCapture('labels'))
+      })
       const raceProgram = fx(function* () {
-        return yield* race([fx(function* () { yield* fail(raceError) })]).pipe(withTraceCapture('labels'), firstSettled)
+        return yield* race([fx(function* () { yield* fail(raceError) })]).pipe(withTraceCapture('labels'))
+      })
+      const firstSuccessProgram = fx(function* () {
+        return yield* firstSuccess([fx(function* () { yield* fail(firstSuccessError) })]).pipe(withTraceCapture('labels'))
       })
 
       const allResult = await allProgram.pipe(withUnboundedConcurrency, returnFail, runPromise)
+      const mapAllResult = await mapAllProgram.pipe(withUnboundedConcurrency, returnFail, runPromise)
       const raceResult = await raceProgram.pipe(withUnboundedConcurrency, returnFail, runPromise)
+      const firstSuccessResult = await firstSuccessProgram.pipe(withUnboundedConcurrency, returnFail, runPromise)
 
       assert.ok(Fail.is(allResult))
+      assert.ok(Fail.is(mapAllResult))
       assert.ok(Fail.is(raceResult))
+      assert.ok(Fail.is(firstSuccessResult))
+      assert.ok(firstSuccessResult.arg instanceof RaceAllFailed)
       assert.deepEqual(traceMessages(allResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/all[0]', 'fx/Concurrent/all'])
       assert.equal(snapshotError(allResult.arg).trace?.frames[1]?.kind, 'fork')
       assert.equal(snapshotError(allResult.arg).trace?.frames[1]?.index, 0)
+      assert.deepEqual(traceMessages(mapAllResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/mapAll[0]', 'fx/Concurrent/mapAll'])
+      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[1]?.kind, 'fork')
+      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[1]?.index, 0)
       assert.deepEqual(traceMessages(raceResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/race[0]', 'fx/Concurrent/race'])
       assert.equal(snapshotError(raceResult.arg).trace?.frames[1]?.kind, 'fork')
       assert.equal(snapshotError(raceResult.arg).trace?.frames[1]?.index, 0)
+      assert.deepEqual(traceMessages(firstSuccessResult.arg.errors[0]).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/firstSuccess[0]', 'fx/Concurrent/firstSuccess'])
+      assert.equal(snapshotError(firstSuccessResult.arg.errors[0]).trace?.frames[1]?.kind, 'fork')
+      assert.equal(snapshotError(firstSuccessResult.arg.errors[0]).trace?.frames[1]?.index, 0)
+    } finally {
+      setTraceCapturePolicy(previous)
+    }
+  })
+
+  it('keeps firstSuccess child traces race-kind under full trace capture', async () => {
+    const previous = setTraceCapturePolicy('full')
+    try {
+      const raceError = new Error('firstSuccess full trace failed')
+      const raceProgram = fx(function* () {
+        return yield* firstSuccess([fx(function* () { yield* fail(raceError) })])
+      })
+
+      const raceResult = await raceProgram.pipe(withUnboundedConcurrency, returnFail, runPromise)
+
+      assert.ok(Fail.is(raceResult))
+      assert.ok(raceResult.arg instanceof RaceAllFailed)
+      assert.deepEqual(traceMessages(raceResult.arg.errors[0]).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/firstSuccess[0]', 'fx/Concurrent/firstSuccess'])
+      assert.equal(snapshotError(raceResult.arg.errors[0]).trace?.frames[1]?.kind, 'race')
+      assert.equal(snapshotError(raceResult.arg.errors[0]).trace?.frames[1]?.index, 0)
     } finally {
       setTraceCapturePolicy(previous)
     }
@@ -435,12 +394,12 @@ describe('Trace', () => {
 
       assert.ok(Fail.is(allResult))
       assert.ok(Fail.is(mapAllResult))
-      assert.deepEqual(traceMessages(allResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/all[0]', 'fx/Concurrent/all'])
-      assert.equal(snapshotError(allResult.arg).trace?.frames[1]?.kind, 'all')
-      assert.equal(snapshotError(allResult.arg).trace?.frames[1]?.index, 0)
-      assert.deepEqual(traceMessages(mapAllResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/mapAll[0]', 'fx/Concurrent/mapAll'])
-      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[1]?.kind, 'all')
-      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[1]?.index, 0)
+      assert.deepEqual(traceMessages(allResult.arg).slice(0, 2), ['fx/Concurrent/all[0]', 'fx/Concurrent/all'])
+      assert.equal(snapshotError(allResult.arg).trace?.frames[0]?.kind, 'fork')
+      assert.equal(snapshotError(allResult.arg).trace?.frames[0]?.index, 0)
+      assert.deepEqual(traceMessages(mapAllResult.arg).slice(0, 2), ['fx/Concurrent/mapAll[0]', 'fx/Concurrent/mapAll'])
+      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[0]?.kind, 'fork')
+      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[0]?.index, 0)
     } finally {
       setTraceCapturePolicy(previous)
     }
@@ -459,7 +418,7 @@ describe('Trace', () => {
         return yield* mapAll([mapAllError], error => fx(function* () { yield* fail(error) })).pipe(withTraceCapture('labels'), withCoopConcurrency())
       })
       const raceProgram = fx(function* () {
-        return yield* race([fx(function* () { yield* fail(raceError) })]).pipe(withTraceCapture('labels'), firstSettled, withCoopConcurrency())
+        return yield* race([fx(function* () { yield* fail(raceError) })]).pipe(withTraceCapture('labels'), withCoopConcurrency())
       })
 
       const allResult = await allProgram.pipe(returnFail, runPromise)
@@ -469,28 +428,27 @@ describe('Trace', () => {
       assert.ok(Fail.is(allResult))
       assert.ok(Fail.is(mapAllResult))
       assert.ok(Fail.is(raceResult))
-      assert.deepEqual(traceMessages(allResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/all[0]', 'fx/Concurrent/all'])
-      assert.equal(snapshotError(allResult.arg).trace?.frames[1]?.kind, 'all')
-      assert.equal(snapshotError(allResult.arg).trace?.frames[1]?.index, 0)
-      assert.deepEqual(traceMessages(mapAllResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/mapAll[0]', 'fx/Concurrent/mapAll'])
-      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[1]?.kind, 'all')
-      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[1]?.index, 0)
-      assert.deepEqual(traceMessages(raceResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/race[0]', 'fx/Concurrent/race'])
-      assert.equal(snapshotError(raceResult.arg).trace?.frames[1]?.kind, 'race')
-      assert.equal(snapshotError(raceResult.arg).trace?.frames[1]?.index, 0)
+      assert.deepEqual(traceMessages(allResult.arg).slice(0, 2), ['fx/Concurrent/all[0]', 'fx/Concurrent/all'])
+      assert.equal(snapshotError(allResult.arg).trace?.frames[0]?.kind, 'fork')
+      assert.equal(snapshotError(allResult.arg).trace?.frames[0]?.index, 0)
+      assert.deepEqual(traceMessages(mapAllResult.arg).slice(0, 2), ['fx/Concurrent/mapAll[0]', 'fx/Concurrent/mapAll'])
+      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[0]?.kind, 'fork')
+      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[0]?.index, 0)
+      assert.deepEqual(traceMessages(raceResult.arg).slice(0, 2), ['fx/Concurrent/race[0]', 'fx/Concurrent/race'])
+      assert.equal(snapshotError(raceResult.arg).trace?.frames[0]?.kind, 'fork')
+      assert.equal(snapshotError(raceResult.arg).trace?.frames[0]?.index, 0)
     } finally {
       setTraceCapturePolicy(previous)
     }
   })
 
-  it('propagates regional trace policy through first-success race policy', async () => {
+  it('propagates regional trace policy through firstSuccess with cooperative scheduling', async () => {
     const previous = setTraceCapturePolicy('off')
     try {
-      const raceError = new Error('cooperative tagged race failed')
+      const raceError = new Error('cooperative firstSuccess failed')
       const raceProgram = fx(function* () {
-        return yield* race([fx(function* () { yield* fail(raceError) })]).pipe(
+        return yield* firstSuccess([fx(function* () { yield* fail(raceError) })]).pipe(
           withTraceCapture('labels'),
-          firstSuccess,
           withCoopConcurrency()
         )
       })
@@ -499,9 +457,9 @@ describe('Trace', () => {
 
       assert.ok(Fail.is(raceResult))
       assert.ok(raceResult.arg instanceof RaceAllFailed)
-      assert.deepEqual(traceMessages(raceResult.arg.errors[0]).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/race[0]', 'fx/Concurrent/race'])
-      assert.equal(snapshotError(raceResult.arg.errors[0]).trace?.frames[1]?.kind, 'race')
-      assert.equal(snapshotError(raceResult.arg.errors[0]).trace?.frames[1]?.index, 0)
+      assert.deepEqual(traceMessages(raceResult.arg.errors[0]).slice(0, 2), ['fx/Concurrent/firstSuccess[0]', 'fx/Concurrent/firstSuccess'])
+      assert.equal(snapshotError(raceResult.arg.errors[0]).trace?.frames[0]?.kind, 'fork')
+      assert.equal(snapshotError(raceResult.arg.errors[0]).trace?.frames[0]?.index, 0)
     } finally {
       setTraceCapturePolicy(previous)
     }
@@ -521,8 +479,7 @@ describe('Trace', () => {
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'http/request',
-          label: 'http/request',
-          description: undefined
+          label: 'http/request'
         }])
         return true
       }
@@ -535,7 +492,7 @@ describe('Trace', () => {
       yield* all([fx(function* () { yield* fail(new Error('all scoped')) })])
     }).pipe(withScope(HttpRequest))
     const raceProgram = fx(function* () {
-      yield* race([fx(function* () { yield* fail(new Error('race scoped')) })]).pipe(firstSettled)
+      yield* race([fx(function* () { yield* fail(new Error('race scoped')) })])
     }).pipe(withScope(HttpRequest))
 
     await assert.rejects(
@@ -543,8 +500,7 @@ describe('Trace', () => {
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'http/request',
-          label: 'http/request',
-          description: undefined
+          label: 'http/request'
         }])
         return true
       }
@@ -554,12 +510,86 @@ describe('Trace', () => {
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'http/request',
-          label: 'http/request',
-          description: undefined
+          label: 'http/request'
         }])
         return true
       }
     )
+  })
+
+  it('keeps hidden operator scopes out of active-scope diagnostics', async () => {
+    const HttpRequest = scope('http/request')
+    const allProgram = fx(function* () {
+      yield* all([fx(function* () { yield* fail(new Error('hidden all scope')) })])
+    }).pipe(withScope(HttpRequest))
+    const raceProgram = fx(function* () {
+      yield* race([fx(function* () { yield* fail(new Error('hidden race scope')) })])
+    }).pipe(withScope(HttpRequest))
+    const firstSuccessProgram = fx(function* () {
+      yield* firstSuccess([fx(function* () { yield* fail(new Error('hidden firstSuccess scope')) })])
+    }).pipe(withScope(HttpRequest))
+
+    await assert.rejects(
+      runPromise(allProgram.pipe(withUnboundedConcurrency) as never),
+      e => {
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'http/request',
+          label: 'http/request'
+        }])
+        return true
+      }
+    )
+    await assert.rejects(
+      runPromise(raceProgram.pipe(withUnboundedConcurrency) as never),
+      e => {
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'http/request',
+          label: 'http/request'
+        }])
+        return true
+      }
+    )
+    await assert.rejects(
+      runPromise(firstSuccessProgram.pipe(withUnboundedConcurrency) as never),
+      e => {
+        assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
+          id: 'http/request',
+          label: 'http/request'
+        }])
+        assert.ok(e instanceof Error)
+        assert.ok(e.cause instanceof RaceAllFailed)
+        assert.deepEqual(snapshotError(e.cause.errors[0]).trace?.activeScopes, [{
+          id: 'http/request',
+          label: 'http/request'
+        }])
+        return true
+      }
+    )
+  })
+
+  it('keeps private timeout scopes out of active-scope diagnostics', async () => {
+    const clock = new VirtualClock(0)
+    const HttpRequest = scope('http/request')
+    const timeoutProgram = fx(function* () {
+      return yield* sleep(100).pipe(timeout({ ms: 50, label: 'request timeout' }))
+    })
+
+    const timeoutPromise = runPromise(timeoutProgram.pipe(
+      withScope(HttpRequest),
+      control(InterruptFrom, (_, interrupt) => fx(function* () {
+        return interrupt.arg
+      })),
+      withUnboundedConcurrency,
+      withClock(clock)
+    ) as never)
+    await clock.step(50)
+    const timeoutResult = await timeoutPromise
+
+    assert.ok(timeoutResult instanceof TimeoutInterrupt)
+    assert.deepEqual(snapshotError(timeoutResult).trace?.activeScopes, [{
+      id: 'http/request',
+      label: 'http/request'
+    }])
   })
 
   it('propagates active scopes to async failures', async () => {
@@ -573,8 +603,7 @@ describe('Trace', () => {
       e => {
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'http/request',
-          label: 'http/request',
-          description: undefined
+          label: 'http/request'
         }])
         return true
       }
@@ -593,8 +622,7 @@ describe('Trace', () => {
         const formatted = formatDiagnostic(e, { colors: 'never' })
         assert.deepEqual(snapshotError(e).trace?.activeScopes, [{
           id: 'db/transaction',
-          label: 'db/transaction',
-          description: undefined
+          label: 'db/transaction'
         }])
         assert.match(formatted, /AggregateError: Resource release failed/)
         assert.match(formatted, /Active scopes: db\/transaction/)
@@ -673,7 +701,7 @@ describe('Trace', () => {
     const clock = new VirtualClock(0)
     const TimeoutScope = scope('test/Trace/timeout')
     const timeoutProgram = fx(function* () {
-      return yield* sleep(100).pipe(timeout(TimeoutScope, { ms: 50 }))
+      return yield* sleep(100).pipe(timeout({ ms: 50 }))
     })
 
     const timeoutPromise = runPromise(timeoutProgram.pipe(
@@ -690,6 +718,7 @@ describe('Trace', () => {
 
     assert.ok(!Fail.is(timeoutResult))
     assert.ok(timeoutResult instanceof TimeoutInterrupt)
+    assert.equal(snapshotError(timeoutResult).trace?.frames[0]?.message, 'Timeout interrupted timeout after 50ms')
     assert.equal(snapshotError(timeoutResult).trace?.frames[0]?.kind, 'timeout')
     assert.equal(snapshotError(timeoutResult).trace?.frames[0]?.location, undefined)
 
@@ -705,6 +734,74 @@ describe('Trace', () => {
     assert.equal(snapshotError(retryError).trace?.frames[0]?.location, undefined)
     assert.equal(snapshotError(retryError).trace?.frames[1]?.kind, 'retry')
     assert.equal(snapshotError(retryError).trace?.frames[1]?.location, undefined)
+  })
+
+  it('uses private timeout labels without exposing private timeout scopes', async () => {
+    const clock = new VirtualClock(0)
+    const timeoutProgram = fx(function* () {
+      return yield* sleep(100).pipe(timeout({ ms: 50, label: 'fetch user' }))
+    })
+
+    const timeoutPromise = runPromise(timeoutProgram.pipe(
+      control(InterruptFrom, (_, interrupt) => fx(function* () {
+        return interrupt.arg
+      })),
+      withUnboundedConcurrency,
+      withClock(clock)
+    ) as never)
+    await clock.step(50)
+    const timeoutResult = await timeoutPromise
+
+    assert.ok(timeoutResult instanceof TimeoutInterrupt)
+    assert.equal(snapshotError(timeoutResult).trace?.frames[0]?.message, 'Timeout interrupted fetch user after 50ms')
+    assert.equal(snapshotError(timeoutResult).trace?.frames[0]?.kind, 'timeout')
+    assert.equal(snapshotError(timeoutResult).trace?.activeScopes, undefined)
+  })
+
+  it('uses timeoutIn labels and caller-owned scope labels in timeout traces', async () => {
+    const labelClock = new VirtualClock(0)
+    const LabeledDeadline = scope('test/Trace/labeled-timeout-in', { label: 'request scope' })
+    const labeledProgram = fx(function* () {
+      yield* timeoutIn(LabeledDeadline, { ms: 50, label: 'request deadline' })
+      yield* forkIn(LabeledDeadline, sleep(100))
+    })
+
+    const labeledPromise = runPromise(labeledProgram.pipe(
+      withScope(LabeledDeadline),
+      control(InterruptFrom, (_, interrupt) => fx(function* () {
+        return interrupt.arg
+      })),
+      withUnboundedConcurrency,
+      withClock(labelClock)
+    ) as never)
+    await labelClock.step(50)
+    const labeledResult = await labeledPromise
+
+    assert.ok(labeledResult instanceof TimeoutInterrupt)
+    assert.equal(snapshotError(labeledResult).trace?.frames[0]?.message, 'Timeout interrupted request deadline after 50ms')
+    assert.equal(snapshotError(labeledResult).trace?.frames[0]?.kind, 'timeout')
+
+    const fallbackClock = new VirtualClock(0)
+    const FallbackDeadline = scope('test/Trace/fallback-timeout-in', { label: 'fallback request' })
+    const fallbackProgram = fx(function* () {
+      yield* timeoutIn(FallbackDeadline, { ms: 50 })
+      yield* forkIn(FallbackDeadline, sleep(100))
+    })
+
+    const fallbackPromise = runPromise(fallbackProgram.pipe(
+      withScope(FallbackDeadline),
+      control(InterruptFrom, (_, interrupt) => fx(function* () {
+        return interrupt.arg
+      })),
+      withUnboundedConcurrency,
+      withClock(fallbackClock)
+    ) as never)
+    await fallbackClock.step(50)
+    const fallbackResult = await fallbackPromise
+
+    assert.ok(fallbackResult instanceof TimeoutInterrupt)
+    assert.equal(snapshotError(fallbackResult).trace?.frames[0]?.message, 'Timeout interrupted fallback request after 50ms')
+    assert.equal(snapshotError(fallbackResult).trace?.frames[0]?.kind, 'timeout')
   })
 
   it('prepends frames newest first', () => {
@@ -1038,6 +1135,20 @@ describe('Trace', () => {
     assert.doesNotMatch(formatted, /at fx\/Concurrent\/race \[race\]/)
   })
 
+  it('compacts same-location firstSuccess child and parent race-kind frames', () => {
+    const error = tracedError(
+      'firstSuccess failed',
+      'fx/Fail/fail',
+      { kind: 'fail' },
+      concurrencyTrace('race', 1, 20, 21, 20, 21, 'fx/Concurrent/firstSuccess')
+    )
+
+    const formatted = formatDiagnostic(error, { colors: 'never' })
+
+    assert.match(formatted, /at fx\/Concurrent\/firstSuccess\[1\] \[race child #1\]/)
+    assert.doesNotMatch(formatted, /at fx\/Concurrent\/firstSuccess \[race\]/)
+  })
+
   it('keeps different-location concurrency child and parent frames', () => {
     const error = tracedError(
       'all failed',
@@ -1302,16 +1413,17 @@ const concurrencyTrace = (
   childLine: number,
   childColumn: number,
   parentLine: number,
-  parentColumn: number
+  parentColumn: number,
+  message = `fx/Concurrent/${kind}`
 ) =>
   prependTrace(
     stackBreadcrumb(
-      `fx/Concurrent/${kind}[${index}]`,
+      `${message}[${index}]`,
       `Error: ${kind} child\n    at child (${import.meta.filename}:${childLine}:${childColumn})`
     ),
     prependTrace(
       stackBreadcrumb(
-        `fx/Concurrent/${kind}`,
+        message,
         `Error: ${kind}\n    at ${kind} (${import.meta.filename}:${parentLine}:${parentColumn})`
       ),
       undefined,

@@ -97,24 +97,25 @@ const program =
   )
 ```
 
-Scopes let lifecycle semantics stay explicit too. A timeout interrupts the named
-scope, scoped finalizers observe how the scope exited, and the caller chooses
-how to recover:
+Scopes let lifecycle semantics stay explicit too. An operation timeout uses a
+private diagnostic-hidden scope for the operation, scoped finalizers observe how
+the operation exited, and the caller chooses how to recover:
 
 ```ts
 import {
   assert as assertNoFail,
   consoleLog,
+  control,
   defaultConsole,
   fx,
   runPromise
 } from "@briancavalier/fx"
 import { withUnboundedConcurrency } from "@briancavalier/fx/concurrent"
-import { andFinallyExit, recoverInterrupt, scope } from "@briancavalier/fx/scope"
+import { andFinallyExit, InterruptFrom, scope, withScope } from "@briancavalier/fx/scope"
 import { defaultTime, sleep } from "@briancavalier/fx/time"
-import { timeout } from "@briancavalier/fx/timeout"
+import { timeout, timeoutIn } from "@briancavalier/fx/timeout"
 
-const RequestScope = "request" as const
+const RequestScope = scope("request")
 
 const loadUser = fx(function* () {
   yield* andFinallyExit(RequestScope, exit =>
@@ -127,15 +128,15 @@ const loadUser = fx(function* () {
 
 const program = fx(function* () {
   const user = yield* loadUser.pipe(
-    timeout(RequestScope, { ms: 500 })
+    timeout({ ms: 500, label: "load user" })
   )
 
   yield* consoleLog("loaded user", user)
 })
 
 await program.pipe(
-  scope(RequestScope),
-  recoverInterrupt(RequestScope, () => consoleLog("request timed out")),
+  withScope(RequestScope),
+  control(InterruptFrom, () => consoleLog("request timed out")),
   defaultTime,
   withUnboundedConcurrency,
   defaultConsole,
@@ -143,6 +144,24 @@ await program.pipe(
   runPromise
 )
 ```
+
+Use `timeoutIn(scope, options)` when the deadline is a delayed interruption of a
+caller-owned scope rather than a timeout for one operation. The caller still
+owns the scope boundary, and a fork scheduler outside that boundary schedules
+the internal timer:
+
+```ts
+const request = fx(function* () {
+  yield* timeoutIn(RequestScope, { ms: 500, label: "request deadline" })
+  return yield* loadUser
+}).pipe(
+  withScope(RequestScope),
+  withUnboundedConcurrency
+)
+```
+
+That timer is daemon scoped work: it can interrupt the scope while other scoped
+work keeps the scope alive, but it does not keep the scope alive by itself.
 
 Core primitives are exported from `@briancavalier/fx`. Optional features are
 exported from named subpaths, so effect signatures stay concise:
@@ -171,7 +190,7 @@ their named subpaths.
 | Time and clock handlers | `@briancavalier/fx/time` |
 | Random effects and handlers | `@briancavalier/fx/random` |
 | Structured logging | `@briancavalier/fx/log` |
-| Retry and timeout policies | `@briancavalier/fx/retry`, `@briancavalier/fx/timeout` |
+| Retry and timeout helpers | `@briancavalier/fx/retry`, `@briancavalier/fx/timeout` |
 | HTTP client and transport-neutral HTTP server routes | `@briancavalier/fx/http-client`, `@briancavalier/fx/http-server` |
 | Node runtime, process, diagnostics, and HTTP transport | `@briancavalier/fx/platform-node` |
 

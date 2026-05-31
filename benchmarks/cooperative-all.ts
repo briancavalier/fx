@@ -4,7 +4,7 @@ import { arch, platform, release } from 'node:os'
 import { performance } from 'node:perf_hooks'
 
 import { assertPromise } from '../src/Async.js'
-import { all, firstSettled, firstSuccess, fork, race, withCoopConcurrency, withUnboundedConcurrency } from '../src/Concurrent.js'
+import { all, firstSuccess, fork, race, withCoopConcurrency, withUnboundedConcurrency } from '../src/Concurrent.js'
 import { Effect } from '../src/Effect.js'
 import { fail, returnFail } from '../src/Fail.js'
 import { andFinally } from '../src/Finalization.js'
@@ -100,17 +100,17 @@ const results = await runBenchmarks([
   benchmark('withCoopConcurrency mixed parked async budget 1', 'mixed async', async () => {
     await mixedAsyncAndYielding().pipe(withCoopConcurrency({ yieldBudget: 1 }), handleStep(), runPromise)
   }),
-  benchmark('firstSettled + withUnboundedConcurrency nested race', 'nested race', async () => {
-    await nestedRace().pipe(firstSettled, handleStep(), withUnboundedConcurrency, runPromise)
+  benchmark('race + withUnboundedConcurrency nested race', 'nested race', async () => {
+    await nestedRace().pipe(handleStep(), withUnboundedConcurrency, runPromise)
   }),
   benchmark('withCoopConcurrency nested race', 'nested race', async () => {
-    await nestedRace().pipe(firstSettled, withCoopConcurrency(), handleStep(), runPromise)
+    await nestedRace().pipe(withCoopConcurrency(), handleStep(), runPromise)
   }),
-  benchmark('firstSuccess + withUnboundedConcurrency nested firstSuccess', 'nested firstSuccess', async () => {
-    await nestedFirstSuccess().pipe(firstSuccess, handleStep(), withUnboundedConcurrency, runPromise)
+  benchmark('firstSuccess withUnboundedConcurrency nested firstSuccess', 'nested firstSuccess', async () => {
+    await nestedFirstSuccess().pipe(handleStep(), withUnboundedConcurrency, runPromise)
   }),
   benchmark('withCoopConcurrency nested firstSuccess', 'nested firstSuccess', async () => {
-    await nestedFirstSuccess().pipe(firstSuccess, withCoopConcurrency(), handleStep(), runPromise)
+    await nestedFirstSuccess().pipe(withCoopConcurrency(), handleStep(), runPromise)
   }),
   benchmark('withUnboundedConcurrency cancel cleanup', 'cleanup', async () => {
     await cleanupFailureProgram().pipe(withScope(CleanupScope), withUnboundedConcurrency, returnFail, runPromise)
@@ -308,7 +308,7 @@ function nestedRace() {
 
 function nestedFirstSuccess() {
   return all([
-    race([
+    firstSuccess([
       fx(function* () {
         yield* fail(new Error('primary failed'))
       }),

@@ -14,7 +14,8 @@ Use the smallest example that demonstrates the task:
 | Minimal runnable program | `basic/hello.ts` | Shows one effect, one handler, and `run` without extra structure. |
 | Custom domain effects and pure tests | `basic/guessing-game` | Shows business logic written against effects and interpreted by handlers. |
 | HTTP boundary code | `basic/http-server-client` | Shows routes, request context, client/server boundaries, and in-memory handlers. |
-| Handler-chosen concurrency semantics | `intermediate/concurrency-handlers.ts` | Shows one request interpreted with different race result policies and execution strategies. |
+| Concurrency operators and schedulers | `intermediate/concurrency-handlers.ts` | Shows race operators and scheduler handlers. |
+| Scope-owned fork lifetime | `intermediate/scope-owned-forks.ts` | Shows scoped fork lifetime, a scope deadline, and scheduler handler ordering. |
 | Interruption and cleanup | `intermediate/interrupt-safe-finalization.ts` | Shows cancellation, named scopes, and async finalizers. |
 | Scoped data-flow or early return | `intermediate/read-csv.ts` | Shows scoped `YieldFrom`, managed resources, transforms, and early return. |
 | Scoped producer/receiver pipelines | `intermediate/yield-sink-pipeline.ts` | Shows scoped `YieldFrom`, `Sink`, and explicit pipe outcomes. |
@@ -37,7 +38,8 @@ already matches the requested pattern.
 
 | Example | What it shows | Best for | Run |
 | --- | --- | --- | --- |
-| `intermediate/concurrency-handlers.ts` | One `race` request interpreted with first-settled and first-success handlers, plus one program run with fork-backed and cooperative concurrency handlers. | Readers learning how handlers choose concurrency semantics. | `node --import tsx examples/intermediate/concurrency-handlers.ts` |
+| `intermediate/concurrency-handlers.ts` | `race` and `firstSuccess` operators, plus one program run with fork-backed and cooperative scheduler handlers. | Readers learning how operators and schedulers compose. | `node --import tsx examples/intermediate/concurrency-handlers.ts` |
+| `intermediate/scope-owned-forks.ts` | `forkIn`, `timeoutIn`, scoped cleanup, and the required `withScope` then scheduler handler order. | Readers learning scope-owned child lifetime. | `node --import tsx examples/intermediate/scope-owned-forks.ts` |
 | `intermediate/interrupt-safe-finalization.ts` | Race cancellation, named scopes, and async finalization for interrupted work. | Readers working with resources under structured concurrency. | `node --import tsx examples/intermediate/interrupt-safe-finalization.ts` |
 | `intermediate/uninterruptible-mask.ts` | Timeout-driven interruption after a protected acquire/register critical section. | Readers who need precise interruption boundaries. | `node --import tsx examples/intermediate/uninterruptible-mask.ts` |
 | `intermediate/scoped-state.ts` | Mutable state modeled as named scoped operations and handled state. | Readers exploring structured local state. | `node --import tsx examples/intermediate/scoped-state.ts` |

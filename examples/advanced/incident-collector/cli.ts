@@ -25,13 +25,11 @@ const runSnapshot = (label: string, failDeploy: boolean) => fx(function* () {
     withScope(CollectorScope),
     withConsoleLog,
     defaultTime,
-    // Toggle structured concurrency handlers:
-    // fork-backed structured concurrency:
+    // Toggle scheduler handlers:
+    // fork-backed scheduling:
     // withBoundedConcurrency(6),
-    // cooperative structured concurrency:
+    // cooperative scheduling:
     withCoopConcurrency({ concurrency: 6, yieldBudget: 64 }),
-    // withCoopConcurrency now also handles explicit/nested Fork.
-    // withBoundedConcurrency(6),
     withScope(BundleScope),
     returnAll,
   )

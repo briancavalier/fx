@@ -47,7 +47,7 @@ const slow = uninterruptibleMask(restore => fx(function* () {
 
 const main = fx(function* () {
   const result = yield* slow.pipe(
-    timeout(ExampleScope, { ms: 50 })
+    timeout({ ms: 50 })
   )
   yield* consoleLog('result:', result)
 })

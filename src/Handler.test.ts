@@ -46,9 +46,9 @@ describe('Handler', () => {
       assert.deepEqual(effect.arg, { value: 2 })
     })
 
-    it('handles same-type effects from a same-name scope token', () => {
-      const FirstScope = scope('test/Handler/same-name')
-      const SecondScope = scope('test/Handler/same-name')
+    it('handles same-type effects from a same-id scope token', () => {
+      const FirstScope = scope('test/Handler/same-id')
+      const SecondScope = scope('test/Handler/same-id')
       const result = fx(function* () {
         return yield* request(SecondScope, 1)
       }).pipe(handleScoped(Request, FirstScope, () => ok('handled')))

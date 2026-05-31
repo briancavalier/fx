@@ -22,6 +22,10 @@
       "types": "./dist/exports/concurrent.d.ts",
       "import": "./dist/exports/concurrent.js"
     },
+    "./experimental/concurrent": {
+      "types": "./dist/exports/experimental/concurrent.d.ts",
+      "import": "./dist/exports/experimental/concurrent.js"
+    },
     "./http-client": {
       "types": "./dist/exports/http-client.d.ts",
       "import": "./dist/exports/http-client.js"

@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Effect, fx, ScopedEffect, type Fx } from '@briancavalier/fx'
 import * as concurrentApi from '@briancavalier/fx/concurrent'
+import * as experimentalConcurrentApi from '@briancavalier/fx/experimental/concurrent'
 import * as scopeApi from '@briancavalier/fx/scope'
 import * as timeoutApi from '@briancavalier/fx/timeout'
 import {
@@ -14,9 +15,9 @@ import {
   mapAll,
   race,
   withBoundedConcurrency,
-  withCoopConcurrency,
   withUnboundedConcurrency
 } from '@briancavalier/fx/concurrent'
+import { withCoopConcurrency } from '@briancavalier/fx/experimental/concurrent'
 import { sameScope, scope, scopeId, scopeLabel, withScope, type AnyScope } from '@briancavalier/fx/scope'
 import { TimeoutInterrupt, timeout, timeoutIn } from '@briancavalier/fx/timeout'
 
@@ -35,8 +36,8 @@ describe('package import inference', () => {
     assert.equal(typeof firstSuccess, 'function')
     assert.equal(typeof withBoundedConcurrency, 'function')
     assert.equal(typeof withUnboundedConcurrency, 'function')
-    assert.equal(typeof withCoopConcurrency, 'function')
     assert.equal(typeof RaceAllFailed, 'function')
+    assert.equal(typeof withCoopConcurrency, 'function')
 
     assert.equal(typeof scope, 'function')
     assert.equal(typeof scopeId, 'function')
@@ -54,6 +55,8 @@ describe('package import inference', () => {
     const noAllPolicy: HasExport<typeof concurrentApi, `all${'Policy'}`> = false
     const noFirstSettledPolicy: HasExport<typeof concurrentApi, `first${'Settled'}Policy`> = false
     const noFirstSuccessPolicy: HasExport<typeof concurrentApi, `first${'Success'}Policy`> = false
+    const noStableCoopConcurrency: HasExport<typeof concurrentApi, `with${'Coop'}Concurrency`> = false
+    const experimentalCoopConcurrency: HasExport<typeof experimentalConcurrentApi, `with${'Coop'}Concurrency`> = true
     const noScopeTypeId: HasExport<typeof scopeApi, `Scope${'Type'}Id`> = false
     const noTimeoutInScope: HasExport<typeof timeoutApi, `timeout${'In'}Scope`> = false
     assert.equal(noConcurrentEffect, false)
@@ -62,6 +65,8 @@ describe('package import inference', () => {
     assert.equal(noAllPolicy, false)
     assert.equal(noFirstSettledPolicy, false)
     assert.equal(noFirstSuccessPolicy, false)
+    assert.equal(noStableCoopConcurrency, false)
+    assert.equal(experimentalCoopConcurrency, true)
     assert.equal(noScopeTypeId, false)
     assert.equal(noTimeoutInScope, false)
   })

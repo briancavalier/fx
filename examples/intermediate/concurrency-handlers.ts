@@ -6,9 +6,9 @@ import {
   fork,
   race,
   withBoundedConcurrency,
-  withCoopConcurrency,
   withUnboundedConcurrency
 } from '@briancavalier/fx/concurrent'
+import { withCoopConcurrency } from '@briancavalier/fx/experimental/concurrent'
 
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 import { formatDiagnostic, formatError, snapshotError } from '@briancavalier/fx/trace'

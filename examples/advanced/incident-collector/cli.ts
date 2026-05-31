@@ -1,5 +1,5 @@
 import { consoleError, consoleLog, defaultConsole, fx, returnAll, runPromise } from '@briancavalier/fx'
-import { withCoopConcurrency } from '@briancavalier/fx/concurrent'
+import { withCoopConcurrency } from '@briancavalier/fx/experimental/concurrent'
 
 import { withConsoleLog } from '@briancavalier/fx/log'
 import { withScope } from '@briancavalier/fx/scope'

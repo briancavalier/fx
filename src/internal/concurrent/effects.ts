@@ -14,6 +14,11 @@ export class Fork extends Effect('fx/Concurrent/Fork')<ForkContext, Task<unknown
 
 export interface ForkContext extends TraceOrigin {
   readonly fx: Fx<unknown, unknown>
+  /**
+   * Internal scheduler work that remains lifecycle-owned by its caller but does
+   * not consume concurrency admission.
+   */
+  readonly unmetered?: boolean
 }
 
 /**

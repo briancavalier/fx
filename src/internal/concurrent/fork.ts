@@ -3,7 +3,7 @@ import { Handle } from '../../Handler.js'
 import { HandlerCapture, handleCaptured, withCapturedHandlers } from '../../HandlerCapture.js'
 import { Task } from '../../Task.js'
 import { Semaphore } from '../Semaphore.js'
-import { acquireAndRunFork } from '../runFork.js'
+import { acquireAndRunFork, runForkUnmetered } from '../runFork.js'
 import { Fork } from './effects.js'
 
 /**
@@ -30,7 +30,7 @@ export const withUnboundedConcurrency = withBoundedConcurrency(Infinity)
 
 const runForkWith = (s: Semaphore) =>
   (fork: Fork): Fx<never, Task<unknown, unknown>> =>
-    ok(acquireAndRunFork(fork.arg, s))
+    ok(fork.arg.unmetered === true ? runForkUnmetered(fork.arg, s) : acquireAndRunFork(fork.arg, s))
 
 type WithConcurrencyHandledEffects<E> =
   Handle<Handle<E, Fork>, HandlerCapture<'fx/Concurrent/Fork'>>

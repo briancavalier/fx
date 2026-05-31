@@ -11,6 +11,11 @@ export class ScopedFork<
 export interface ScopedForkContext extends TraceOrigin {
   readonly fx: Fx<unknown, unknown>
   /**
+   * Internal scheduler work that remains scope-owned but does not consume
+   * concurrency admission.
+   */
+  readonly unmetered?: boolean
+  /**
    * Internal daemon scoped forks are still owned by their scope, but do not
    * hold the scope open on normal completion.
    */

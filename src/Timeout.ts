@@ -1,17 +1,18 @@
-import { Async, assertPromise } from './Async.js'
+import { Async } from './Async.js'
 import { at } from './Breadcrumb.js'
 import { Fork, forkIn } from './Concurrent.js'
 import { Fail, catchAll, fail } from './Fail.js'
-import { Finally, andFinallyExit } from './Finalization.js'
+import { Finally, andFinally } from './Finalization.js'
 import { Fx, flatMap, fx, map, ok } from './Fx.js'
-import { withCapturedHandlers, type HandlerCapture } from './HandlerCapture.js'
-import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
+import { InterruptFrom } from './InterruptFrom.js'
 import { returnFrom } from './ReturnFrom.js'
 import { scope, scopeLabel, withScope, type AnyScope, type Exit } from './Scope.js'
-import { Sleep, sleep } from './Time.js'
+import { Sleep } from './Time.js'
 import type { TraceOrigin } from './Trace.js'
 import { attachTrace, captureTrace } from './Trace.js'
-import { ScopedFork } from './internal/scopedFork.js'
+import { dispose } from './internal/disposable.js'
+import { scopeExit } from './internal/scopeExit.js'
+import { schedule } from './internal/timeSchedule.js'
 
 /**
  * Run an Fx with a time limit, interrupting a private timeout scope when the
@@ -50,37 +51,40 @@ export function timeout<const Options extends AnyTimeoutOptions>(
 /**
  * Schedule a delayed interruption for a caller-owned scope.
  *
- * `timeoutIn` does not install a scope boundary and does not schedule the timer
- * by itself. The caller must handle the same scope with {@link withScope} and
- * place a fork scheduler outside that scope boundary. The timer fork is
- * scope-owned, but it is internal daemon work: it can interrupt the scope while
- * other scope-owned work keeps the scope alive, but it does not keep the scope
- * alive by itself.
+ * `timeoutIn` does not install a scope boundary. The caller must handle the same
+ * scope with {@link withScope}. The timer is scope-owned cleanup: it can
+ * interrupt the scope while other scope-owned work keeps the scope alive, but it
+ * does not keep the scope alive by itself.
  */
 export function timeoutIn<const Scope extends AnyScope, const Options extends AnyTimeoutOptions>(
   scope: Scope,
   options: Options
-): Fx<Sleep | InterruptFrom<Scope, TimeoutReasonOf<Options>> | Fork | Finally<Scope, Async> | ScopedFork<Scope> | HandlerCapture<'fx/Concurrent/ForkIn'>, void> {
+): Fx<Sleep | InterruptFrom<Scope, TimeoutReasonOf<Options>> | Finally<Scope>, void> {
   const origin = at(`Timeout interrupted ${options.label ?? scopeLabel(scope)} after ${options.ms}ms`, timeoutIn)
   const trace = captureTrace(origin, undefined, { kind: 'timeout' })
 
-  return timeoutInWithTrace(scope, options, { origin, trace })
+  return timeoutInWithTrace(scope, options, { origin, trace }) as Fx<Sleep | InterruptFrom<Scope, TimeoutReasonOf<Options>> | Finally<Scope>, void>
 }
 
 function timeoutInWithTrace<const Scope extends AnyScope, const Options extends AnyTimeoutOptions>(
   scope: Scope,
   options: Options,
   traceOrigin: TraceOrigin
-): Fx<Sleep | InterruptFrom<Scope, TimeoutReasonOf<Options>> | Fork | Finally<Scope, Async> | ScopedFork<Scope> | HandlerCapture<'fx/Concurrent/ForkIn'>, void> {
+): Fx<unknown, void> {
   const trace = traceOrigin.trace
   const reasonOrigin = traceOrigin.origin
   return fx(function* () {
-    const task = yield* withCapturedHandlers('fx/Concurrent/ForkIn', sleep(options.ms).pipe(
-      flatMap(() => interruptFrom(scope, makeTimeoutReason(options, { ms: options.ms, origin: reasonOrigin, trace })))
-    )).pipe(
-      flatMap(fx => new ScopedFork(scope, { fx, ...traceOrigin, daemon: true }))
-    )
-    yield* andFinallyExit(scope, exit => assertPromise(() => task.interrupt(exitReason(exit))))
+    const requestExit = yield* scopeExit(scope)
+    const timer = yield* schedule(options.ms, () => {
+      try {
+        requestExit(interruptedExit(scope, makeTimeoutReason(options, { ms: options.ms, origin: reasonOrigin, trace })))
+      } catch (error) {
+        requestExit({ type: 'failure', failure: new Fail(error) })
+      }
+    })
+    yield* andFinally(scope, fx(function* () {
+      dispose(timer)
+    }))
   })
 }
 
@@ -144,8 +148,13 @@ const makeTimeoutReason = <const Options extends AnyTimeoutOptions>(
     ? makeTimeoutInterrupt(expired) as TimeoutReasonOf<Options>
     : options.reason(expired) as TimeoutReasonOf<Options>
 
-const exitReason = (exit: Exit) =>
-  exit.type === 'interrupted' ? exit.reason : undefined
+const interruptedExit = <const Scope extends AnyScope>(
+  scope: Scope,
+  reason: unknown
+): Exit<Scope> =>
+  reason === undefined
+    ? { type: 'interrupted', scope }
+    : { type: 'interrupted', scope, reason }
 
 type AttemptResult<E, A> = Success<A> | Failure<E>
 

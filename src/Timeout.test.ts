@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Fail, fail, returnFail } from './Fail.js'
-import { forkIn, withBoundedConcurrency, withUnboundedConcurrency } from './Concurrent.js'
+import { forkIn, withBoundedConcurrency, withCoopConcurrency, withUnboundedConcurrency } from './Concurrent.js'
 import { fx, ok, run, runPromise } from './Fx.js'
 import { andFinallyExit } from './Finalization.js'
 import type { Fx } from './Fx.js'
@@ -61,6 +61,44 @@ describe('Timeout', () => {
 
     assert.ok(!Fail.is(r))
     assert.equal(r, 'fast')
+  })
+
+  it('interrupts long protected work under bounded concurrency', async () => {
+    const c = new VirtualClock(0)
+
+    const p = sleep(100).pipe(
+      timeout({ ms: 10 }),
+      control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
+      withBoundedConcurrency(1),
+      returnFail,
+      withClock(c),
+      runPromise
+    )
+
+    await c.step(10)
+    const r = await p
+
+    assert.ok(!Fail.is(r))
+    assert.ok(r instanceof TimeoutInterrupt)
+  })
+
+  it('interrupts long protected work under cooperative concurrency', async () => {
+    const c = new VirtualClock(0)
+
+    const p = sleep(100).pipe(
+      timeout({ ms: 10 }),
+      control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
+      withCoopConcurrency({ concurrency: 1 }),
+      returnFail,
+      withClock(c),
+      runPromise
+    )
+
+    await c.step(10)
+    const r = await p
+
+    assert.ok(!Fail.is(r))
+    assert.ok(r instanceof TimeoutInterrupt)
   })
 
   it('interrupts the scope with the timeout reason when the timeout wins', async () => {
@@ -258,6 +296,66 @@ describe('Timeout', () => {
     assert.equal(r, reason)
     assert.equal(completed, false)
     assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope, reason }])
+  })
+
+  it('timeoutIn interrupts scope-owned work occupying the only bounded concurrency permit', async () => {
+    const c = new VirtualClock(0)
+    const reason = { type: 'scope-timeout' }
+    const events = [] as string[]
+
+    const p = fx(function* () {
+      yield* timeoutIn(TestScope, { ms: 10, reason: () => reason })
+      yield* forkIn(TestScope, fx(function* () {
+        events.push('child:start')
+        yield* andFinallyExit(TestScope, exit => fx(function* () {
+          events.push(`child:finalize:${exit.type}`)
+        }))
+        yield* sleep(100)
+      }))
+    }).pipe(
+      withScope(TestScope),
+      control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
+      withBoundedConcurrency(1),
+      returnFail,
+      withClock(c),
+      runPromise
+    )
+
+    await c.step(10)
+    const r = await p
+
+    assert.equal(r, reason)
+    assert.deepEqual(events, ['child:start', 'child:finalize:interrupted'])
+  })
+
+  it('timeoutIn interrupts scope-owned work occupying the only cooperative concurrency permit', async () => {
+    const c = new VirtualClock(0)
+    const reason = { type: 'scope-timeout' }
+    const events = [] as string[]
+
+    const p = fx(function* () {
+      yield* timeoutIn(TestScope, { ms: 10, reason: () => reason })
+      yield* forkIn(TestScope, fx(function* () {
+        events.push('child:start')
+        yield* andFinallyExit(TestScope, exit => fx(function* () {
+          events.push(`child:finalize:${exit.type}`)
+        }))
+        yield* sleep(100)
+      }))
+    }).pipe(
+      withScope(TestScope),
+      control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
+      withCoopConcurrency({ concurrency: 1 }),
+      returnFail,
+      withClock(c),
+      runPromise
+    )
+
+    await c.step(10)
+    const r = await p
+
+    assert.equal(r, reason)
+    assert.deepEqual(events, ['child:start', 'child:finalize:interrupted'])
   })
 
   it('timeoutIn interrupts the owning scope while the parent body is parked', async () => {

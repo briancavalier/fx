@@ -13,6 +13,7 @@ import { cooperativeAssertPromise } from './internal/concurrent/cooperativeAsync
 import { drainIteratorReturn, isInterpretingReturn, isInterruptedReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { interruptionReason, RuntimeScopeExit, withActiveScope, withScopeExitSource, withoutScopeExitSources, type ActiveScopeDiagnostic } from './internal/runtimeContext.js'
+import { ScopeExit } from './internal/scopeExit.js'
 import { ScopeTypeId, sameScope, scopeId, type ScopeIdentity } from './internal/scopeIdentity.js'
 import { settledTaskQueue } from './internal/settledQueue.js'
 import { ScopedFork } from './internal/scopedFork.js'
@@ -113,6 +114,7 @@ type HandleScopeEffect<E, Scope extends AnyScope> =
   E extends Finally<Scope, any> ? never
   : E extends ReturnFrom<Scope, any> ? never
   : E extends ScopedFork<Scope> ? never
+  : E extends ScopeExit<Scope> ? never
   : E
 
 type ScopedForkEffects<E, Scope extends AnyScope> =
@@ -214,6 +216,8 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
           if (matchesScope && Finally.is(effect)) {
             controller.addFinalizer(effect.arg)
             ir = i.next(undefined)
+          } else if (matchesScope && ScopeExit.is(effect)) {
+            ir = i.next((exit: Exit<Scope>) => controller.requestExit(exit))
           } else if (matchesScope && ScopedFork.is(effect)) {
             const task = yield* controller.fork(effect.arg)
             ir = i.next(task)
@@ -353,7 +357,12 @@ class ScopeController<Scope extends AnyScope> {
       }
       if (initialExit.type === 'success' && !hasNonDaemonTask(pending, this.tasks)) break
 
-      const result = await settled.next()
+      const result = await Promise.race([
+        settled.next(),
+        this.exitRequested.promise.then(exit => ({ type: 'scope-exit', exit }) as const)
+      ])
+      if (result.type === 'scope-exit') break
+
       pending.delete(result.task)
       this.tasks.delete(result.task)
 

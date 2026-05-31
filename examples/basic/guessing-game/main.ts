@@ -1,5 +1,5 @@
 import { Effect, fx, ok } from '@briancavalier/fx'
-import { abort, orReturn, scope, withScope } from '@briancavalier/fx/scope'
+import { abort, orReturn, scope, withScope, type Control } from '@briancavalier/fx/scope'
 
 // -------------------------------------------------------------------
 // The number guessing game example from
@@ -16,7 +16,7 @@ export class Read extends Effect('Read')<string, string> { }
 
 const read = (prompt: string) => new Read(prompt)
 
-const ParseInteger = scope('examples/basic/guessing-game/ParseInteger')
+const ParseInteger = scope<Control>()('examples/basic/guessing-game/ParseInteger')
 
 export const toInteger = (s: string) => {
   const i = Number.parseInt(s, 10)

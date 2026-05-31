@@ -31,10 +31,25 @@ export interface Scope<Id extends PropertyKey = PropertyKey> extends ScopeIdenti
   readonly diagnostic?: boolean
 }
 
-export type AnyScope = Scope<PropertyKey>
+declare const LifetimeTypeId: unique symbol
+declare const ControlTypeId: unique symbol
 
-export function scope<Brand>(): <const Id extends PropertyKey>(id: Id, metadata?: ScopeMetadata) => Scope<Id> & Brand
-export function scope<const Id extends PropertyKey>(id: Id, metadata?: ScopeMetadata): Scope<Id>
+export type Lifetime = {
+  readonly [LifetimeTypeId]: true
+}
+
+export type Control = {
+  readonly [ControlTypeId]: true
+}
+
+export type AnyScope = Scope<PropertyKey>
+export type LifetimeScope<Id extends PropertyKey = PropertyKey> = Scope<Id> & Lifetime
+export type ControlScope<Id extends PropertyKey = PropertyKey> = Scope<Id> & Lifetime & Control
+export type AnyLifetimeScope = LifetimeScope<PropertyKey>
+export type AnyControlScope = ControlScope<PropertyKey>
+
+export function scope<Brand>(): <const Id extends PropertyKey>(id: Id, metadata?: ScopeMetadata) => Scope<Id> & Lifetime & Brand
+export function scope<const Id extends PropertyKey>(id: Id, metadata?: ScopeMetadata): Scope<Id> & Lifetime
 export function scope(id?: PropertyKey, metadata: ScopeMetadata = {}): any {
   if (id === undefined) return scope
   const token = { ...metadata }
@@ -96,7 +111,7 @@ export interface Interrupted<Scope extends AnyScope> {
   readonly reason?: unknown
 }
 
-export function withScope<const Scope extends AnyScope>(
+export function withScope<const Scope extends AnyLifetimeScope>(
   scope: Scope
 ): <const E, const A>(f: Fx<E, A>) => Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>> {
   return <const E, const A>(f: Fx<E, A>) => {
@@ -106,34 +121,36 @@ export function withScope<const Scope extends AnyScope>(
   }
 }
 
-export type ScopeEffects<E, Scope extends AnyScope> =
+export type ScopeEffects<E, Scope extends AnyLifetimeScope> =
   HandleScopeEffect<E, Scope> | ScopedForkEffects<E, Scope> | CleanupEffects<E, Scope> | CleanupFailure<E, Scope>
 
-type HandleScopeEffect<E, Scope extends AnyScope> =
+type HandleScopeEffect<E, Scope extends AnyLifetimeScope> =
   E extends Finally<Scope, any> ? never
   : E extends ReturnFrom<Scope, any> ? never
   : E extends ScopedFork<Scope> ? never
   : E
 
-type ScopedForkEffects<E, Scope extends AnyScope> =
+type ScopedForkEffects<E, Scope extends AnyLifetimeScope> =
   E extends ScopedFork<Scope> ? Fork | Async | Fail<unknown> : never
 
-type MatchingFinally<E, Scope extends AnyScope> =
+type MatchingFinally<E, Scope extends AnyLifetimeScope> =
   Extract<E, Finally<Scope, any>>
 
-type FinalizerEffects<E, Scope extends AnyScope> =
+type FinalizerEffects<E, Scope extends AnyLifetimeScope> =
   MatchingFinally<E, Scope> extends never
     ? never
     : MatchingFinally<E, Scope> extends Finally<Scope, infer FE> ? FE : never
 
-type CleanupEffects<E, Scope extends AnyScope> =
+type CleanupEffects<E, Scope extends AnyLifetimeScope> =
   Exclude<FinalizerEffects<E, Scope>, Fail<any>>
 
-type CleanupFailure<E, Scope extends AnyScope> =
+type CleanupFailure<E, Scope extends AnyLifetimeScope> =
   MatchingFinally<E, Scope> extends never ? never : Fail<AggregateError>
 
 export type ReturnValue<E, Scope extends AnyScope> =
-  E extends ReturnFrom<Scope, infer A> ? A : never
+  E extends ReturnFrom<infer EffectScope extends AnyScope, infer A>
+    ? Extract<EffectScope, Scope> extends never ? never : A
+    : never
 
 class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pipeable, CapturedHandler {
   public readonly pipe = pipeThis as Pipeable['pipe']

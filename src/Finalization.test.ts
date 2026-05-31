@@ -7,11 +7,11 @@ import { fx, ok, run, type Fx } from './Fx.js'
 import { andFinally, andFinallyExit, managed, using, usingManaged, type Finally, type Managed } from './Finalization.js'
 import type { Interrupt } from './Interrupt.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope, withScope, type Exit } from './Scope.js'
+import { scope, withScope, type Control, type Exit } from './Scope.js'
 import { collectFrom, YieldFrom, yieldFrom, type Yielding } from './YieldFrom.js'
 
 describe('Finalization', () => {
-  const TestScope = scope('test/Finalization')
+  const TestScope = scope<Control>()('test/Finalization')
   const CleanupEvents = scope<Yielding<'cleanup'>>()('test/Finalization/cleanup')
 
   it('preserves finalizer effects in constructor types', () => {
@@ -79,7 +79,7 @@ describe('Finalization', () => {
   })
 
   it('leaves finalizers from a different scope visible after scope', () => {
-    const OtherScope = scope('test/Finalization/other')
+    const OtherScope = scope<Control>()('test/Finalization/other')
     const scoped = fx(function* () {
       yield* andFinally(OtherScope, yieldFrom(CleanupEvents, 'cleanup'))
       return 'done'
@@ -460,7 +460,7 @@ describe('Finalization', () => {
   })
 
   it('does not run finalizers from a different scope', () => {
-    const OtherScope = scope('test/Finalization/other')
+    const OtherScope = scope<Control>()('test/Finalization/other')
     const released = [] as string[]
 
     const f = fx(function* () {

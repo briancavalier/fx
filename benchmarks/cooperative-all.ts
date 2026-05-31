@@ -4,7 +4,7 @@ import { arch, platform, release } from 'node:os'
 import { performance } from 'node:perf_hooks'
 
 import { assertPromise } from '../src/Async.js'
-import { all, firstSuccess, fork, race, withCoopConcurrency, withUnboundedConcurrency } from '../src/Concurrent.js'
+import { all, firstSuccess, fork, forkIn, race, withBoundedConcurrency, withCoopConcurrency, withUnboundedConcurrency } from '../src/Concurrent.js'
 import { Effect } from '../src/Effect.js'
 import { fail, returnFail } from '../src/Fail.js'
 import { andFinally } from '../src/Finalization.js'
@@ -53,6 +53,7 @@ const CalibrationTargetMs = TargetSampleMs / 2
 const MaxCalibrationIterations = 65_536
 const NoiseSpreadThreshold = 1.25
 const CleanupScope = scope('benchmark/cooperative-all/Cleanup')
+const JoinScope = scope('benchmark/cooperative-all/Join')
 
 await runSemanticChecks()
 
@@ -81,6 +82,18 @@ const results = await runBenchmarks([
   }),
   benchmark('withCoopConcurrency explicit fork fanout 16', 'explicit fork fanout', async () => {
     await explicitForkFanout(okChildren(Fanout)).pipe(withCoopConcurrency(), runPromise)
+  }),
+  benchmark('withBoundedConcurrency explicit fork fanout 16 limit 1', 'queued slots', async () => {
+    await explicitForkFanout(asyncChildren(Fanout)).pipe(withBoundedConcurrency(1), runPromise)
+  }),
+  benchmark('withCoopConcurrency explicit fork fanout 16 limit 1', 'queued slots', async () => {
+    await explicitForkFanout(asyncChildren(Fanout)).pipe(withCoopConcurrency({ concurrency: 1 }), runPromise)
+  }),
+  benchmark('withUnboundedConcurrency scoped join fanout 16', 'scoped join', async () => {
+    await scopedJoinFanout(Fanout).pipe(withUnboundedConcurrency, returnFail, runPromise)
+  }),
+  benchmark('withCoopConcurrency scoped join fanout 16', 'scoped join', async () => {
+    await scopedJoinFanout(Fanout).pipe(withCoopConcurrency(), returnFail, runPromise)
   }),
   benchmark('withUnboundedConcurrency yielding 16x16', 'yielding fanout', async () => {
     await yieldingAll().pipe(handleStep(), withUnboundedConcurrency, runPromise)
@@ -294,6 +307,15 @@ function explicitForkFanout(children: readonly Fx<any, unknown>[]) {
     for (const task of tasks) results.push(yield* wait(task))
     return results
   })
+}
+
+function scopedJoinFanout(length: number) {
+  return fx(function* () {
+    for (let i = 0; i < length; i++) {
+      yield* forkIn(JoinScope, assertPromise(() => Promise.resolve(i)))
+    }
+    return 'parent'
+  }).pipe(withScope(JoinScope))
 }
 
 function nestedRace() {

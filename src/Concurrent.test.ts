@@ -1345,6 +1345,36 @@ describe('Fork', () => {
       await tasks[2].interrupt()
     })
 
+    it('does not instantiate queued cooperative fork iterators interrupted before admission', async () => {
+      let iteratorCreated = 0
+      const blocker = fx(function* () {
+        yield* awaitAbort()
+      })
+      const queued = {
+        [Symbol.iterator]() {
+          iteratorCreated++
+          return fx(function* () {
+            yield* awaitAbort()
+          })[Symbol.iterator]()
+        }
+      } as Fx<Async, void>
+
+      const tasks = await fx(function* () {
+        const first = yield* fork(blocker)
+        const second = yield* fork(queued)
+        return [first, second] as const
+      }).pipe(
+        withCoopConcurrency({ concurrency: 1 }),
+        runPromise
+      )
+
+      await tasks[1].interrupt('stop queued')
+      assert.equal(iteratorCreated, 0)
+
+      await tasks[0].interrupt('stop first')
+      assert.equal(iteratorCreated, 0)
+    })
+
     it('defers sibling cancellation while a child is interruption-masked', async () => {
       const TestScope = scope('test/Fork/CooperativeAllMaskedCancelScope')
       const events = [] as string[]

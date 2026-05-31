@@ -15,6 +15,7 @@ import { withBoundedConcurrency, withUnboundedConcurrency } from './internal/con
 import { cooperativeAssertPromise } from './internal/concurrent/cooperativeAsync.js'
 import { InterruptedReturn, isInterpretingReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
+import { settledTaskQueue, type SettledQueue, type SettledTask } from './internal/settledQueue.js'
 import { ScopedFork } from './internal/scopedFork.js'
 import type { ScopedForkContext } from './internal/scopedFork.js'
 import type { AnyScope } from './Scope.js'
@@ -255,20 +256,18 @@ const waitAllTasks = <const Tasks extends readonly Task<unknown, unknown>[]>(
   tasks: Tasks
 ): Fx<Async | TaskErrors<Tasks[number]>, { readonly [K in keyof Tasks]: TaskResult<Tasks[K]> }> => fx(function* () {
   const results = [] as TaskResult<Tasks[number]>[]
-  const pending = tasks.map((task, index) =>
-    task.promise.then(
-      value => ({ type: 'success' as const, index, value: value as TaskResult<Tasks[number]> }),
-      failure => ({ type: 'failure' as const, index, failure })
-    )
-  )
+  const pending = new Set<Task<unknown, unknown>>(tasks)
+  const indexes = taskIndexes(tasks)
+  const settled = settledTaskQueue(tasks)
 
-  while (pending.length > 0) {
-    const { position, result } = yield* waitSettled(pending)
+  while (pending.size > 0) {
+    const result = yield* waitSettled(settled)
 
-    void pending.splice(position, 1)
-    if (tasks[result.index]?._interrupted) continue
+    pending.delete(result.task)
+    if (result.task._interrupted) continue
+    const index = indexes.get(result.task) ?? -1
     if (result.type === 'failure') return yield* fail(result.failure)
-    results[result.index] = result.value
+    results[index] = result.value as TaskResult<Tasks[number]>
   }
 
   return results.length === tasks.length
@@ -282,21 +281,15 @@ const waitFirstSettled = <const Tasks extends readonly Task<unknown, unknown>[]>
   tasks: Tasks
 ): Fx<Async | Fail<unknown>, FirstSettledResult<TaskResult<Tasks[number]>>> =>
   cooperativeAssertPromise(async () => {
-    const pending = tasks.map((task, index) =>
-      task.promise.then(
-        value => ({ type: 'success' as const, index, value: value as TaskResult<Tasks[number]> }),
-        failure => ({ type: 'failure' as const, index, failure })
-      )
-    )
+    const pending = new Set<Task<unknown, unknown>>(tasks)
+    const settled = settledTaskQueue(tasks)
 
-    while (pending.length > 0) {
-      const { position, result } = await Promise.race(pending.map((p, position) =>
-        p.then(result => ({ position, result }))
-      ))
+    while (pending.size > 0) {
+      const result = await settled.next()
 
-      void pending.splice(position, 1)
-      if (tasks[result.index]?._interrupted) continue
-      if (result.type === 'success') return { type: 'success', value: result.value }
+      pending.delete(result.task)
+      if (result.task._interrupted) continue
+      if (result.type === 'success') return { type: 'success', value: result.value as TaskResult<Tasks[number]> }
       return { type: 'failure', failure: result.failure }
     }
 
@@ -307,23 +300,18 @@ const waitFirstSuccess = <const Tasks extends readonly Task<unknown, unknown>[]>
   tasks: Tasks
 ): Fx<Async | Fail<unknown>, FirstSuccessResult<TaskResult<Tasks[number]>, TaskErrorsOf<Tasks>>> =>
   cooperativeAssertPromise(async () => {
-    const pending = tasks.map((task, index) =>
-      task.promise.then(
-        value => ({ type: 'success' as const, index, value: value as TaskResult<Tasks[number]> }),
-        failure => ({ type: 'failure' as const, index, failure })
-      )
-    )
+    const pending = new Set<Task<unknown, unknown>>(tasks)
+    const indexes = taskIndexes(tasks)
+    const settled = settledTaskQueue(tasks)
     const failures = [] as unknown[]
 
-    while (pending.length > 0) {
-      const { position, result } = await Promise.race(pending.map((p, position) =>
-        p.then(result => ({ position, result }))
-      ))
+    while (pending.size > 0) {
+      const result = await settled.next()
 
-      void pending.splice(position, 1)
-      if (tasks[result.index]?._interrupted) continue
-      if (result.type === 'success') return { type: 'success', value: result.value }
-      failures[result.index] = result.failure
+      pending.delete(result.task)
+      if (result.task._interrupted) continue
+      if (result.type === 'success') return { type: 'success', value: result.value as TaskResult<Tasks[number]> }
+      failures[indexes.get(result.task) ?? -1] = result.failure
     }
 
     return failures.length === 0
@@ -342,11 +330,19 @@ type FirstSuccessResult<A, E extends readonly unknown[]> =
 const pendingPromise = <A>(): Promise<A> => new Promise(() => { })
 
 const waitSettled = <A>(
-  pending: readonly Promise<A>[]
-): Fx<Async, { readonly position: number, readonly result: A }> =>
-  cooperativeAssertPromise(() => Promise.race(pending.map((p, position) =>
-    p.then(result => ({ position, result }))
-  )), at('fx/Concurrent/waitSettled', waitSettled))
+  settled: SettledQueue<SettledTask<Task<unknown, unknown>>>
+): Fx<Async, TaskSettlement<A>> =>
+  cooperativeAssertPromise(() => settled.next() as Promise<TaskSettlement<A>>, at('fx/Concurrent/waitSettled', waitSettled))
+
+type TaskSettlement<A> =
+  | { readonly task: Task<unknown, unknown>, readonly type: 'success', readonly value: A }
+  | { readonly task: Task<unknown, unknown>, readonly type: 'failure', readonly failure: unknown }
+
+const taskIndexes = (tasks: readonly Task<unknown, unknown>[]): Map<Task<unknown, unknown>, number> => {
+  const indexes = new Map<Task<unknown, unknown>, number>()
+  for (let i = 0; i < tasks.length; i++) indexes.set(tasks[i], i)
+  return indexes
+}
 
 class RuntimeCloseBoundary<E, A> implements Fx<E, A>, Pipeable {
   public readonly pipe = pipeThis as Pipeable['pipe']

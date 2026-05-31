@@ -12,8 +12,7 @@ import { captureTrace, getTrace } from '../../Trace.js'
 import { ForkError, capturePrependTraceWithContext, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from '../forkDiagnostics.js'
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from '../interrupt.js'
 import { withInterpretedReturn } from '../iteratorClose.js'
-import { attachRuntimeContext, currentRuntimeContext, getRuntimeContext, RuntimeScopeExit, withActiveRuntimeContext } from '../runtimeContext.js'
-import type { RuntimeContext } from '../runtimeContext.js'
+import { attachRuntimeContext, currentRuntimeContext, getRuntimeContext, runtimeScopeExit, RuntimeScopeExit, withActiveRuntimeContext } from '../runtimeContext.js'
 import { shouldReleaseSlotForAsync } from './cooperativeAsync.js'
 
 export interface CooperativeConfig {
@@ -52,10 +51,11 @@ type Resume =
 
 interface Fiber {
   readonly index: number
-  readonly iterator: Iterator<unknown, unknown, unknown>
+  readonly fx: Fx<unknown, unknown>
   readonly traceOrigin: TraceOrigin
   readonly masks: InterruptMaskState
   readonly runtimeContext: ReturnType<typeof getRuntimeContext>
+  iterator?: Iterator<unknown, unknown, unknown>
   slotAcquired: boolean
   status: 'ready' | 'waiting' | 'done'
   resume: Resume
@@ -90,7 +90,7 @@ export class CooperativeRuntime {
     const trace = fork.arg.trace
     const fiber: Fiber = {
       index: -1,
-      iterator: fork.arg.fx[Symbol.iterator](),
+      fx: fork.arg.fx,
       traceOrigin: { origin, trace },
       runtimeContext: context,
       masks: new InterruptMaskState(),
@@ -111,7 +111,7 @@ export class CooperativeRuntime {
       reason => {
         fiber.cancelRequested = true
         if (fiber.masks.canInterrupt) fiber.abort?.abort(reason)
-        this.notifySlotWaiters()
+        this.notifySlotWaiters(true)
         if (!running) {
           cleanup = this.drainFork(fiber, done)
           running = true
@@ -148,7 +148,7 @@ export class CooperativeRuntime {
       }
       while (fiber.status !== 'done') {
         if (fiber.status === 'waiting') {
-          await runPromise(wake.wait())
+          await wake.wait()
           continue
         }
         while (!fiber.slotAcquired) {
@@ -212,10 +212,13 @@ export class CooperativeRuntime {
     return new Promise<void>(resolve => this.slotWaiters.push(resolve))
   }
 
-  private notifySlotWaiters() {
+  private notifySlotWaiters(forceAll = false) {
     if (this.slotWaiters.length === 0) return
-    const waiters = this.slotWaiters
-    this.slotWaiters = []
+    const count = forceAll || this.availableSlots === Infinity
+      ? this.slotWaiters.length
+      : Math.min(this.slotWaiters.length, Math.max(0, this.availableSlots))
+    if (count === 0) return
+    const waiters = this.slotWaiters.splice(0, count)
     for (const waiter of waiters) waiter()
   }
 
@@ -259,7 +262,7 @@ const startCooperativeAsync = (
   const context = getRuntimeContext(async)
   const run = () => async.arg.run(abort.signal)
   const promise = context === undefined ? run() : withActiveRuntimeContext(context, run)
-  const scopeExit = fiber.masks.canInterrupt ? raceScopeExits(context) : undefined
+  const scopeExit = fiber.masks.canInterrupt ? runtimeScopeExit(context) : undefined
   const wakeOnAbort = () => {
     if (fiber.status !== 'waiting') return
     fiber.abort = undefined
@@ -287,13 +290,6 @@ const startCooperativeAsync = (
   )
 }
 
-const raceScopeExits = (context: RuntimeContext | undefined): Promise<RuntimeScopeExit> | undefined => {
-  if (context?.clearScopeExitSources === true) return undefined
-  const sources = context?.scopeExitSources
-  if (sources === undefined || sources.length === 0) return undefined
-  return Promise.race(sources.map(source => source.promise))
-}
-
 interface FiberCallbacks {
   readonly succeed: (value: unknown) => void
   readonly fail: (error: unknown) => void
@@ -314,9 +310,10 @@ function* stepFiber(
     fiber.releaseSlotBeforeResume = false
     if (releaseSlotBeforeResume) runtime.releaseSlot(fiber)
     try {
+      const iterator = fiberIterator(fiber)
       ir = fiber.resume.type === 'throw'
-        ? fiber.iterator.throw?.(fiber.resume.error) ?? throwIntoMissingIterator(fiber.resume.error)
-        : fiber.iterator.next(fiber.resume.value)
+        ? iterator.throw?.(fiber.resume.error) ?? throwIntoMissingIterator(fiber.resume.error)
+        : iterator.next(fiber.resume.value)
     } catch (e) {
       callbacks.fail(wrapThrownFiberError(fiber, e))
       break
@@ -395,9 +392,11 @@ function* closeFiber(
 ): Generator<unknown, void, unknown> {
   fiber.abort?.abort()
   fiber.abort = undefined
+  const iterator = fiber.iterator
+  if (iterator === undefined) return
   let ir: IteratorResult<unknown, unknown>
   try {
-    ir = withInterpretedReturn(() => fiber.iterator.return?.() ?? { done: true, value: undefined })
+    ir = withInterpretedReturn(() => iterator.return?.() ?? { done: true, value: undefined })
   } catch (e) {
     fiber.cleanupFailures.push(e)
     return
@@ -406,28 +405,28 @@ function* closeFiber(
   while (!ir.done) {
     try {
       if (Async.is(ir.value)) {
-        ir = fiber.iterator.next(yield ir.value as any)
+        ir = iterator.next(yield ir.value as any)
       } else if (Fork.is(ir.value)) {
-        ir = fiber.iterator.next(runtime.startFork(runtime.wrapFork(ir.value)))
+        ir = iterator.next(runtime.startFork(runtime.wrapFork(ir.value)))
       } else if (Fail.is(ir.value)) {
         fiber.cleanupFailures.push(ir.value.arg)
         return
       } else if (InterruptMaskBegin.is(ir.value)) {
         fiber.masks.mask(ir.value.arg)
-        ir = fiber.iterator.next()
+        ir = iterator.next()
       } else if (InterruptMaskEnd.is(ir.value)) {
         fiber.masks.unmask(ir.value.arg)
-        ir = fiber.iterator.next()
+        ir = iterator.next()
       } else if (HandlerCapture.is(ir.value)) {
         const releaseSlotBeforeResume = fiber.slotAcquired
         if (releaseSlotBeforeResume) runtime.releaseSlot(fiber)
         try {
-          ir = fiber.iterator.next(yield* runCleanupEffect(runtime, fiber, ir.value))
+          ir = iterator.next(yield* runCleanupEffect(runtime, fiber, ir.value))
         } finally {
           if (releaseSlotBeforeResume) yield* reacquireSlot(runtime, fiber)
         }
       } else {
-        ir = fiber.iterator.next(yield* runCleanupEffect(runtime, fiber, ir.value))
+        ir = iterator.next(yield* runCleanupEffect(runtime, fiber, ir.value))
       }
     } catch (e) {
       fiber.cleanupFailures.push(e)
@@ -483,29 +482,38 @@ const throwIntoMissingIterator = (error: unknown): never => {
 }
 
 class Wake {
-  private readonly readyFibers = [] as Fiber[]
+  private signaled = false
   private waiters = [] as (() => void)[]
 
-  ready(fiber: Fiber) {
-    this.readyFibers.push(fiber)
+  ready(_fiber: Fiber) {
     this.notify()
   }
 
   notify() {
-    if (this.waiters.length === 0) return
+    if (this.waiters.length === 0) {
+      this.signaled = true
+      return
+    }
     const waiters = this.waiters
     this.waiters = []
     for (const waiter of waiters) waiter()
   }
 
   wait() {
-    return fx(function* (this: Wake) {
-      if (this.readyFibers.length === 0) {
-        yield* AsyncWait(this.waiters)
-      }
-      return this.readyFibers.splice(0)
-    }.bind(this))
+    if (this.signaled) {
+      this.signaled = false
+      return Promise.resolve()
+    }
+    return new Promise<void>(resolve => this.waiters.push(resolve))
   }
+}
+
+const fiberIterator = (fiber: Fiber): Iterator<unknown, unknown, unknown> => {
+  if (fiber.iterator !== undefined) return fiber.iterator
+  fiber.iterator = fiber.runtimeContext === undefined
+    ? fiber.fx[Symbol.iterator]()
+    : withActiveRuntimeContext(fiber.runtimeContext, () => fiber.fx[Symbol.iterator]())
+  return fiber.iterator
 }
 
 const AsyncWait = (waiters: (() => void)[]) =>

@@ -169,12 +169,14 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
       activeScope === undefined ? fx : withActiveScope(activeScope, fx)
     const scopedFx = root ? controller.withExitSource(this.fx) : this.fx
     const i = withMaybeActiveScope(scopedFx)[Symbol.iterator]()
-    const captured: CapturedHandler = {
+    const captured = {
+      rootBoundary: true,
       wrap: fx => new ScopeBoundary(fx, scope)
-    }
-    const capturedShared: CapturedHandler = {
+    } satisfies CapturedHandler & { readonly rootBoundary: true }
+    const capturedShared = {
+      rootBoundary: true,
       wrap: fx => new ScopeBoundary(fx, scope, controller)
-    }
+    } satisfies CapturedHandler & { readonly rootBoundary: true }
     let released = false
     const release = function* (exit: Exit<Scope>): Generator<unknown, ScopeRelease<Scope>> {
       if (released) return { exit, failures: [] }

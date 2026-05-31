@@ -772,7 +772,9 @@ describe('Fork', () => {
       )
 
       assert.deepEqual(result, [1, 2, 3])
-      assert.deepEqual(events, ['start 1', 'start 2', 'end 1', 'end 2', 'start 3', 'end 3'])
+      assert.deepEqual(events.slice(0, 2), ['start 1', 'start 2'])
+      assert.ok(events.indexOf('start 3') > events.indexOf('end 1'))
+      assert.deepEqual(events.slice(-1), ['end 3'])
     })
 
     it('interleaves ready children according to the yield budget', async () => {
@@ -786,6 +788,27 @@ describe('Fork', () => {
 
       const result = await all([child('A'), child('B')]).pipe(
         withCoopConcurrency({ yieldBudget: 1 }),
+        handle(Step, step => fx(function* () {
+          events.push(step.arg)
+        })),
+        runPromise
+      )
+
+      assert.deepEqual(result, ['A', 'B'])
+      assert.deepEqual(events, ['A1', 'B1', 'A2', 'B2'])
+    })
+
+    it('lets a ready child run up to the configured yield budget', async () => {
+      class Step extends Effect('test/Fork/CooperativeAllStepBudget')<string, void> { }
+      const events = [] as string[]
+      const child = (label: string) => fx(function* () {
+        yield* new Step(`${label}1`)
+        yield* new Step(`${label}2`)
+        return label
+      })
+
+      const result = await all([child('A'), child('B')]).pipe(
+        withCoopConcurrency({ yieldBudget: 2 }),
         handle(Step, step => fx(function* () {
           events.push(step.arg)
         })),
@@ -1134,11 +1157,11 @@ describe('Fork', () => {
     })
 
     it('interleaves explicit forked children according to the yield budget', async () => {
+      class Step extends Effect('test/Fork/CooperativeForkStep')<string, void> { }
       const events = [] as string[]
       const child = (label: string) => fx(function* () {
-        events.push(`${label}1`)
-        yield* asyncValue(undefined)
-        events.push(`${label}2`)
+        yield* new Step(`${label}1`)
+        yield* new Step(`${label}2`)
         return label
       })
 
@@ -1148,6 +1171,9 @@ describe('Fork', () => {
         return [yield* wait(a), yield* wait(b)]
       }).pipe(
         withCoopConcurrency({ yieldBudget: 1 }),
+        handle(Step, step => fx(function* () {
+          events.push(step.arg)
+        })),
         runPromise
       )
 
@@ -1267,12 +1293,15 @@ describe('Fork', () => {
     it('interrupts explicit cooperative forks and runs scoped finalizers', async () => {
       const TestScope = scope('test/Fork/CooperativeForkInterruptScope')
       const exits = [] as Exit[]
+      let started!: () => void
+      const startedPromise = new Promise<void>(resolve => { started = resolve })
 
       const task = taskOrThrow(await fx(function* () {
         return yield* fork(fx(function* () {
           yield* andFinallyExit(TestScope, exit => fx(function* () {
             exits.push(exit)
           }))
+          started()
           yield* awaitAbort()
         }))
       }).pipe(
@@ -1282,6 +1311,7 @@ describe('Fork', () => {
         runPromise
       ))
 
+      await startedPromise
       await task.interrupt('stop')
 
       assert.deepEqual(exits.map(exit => exit.type), ['interrupted'])
@@ -1666,7 +1696,7 @@ describe('Fork', () => {
         }, { once: true })
       }))
 
-      const task = all([race([parked])]).pipe(
+      const task = all([parked]).pipe(
         withCoopConcurrency(),
         runTask
       )

@@ -4,7 +4,7 @@ import { Fork } from './effects.js'
 import { Fail } from '../../Fail.js'
 import { flatMap, flatten, Fx, fx, ok, runPromise } from '../../Fx.js'
 import { Handle } from '../../Handler.js'
-import { HandlerCapture, captureHandlers, handleCaptured, withCapturedHandlers, withHandlerContext } from '../../HandlerCapture.js'
+import { HandlerCapture, captureHandlers, closeHandlerCapture, handleCaptured, withCapturedHandlers, withHandlerContext } from '../../HandlerCapture.js'
 import type { CapturedHandler } from '../../HandlerCapture.js'
 import { Task } from '../../Task.js'
 import type { TraceOrigin } from '../../Trace.js'
@@ -34,7 +34,8 @@ export const withCoopConcurrency = (options: CoopConcurrencyOptions = {}) => {
     captureHandlers('fx/Concurrent/Fork').pipe(
       flatMap(handlers => {
         const runtime = new CooperativeRuntime(normalized, handlers)
-        return ok(withHandlerContext(handlers, f).pipe(
+        return ok(withHandlerContext(handlers.filter(isRootBoundaryHandler), f).pipe(
+          closeHandlerCapture('fx/Concurrent/ForkIn'),
           handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)
         ))
       }),
@@ -44,6 +45,9 @@ export const withCoopConcurrency = (options: CoopConcurrencyOptions = {}) => {
 
 type CoopConcurrencyHandledEffects<E> =
   Handle<Handle<E, Fork>, HandlerCapture<'fx/Concurrent/Fork'>>
+
+const isRootBoundaryHandler = (handler: CapturedHandler): boolean =>
+  (handler as { readonly rootBoundary?: boolean }).rootBoundary === true
 
 type Resume =
   | { readonly type: 'next', readonly value: unknown }
@@ -55,22 +59,29 @@ interface Fiber {
   readonly traceOrigin: TraceOrigin
   readonly masks: InterruptMaskState
   readonly runtimeContext: ReturnType<typeof getRuntimeContext>
+  readonly done: PromiseWithResolvers<unknown>
+  readonly interrupted: PromiseWithResolvers<void>
   iterator?: Iterator<unknown, unknown, unknown>
   slotAcquired: boolean
-  status: 'ready' | 'waiting' | 'done'
+  status: 'ready' | 'running' | 'waiting' | 'done'
   resume: Resume
   abort?: AbortController
   cancelRequested: boolean
   cleanupFailures: unknown[]
   releaseSlotBeforeResume: boolean
+  queued: boolean
 }
 
 type PrimaryFailure =
   | { readonly error: unknown }
 
 export class CooperativeRuntime {
+  private readonly readyFibers = [] as Fiber[]
+  private readonly yieldedFibers = [] as Fiber[]
   private slotWaiters = [] as (() => void)[]
   private availableSlots: number
+  private pumpScheduled = false
+  private pumping = false
 
   constructor(
     readonly config: CooperativeConfig,
@@ -88,103 +99,180 @@ export class CooperativeRuntime {
     const context = getRuntimeContext(fork) ?? currentRuntimeContext()
     const origin = fork.arg.origin
     const trace = fork.arg.trace
+    const done = Promise.withResolvers<unknown>()
+    const interrupted = Promise.withResolvers<void>()
     const fiber: Fiber = {
       index: -1,
       fx: fork.arg.fx,
       traceOrigin: { origin, trace },
       runtimeContext: context,
+      done,
+      interrupted,
       masks: new InterruptMaskState(),
       slotAcquired: false,
       status: 'ready',
       resume: { type: 'next', value: undefined },
       cancelRequested: false,
       cleanupFailures: [],
-      releaseSlotBeforeResume: false
+      releaseSlotBeforeResume: false,
+      queued: false
     }
-    const done = Promise.withResolvers<unknown>()
-    const interrupted = Promise.withResolvers<void>()
-    let cleanup: Promise<void> = Promise.resolve()
-    let running = false
-    const wake = new Wake()
     const task = new Task<unknown, unknown>(
       done.promise,
       reason => {
         fiber.cancelRequested = true
-        if (fiber.masks.canInterrupt) fiber.abort?.abort(reason)
-        this.notifySlotWaiters(true)
-        if (!running) {
-          cleanup = this.drainFork(fiber, done)
-          running = true
+        if (fiber.masks.canInterrupt && fiber.status === 'waiting') {
+          fiber.status = 'ready'
+          this.enqueue(fiber)
+        } else if (fiber.masks.canInterrupt) {
+          fiber.abort?.abort(reason)
         }
-        cleanup.then(() => interrupted.resolve(), error => interrupted.reject(error))
+        if (fiber.status === 'ready') this.enqueue(fiber)
+        this.schedulePump()
+        if (fiber.status === 'done') interrupted.resolve()
       },
       context,
       interrupted.promise
     )
-    this.tryAcquireSlot(fiber)
     done.promise.catch(error => {
       queueMicrotask(() => {
         if (task._handled || task._interrupted || fiber.cancelRequested) return
         onUnhandled?.(new ForkError('FX_UNHANDLED_FORK_FAILURE', 'Unhandled failure in forked task', origin, traceWithCause(trace, error, runtimeContextOfEffect(error, context), getTrace(error)), runtimeContextOfEffect(error, context), { cause: error }))
       })
     })
-    queueMicrotask(() => {
-      if (running) return
-      running = true
-      cleanup = this.drainFork(fiber, done, wake)
-    })
+    this.enqueue(fiber)
     return task
   }
 
-  private async drainFork(fiber: Fiber, done: PromiseWithResolvers<unknown>, wake = new Wake()): Promise<void> {
+  enqueue(fiber: Fiber) {
+    if (fiber.status !== 'ready' || fiber.queued) return
+    fiber.queued = true
+    this.readyFibers.push(fiber)
+    this.schedulePump()
+  }
+
+  private enqueueYielded(fiber: Fiber) {
+    if (fiber.status !== 'ready' || fiber.queued) return
+    fiber.queued = true
+    this.yieldedFibers.push(fiber)
+    this.schedulePump()
+  }
+
+  private schedulePump() {
+    if (this.pumpScheduled || this.pumping) return
+    this.pumpScheduled = true
+    setTimeout(() => {
+      setTimeout(() => {
+        this.pumpScheduled = false
+        void this.pump()
+      }, 0)
+    }, 0)
+  }
+
+  private async pump(): Promise<void> {
+    if (this.pumping) return
+    this.pumping = true
     try {
-      while (!fiber.slotAcquired) {
-        if (fiber.cancelRequested) {
-          finishDetachedFiber(this, fiber)
-          return
-        }
-        if (this.tryAcquireSlot(fiber)) break
-        await this.waitForSlotPromise()
+      let fiber: Fiber | undefined
+      while ((fiber = this.takeRunnableFiber()) !== undefined) {
+        fiber.status = 'running'
+        await this.runFiberTurn(fiber)
       }
-      while (fiber.status !== 'done') {
-        if (fiber.status === 'waiting') {
-          await wake.wait()
-          continue
-        }
-        while (!fiber.slotAcquired) {
-          if (this.tryAcquireSlot(fiber)) break
-          await this.waitForSlotPromise()
-        }
-        if (fiber.cancelRequested && fiber.masks.canInterrupt) {
-          await runPromise(fx(function* (this: CooperativeRuntime) { yield* closeFiber(this, fiber) }.bind(this)) as Fx<any, void>)
-          finishDetachedFiber(this, fiber)
-          if (fiber.cleanupFailures.length > 0) {
-            const failure = resourceReleaseFailed(fiber.cleanupFailures)
-            done.reject(failure)
-            throw failure
-          }
+    } finally {
+      this.pumping = false
+      if (this.hasRunnableFiber()) this.schedulePump()
+    }
+  }
+
+  private takeRunnableFiber(): Fiber | undefined {
+    this.pruneQueue(this.readyFibers)
+    this.pruneQueue(this.yieldedFibers)
+    return this.takeRunnableFromQueue(this.readyFibers)
+      ?? this.takeRunnableFromQueue(this.yieldedFibers)
+  }
+
+  private hasRunnableFiber(): boolean {
+    return this.hasRunnableQueuedFiber(this.readyFibers) || this.hasRunnableQueuedFiber(this.yieldedFibers)
+  }
+
+  private pruneQueue(queue: Fiber[]) {
+    for (let i = 0; i < queue.length; ++i) {
+      if (queue[i].status !== 'ready') {
+        queue[i].queued = false
+        void queue.splice(i, 1)
+        --i
+      }
+    }
+  }
+
+  private takeRunnableFromQueue(queue: Fiber[]): Fiber | undefined {
+    for (let i = 0; i < queue.length; ++i) {
+      const fiber = queue[i]
+      if (fiber.slotAcquired || fiber.cancelRequested || this.availableSlots > 0) return this.takeQueuedFiber(queue, i)
+    }
+  }
+
+  private takeQueuedFiber(queue: Fiber[], index: number): Fiber {
+    const [fiber] = queue.splice(index, 1)
+    fiber.queued = false
+    return fiber
+  }
+
+  private hasRunnableQueuedFiber(queue: Fiber[]): boolean {
+    return queue.some(fiber =>
+      fiber.status === 'ready' && (fiber.slotAcquired || this.availableSlots > 0 || fiber.cancelRequested)
+    )
+  }
+
+  private async runFiberTurn(fiber: Fiber): Promise<void> {
+    try {
+      if (!fiber.slotAcquired) {
+        if (fiber.cancelRequested) {
+          finishFiber(this, fiber)
           return
         }
-        const step = stepFiber(this, fiber, wake, {
-          succeed: value => {
-            finishDetachedFiber(this, fiber)
-            done.resolve(value)
-          },
-          fail: error => {
-            finishDetachedFiber(this, fiber)
-            done.reject(error)
-          },
-          cancel: () => {
-            finishDetachedFiber(this, fiber)
+        if (!this.tryAcquireSlot(fiber)) {
+          fiber.status = 'ready'
+          this.enqueue(fiber)
+          return
+        }
+      }
+
+      if (fiber.cancelRequested && fiber.masks.canInterrupt) {
+        await runPromise(fx(function* (this: CooperativeRuntime) { yield* closeFiber(this, fiber) }.bind(this)) as Fx<any, void>)
+        if (fiber.cleanupFailures.length > 0) {
+          finishInterruptedFiber(this, fiber, resourceReleaseFailed(fiber.cleanupFailures))
+        } else {
+          finishInterruptedFiber(this, fiber)
+        }
+        return
+      }
+
+      const step = stepFiber(this, fiber, {
+        succeed: value => {
+          finishFiber(this, fiber)
+          fiber.done.resolve(value)
+        },
+        fail: error => {
+          finishFiber(this, fiber)
+          fiber.done.reject(error)
+        },
+        cancel: () => {
+          if (fiber.cleanupFailures.length > 0) {
+            finishInterruptedFiber(this, fiber, resourceReleaseFailed(fiber.cleanupFailures))
+          } else {
+            finishInterruptedFiber(this, fiber)
           }
-        })
-        await runPromise(fx(function* () { yield* step }) as Fx<any, void>)
-        if (fiber.status === 'ready') await Promise.resolve()
+        }
+      })
+      await runPromise(withHandlerContext(this.handlers, fx(function* () { yield* step })) as Fx<any, void>)
+      if (fiber.status === 'running') {
+        fiber.status = 'ready'
+        this.enqueueYielded(fiber)
       }
     } catch (error) {
-      finishDetachedFiber(this, fiber)
-      done.reject(error)
-      throw error
+      finishFiber(this, fiber)
+      fiber.done.reject(error)
     }
   }
 
@@ -201,15 +289,11 @@ export class CooperativeRuntime {
     fiber.slotAcquired = false
     this.availableSlots++
     this.notifySlotWaiters()
+    this.schedulePump()
   }
 
   waitForSlot() {
     return AsyncWait(this.slotWaiters)
-  }
-
-  private waitForSlotPromise() {
-    if (this.availableSlots > 0) return Promise.resolve()
-    return new Promise<void>(resolve => this.slotWaiters.push(resolve))
   }
 
   private notifySlotWaiters(forceAll = false) {
@@ -226,7 +310,7 @@ export class CooperativeRuntime {
     if (this.handlers.length === 0) return fork
     const wrapped = new Fork({
       ...fork.arg,
-      fx: withHandlerContext(this.handlers, fork.arg.fx)
+      fx: fork.arg.fx
     })
     attachRuntimeContext(wrapped, getRuntimeContext(fork))
     return wrapped
@@ -252,7 +336,6 @@ const startCooperativeAsync = (
   runtime: CooperativeRuntime,
   fiber: Fiber,
   async: Async,
-  wake: Wake,
   failFiber: (fiber: Fiber, failure: PrimaryFailure) => void
 ) => {
   const abort = new AbortController()
@@ -267,7 +350,7 @@ const startCooperativeAsync = (
     if (fiber.status !== 'waiting') return
     fiber.abort = undefined
     fiber.status = 'ready'
-    wake.ready(fiber)
+    runtime.enqueue(fiber)
   }
   abort.signal.addEventListener('abort', wakeOnAbort, { once: true })
   Promise.race(scopeExit === undefined ? [promise] : [promise, scopeExit]).then(
@@ -278,14 +361,13 @@ const startCooperativeAsync = (
       if (value instanceof RuntimeScopeExit) abort.abort(value.reason)
       fiber.resume = { type: 'next', value }
       fiber.status = 'ready'
-      wake.ready(fiber)
+      runtime.enqueue(fiber)
     },
     error => {
       if (fiber.status !== 'waiting') return
       abort.signal.removeEventListener('abort', wakeOnAbort)
       fiber.abort = undefined
       failFiber(fiber, { error: wrapAsyncFiberError(fiber, async, error, context) })
-      wake.notify()
     }
   )
 }
@@ -299,11 +381,10 @@ interface FiberCallbacks {
 function* stepFiber(
   runtime: CooperativeRuntime,
   fiber: Fiber,
-  wake: Wake,
   callbacks: FiberCallbacks
 ): Generator<unknown, void, unknown> {
   let budget = runtime.config.yieldBudget
-  while (budget > 0 && fiber.status === 'ready') {
+  while (budget > 0 && fiber.status === 'running') {
     budget--
     let ir: IteratorResult<unknown, unknown>
     const releaseSlotBeforeResume = fiber.releaseSlotBeforeResume && fiber.slotAcquired
@@ -328,7 +409,7 @@ function* stepFiber(
     }
 
     if (Async.is(ir.value)) {
-      startCooperativeAsync(runtime, fiber, ir.value, wake, (_fiber, failure) => {
+      startCooperativeAsync(runtime, fiber, ir.value, (_fiber, failure) => {
         callbacks.fail(failure.error)
       })
       break
@@ -337,11 +418,7 @@ function* stepFiber(
     if (Fork.is(ir.value)) {
       fiber.resume = {
         type: 'next',
-        value: runtime.startFork(ir.value, error => {
-          if (fiber.status === 'done') return
-          callbacks.fail(error)
-          wake.notify()
-        })
+        value: runtime.startFork(ir.value)
       }
       continue
     }
@@ -440,22 +517,39 @@ const runCleanupEffect = (
   fiber: Fiber,
   effect: unknown
 ) =>
-  withCapturedHandlers('fx/Concurrent/Fork', fx(function* () {
-    return yield effect as any
-  })).pipe(
-    flatMap(fx =>
-      ok(fx.pipe(
-        handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)
-      ))
-    ),
-    flatten
-  ) as Fx<unknown, unknown>
+  withHandlerContext(
+    runtime.handlers,
+    withCapturedHandlers('fx/Concurrent/Fork', fx(function* () {
+      return yield effect as any
+    })).pipe(
+      flatMap(fx =>
+        ok(fx.pipe(
+          handleCaptured('fx/Concurrent/Fork', Fork, runtime.runFork)
+        ))
+      ),
+      flatten
+    ) as Fx<unknown, unknown>
+  )
 
-const finishDetachedFiber = (runtime: CooperativeRuntime, fiber: Fiber) => {
+const finishFiber = (runtime: CooperativeRuntime, fiber: Fiber) => {
   if (fiber.status === 'done') return
   fiber.status = 'done'
   fiber.abort?.abort()
   runtime.releaseSlot(fiber)
+  fiber.interrupted.resolve()
+}
+
+const finishInterruptedFiber = (runtime: CooperativeRuntime, fiber: Fiber, failure?: unknown) => {
+  if (fiber.status === 'done') return
+  fiber.status = 'done'
+  fiber.abort?.abort()
+  runtime.releaseSlot(fiber)
+  if (failure === undefined) {
+    fiber.interrupted.resolve()
+  } else {
+    fiber.done.reject(failure)
+    fiber.interrupted.reject(failure)
+  }
 }
 
 const wrapFiberFailure = (fiber: Fiber, failure: Fail<unknown>): ForkError => {
@@ -479,33 +573,6 @@ const wrapAsyncFiberError = (fiber: Fiber, async: Async, error: unknown, fallbac
 
 const throwIntoMissingIterator = (error: unknown): never => {
   throw error
-}
-
-class Wake {
-  private signaled = false
-  private waiters = [] as (() => void)[]
-
-  ready(_fiber: Fiber) {
-    this.notify()
-  }
-
-  notify() {
-    if (this.waiters.length === 0) {
-      this.signaled = true
-      return
-    }
-    const waiters = this.waiters
-    this.waiters = []
-    for (const waiter of waiters) waiter()
-  }
-
-  wait() {
-    if (this.signaled) {
-      this.signaled = false
-      return Promise.resolve()
-    }
-    return new Promise<void>(resolve => this.waiters.push(resolve))
-  }
 }
 
 const fiberIterator = (fiber: Fiber): Iterator<unknown, unknown, unknown> => {

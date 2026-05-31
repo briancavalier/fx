@@ -15,6 +15,7 @@ export interface RuntimeContext {
   readonly activeScopes?: readonly ActiveScopeDiagnostic[]
   readonly interruptionReason?: unknown
   readonly scopeExitSources?: readonly RuntimeScopeExitSource[]
+  readonly scopeExit?: Promise<RuntimeScopeExit>
   readonly clearScopeExitSources?: boolean
 }
 
@@ -112,10 +113,13 @@ export const withActiveScope = <E, A>(scope: ActiveScopeDiagnostic, fx: Fx<E, A>
 }
 
 export const withScopeExitSource = <E, A>(source: RuntimeScopeExitSource, fx: Fx<E, A>): Fx<E, A> =>
-  withRuntimeContext({ scopeExitSources: [source] }, fx)
+  withRuntimeContext({ scopeExitSources: [source], scopeExit: source.promise }, fx)
 
 export const withoutScopeExitSources = <E, A>(fx: Fx<E, A>): Fx<E, A> =>
-  withRuntimeContext({ scopeExitSources: [], clearScopeExitSources: true }, fx)
+  withRuntimeContext({ scopeExitSources: [], scopeExit: undefined, clearScopeExitSources: true }, fx)
+
+export const runtimeScopeExit = (context: RuntimeContext | undefined): Promise<RuntimeScopeExit> | undefined =>
+  context?.clearScopeExitSources === true ? undefined : context?.scopeExit
 
 const mergeRuntimeContext = (
   previous: RuntimeContext | undefined,
@@ -128,10 +132,18 @@ const mergeRuntimeContext = (
     : next.scopeExitSources === undefined
       ? previous.scopeExitSources
       : [...previous.scopeExitSources, ...next.scopeExitSources]
+  const scopeExit = next.clearScopeExitSources === true
+    ? next.scopeExit
+    : previous?.scopeExit === undefined
+    ? next.scopeExit
+    : next.scopeExit === undefined
+      ? previous.scopeExit
+      : Promise.race([previous.scopeExit, next.scopeExit])
   return {
     ...previous,
     ...next,
-    scopeExitSources
+    scopeExitSources,
+    scopeExit
   }
 }
 

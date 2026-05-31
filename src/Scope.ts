@@ -14,6 +14,7 @@ import { drainIteratorReturn, isInterpretingReturn, isInterruptedReturn } from '
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { interruptionReason, RuntimeScopeExit, withActiveScope, withScopeExitSource, withoutScopeExitSources, type ActiveScopeDiagnostic } from './internal/runtimeContext.js'
 import { ScopeTypeId, sameScope, scopeId, type ScopeIdentity } from './internal/scopeIdentity.js'
+import { settledTaskQueue } from './internal/settledQueue.js'
 import { ScopedFork } from './internal/scopedFork.js'
 import type { ScopedForkContext } from './internal/scopedFork.js'
 import type { Task } from './Task.js'
@@ -292,6 +293,7 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
 class ScopeController<Scope extends AnyScope> {
   readonly finalizers = [] as Finalizer<unknown>[]
   private readonly tasks = new Map<Task<unknown, unknown>, ScopedForkContext>()
+  private readonly joinFailures = [] as unknown[]
   private settled?: Exit<Scope>
   private readonly exitRequested = Promise.withResolvers<Exit<Scope>>()
   private readonly exitSource = {
@@ -329,6 +331,9 @@ class ScopeController<Scope extends AnyScope> {
 
   join(exit: Exit<Scope>): Fx<Async, { readonly exit: Exit<Scope>, readonly failures: readonly unknown[] }> {
     if (exit.type !== 'success' && this.settled === undefined) this.settle(exit)
+    if (this.joinFailures.length > 0 && this.settled === undefined) {
+      this.settle({ type: 'failure', failure: new Fail(this.joinFailures[0]) })
+    }
     if (this.tasks.size === 0) return ok({ exit: this.settled ?? exit, failures: [] })
     return cooperativeAssertPromise(() => this.joinTasks(exit), at('fx/Scope/withScope/join', withScope))
   }
@@ -336,29 +341,30 @@ class ScopeController<Scope extends AnyScope> {
   private async joinTasks(initialExit: Exit<Scope>): Promise<{ readonly exit: Exit<Scope>, readonly failures: readonly unknown[] }> {
     const failures = [] as unknown[]
     const pending = new Set(this.tasks.keys())
+    const settled = settledTaskQueue(pending)
 
     while (pending.size > 0) {
-      removeInterruptedTasks(pending)
+      removeInterruptedTasks(pending, this.tasks)
       const exit = this.settled
       if (exit !== undefined && exit.type !== 'success') break
+      if (this.joinFailures.length > 0) {
+        this.settle({ type: 'failure', failure: new Fail(this.joinFailures[0]) })
+        break
+      }
       if (initialExit.type === 'success' && !hasNonDaemonTask(pending, this.tasks)) break
 
-      const result = await Promise.race([...pending].map(task =>
-        task.promise.then(
-          value => ({ task, status: 'fulfilled' as const, value }),
-          reason => ({ task, status: 'rejected' as const, reason })
-        )
-      ))
+      const result = await settled.next()
       pending.delete(result.task)
+      this.tasks.delete(result.task)
 
-      if (result.status === 'rejected') {
-        this.settle({ type: 'failure', failure: new Fail(result.reason) })
+      if (result.type === 'failure' && !result.task._interrupted) {
+        this.settle({ type: 'failure', failure: new Fail(result.failure) })
         break
       }
     }
 
     const exit = this.settled ?? initialExit
-    removeInterruptedTasks(pending)
+    removeInterruptedTasks(pending, this.tasks)
     if (pending.size > 0 || exit.type !== 'success') {
       failures.push(...await this.interruptPending(pending, interruptReason(exit)))
     }
@@ -375,12 +381,26 @@ class ScopeController<Scope extends AnyScope> {
 
   private watchTask(task: Task<unknown, unknown>) {
     const failure = this.tasks.get(task)?.failure
-    if (failure === 'task' || failure === 'join') return
-    task.promise.catch(reason => {
-      if (!task._interrupted) {
-        this.requestExit({ type: 'failure', failure: new Fail(reason) })
+    task.promise.then(
+      () => {
+        this.tasks.delete(task)
+      },
+      reason => {
+        const context = this.tasks.get(task)
+        if (context === undefined) return
+        if (task._interrupted) {
+          this.tasks.delete(task)
+        } else if (failure === 'task') {
+          this.tasks.delete(task)
+        } else if (failure === 'join') {
+          this.joinFailures.push(reason)
+          this.tasks.delete(task)
+        } else {
+          this.tasks.delete(task)
+          this.requestExit({ type: 'failure', failure: new Fail(reason) })
+        }
       }
-    })
+    )
   }
 
   private settle(exit: Exit<Scope>) {
@@ -398,9 +418,15 @@ const hasNonDaemonTask = (
   return false
 }
 
-const removeInterruptedTasks = (pending: Set<Task<unknown, unknown>>) => {
+const removeInterruptedTasks = (
+  pending: Set<Task<unknown, unknown>>,
+  tasks: Map<Task<unknown, unknown>, ScopedForkContext>
+) => {
   for (const task of pending) {
-    if (task._interrupted) pending.delete(task)
+    if (task._interrupted) {
+      pending.delete(task)
+      tasks.delete(task)
+    }
   }
 }
 

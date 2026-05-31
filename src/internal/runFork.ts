@@ -15,7 +15,7 @@ import { ForkError, capturePrependTraceWithContext, captureTraceWithContext, for
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './interrupt.js'
 import { isInterruptedReturn, withInterpretedReturn } from './iteratorClose.js'
 import type { RuntimeContext } from './runtimeContext.js'
-import { currentRuntimeContext, getRuntimeContext, RuntimeScopeExit, withActiveRuntimeContext, withInterruptionReason } from './runtimeContext.js'
+import { currentRuntimeContext, getRuntimeContext, runtimeScopeExit, RuntimeScopeExit, withActiveRuntimeContext, withInterruptionReason } from './runtimeContext.js'
 
 export type RunForkOptions = TraceOptions & {
   readonly maxConcurrency?: number
@@ -165,7 +165,7 @@ const runIterator = async <const E, const A>(
       const promise = t.promise.finally(() => disposables.removeTask(t))
       let a
       try {
-        const scopeExit = disposables.canDeliverInterrupt ? raceScopeExits(effectContext) : undefined
+        const scopeExit = disposables.canDeliverInterrupt ? runtimeScopeExit(effectContext) : undefined
         a = await Promise.race(scopeExit === undefined ? [promise, unhandled] : [promise, unhandled, scopeExit])
       } catch (e) {
         if (e instanceof UnhandledForkError) throw e.error
@@ -424,13 +424,6 @@ const returnWithRuntimeContext = <E, A>(
       withInterpretedReturn(() => iterator.return?.() ?? { done: true, value: undefined as A }))
 
 const never = <A>(): Promise<A> => new Promise(() => { })
-
-const raceScopeExits = (context: RuntimeContext | undefined): Promise<RuntimeScopeExit> | undefined => {
-  if (context?.clearScopeExitSources === true) return undefined
-  const sources = context?.scopeExitSources
-  if (sources === undefined || sources.length === 0) return undefined
-  return Promise.race(sources.map(source => source.promise))
-}
 
 class DisposableAbortController extends AbortController {
   [Symbol.dispose]() { this.abort() }

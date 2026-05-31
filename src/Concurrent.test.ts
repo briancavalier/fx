@@ -655,6 +655,32 @@ describe('Fork', () => {
       assert.deepEqual(events, ['start 1', 'end 1', 'start 2', 'end 2', 'start 3', 'end 3'])
     })
 
+    it('allows advanced unmetered forks to bypass bounded concurrency admission', async () => {
+      const events = [] as string[]
+      let releaseMetered!: () => void
+
+      const result = await fx(function* () {
+        yield* fork(assertPromise<void>(() => new Promise(resolve => {
+          events.push('metered start')
+          releaseMetered = resolve
+        })))
+        yield* asyncValue(undefined)
+        const unmetered = yield* fork(fx(function* () {
+          events.push('unmetered start')
+          return 'unmetered' as const
+        }), { scheduling: 'unmetered' })
+        return yield* wait(unmetered)
+      }).pipe(
+        withBoundedConcurrency(1),
+        runPromise
+      )
+
+      releaseMetered()
+
+      assert.equal(result, 'unmetered')
+      assert.deepEqual(events, ['metered start', 'unmetered start'])
+    })
+
     it('cancels mapped siblings when a child fails', async () => {
       const cause = new Error('mapAll failed')
       let cancelled = false
@@ -1315,6 +1341,32 @@ describe('Fork', () => {
 
       assert.deepEqual(await promise, [undefined, 'all'])
       assert.deepEqual(events, ['fork start', 'all start'])
+    })
+
+    it('allows advanced unmetered forks to bypass cooperative concurrency admission', async () => {
+      const events = [] as string[]
+      let releaseMetered!: () => void
+
+      const result = await fx(function* () {
+        yield* fork(assertPromise<void>(() => new Promise(resolve => {
+          events.push('metered start')
+          releaseMetered = resolve
+        })))
+        yield* asyncValue(undefined)
+        const unmetered = yield* fork(fx(function* () {
+          events.push('unmetered start')
+          return 'unmetered' as const
+        }), { scheduling: 'unmetered' })
+        return yield* wait(unmetered)
+      }).pipe(
+        withCoopConcurrency({ concurrency: 1 }),
+        runPromise
+      )
+
+      releaseMetered()
+
+      assert.equal(result, 'unmetered')
+      assert.deepEqual(events, ['metered start', 'unmetered start'])
     })
 
     it('interrupts queued explicit cooperative forks before they start', async () => {

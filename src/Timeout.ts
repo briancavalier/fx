@@ -78,7 +78,7 @@ function timeoutInWithTrace<const Scope extends AnyScope, const Options extends 
     const task = yield* withCapturedHandlers('fx/Concurrent/ForkIn', sleep(options.ms).pipe(
       flatMap(() => interruptFrom(scope, makeTimeoutReason(options, { ms: options.ms, origin: reasonOrigin, trace })))
     )).pipe(
-      flatMap(fx => new ScopedFork(scope, { fx, ...traceOrigin, daemon: true }))
+      flatMap(fx => new ScopedFork(scope, { fx, ...traceOrigin, daemon: true, scheduling: 'unmetered' }))
     )
     yield* andFinallyExit(scope, exit => assertPromise(() => task.interrupt(exitReason(exit))))
   })

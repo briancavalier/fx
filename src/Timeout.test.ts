@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Fail, fail, returnFail } from './Fail.js'
-import { forkIn, withBoundedConcurrency, withUnboundedConcurrency } from './Concurrent.js'
+import { forkIn, withBoundedConcurrency, withCoopConcurrency, withUnboundedConcurrency } from './Concurrent.js'
 import { fx, ok, run, runPromise } from './Fx.js'
 import { andFinallyExit } from './Finalization.js'
 import type { Fx } from './Fx.js'
@@ -61,6 +61,44 @@ describe('Timeout', () => {
 
     assert.ok(!Fail.is(r))
     assert.equal(r, 'fast')
+  })
+
+  it('interrupts a parked protected computation under bounded concurrency', async () => {
+    const c = new VirtualClock(0)
+    const reason = { type: 'timeout' }
+
+    const p = sleep(100).pipe(
+      timeout({ ms: 10, reason: () => reason }),
+      control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
+      withBoundedConcurrency(1),
+      returnFail,
+      withClock(c),
+      runPromise
+    )
+
+    await c.step(10)
+    const r = await mustSettle(p)
+
+    assert.equal(r, reason)
+  })
+
+  it('interrupts a parked protected computation under cooperative concurrency', async () => {
+    const c = new VirtualClock(0)
+    const reason = { type: 'timeout' }
+
+    const p = sleep(100).pipe(
+      timeout({ ms: 10, reason: () => reason }),
+      control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
+      withCoopConcurrency({ concurrency: 1 }),
+      returnFail,
+      withClock(c),
+      runPromise
+    )
+
+    await c.step(10)
+    const r = await mustSettle(p)
+
+    assert.equal(r, reason)
   })
 
   it('interrupts the scope with the timeout reason when the timeout wins', async () => {
@@ -285,6 +323,60 @@ describe('Timeout', () => {
     assert.equal(completed, false)
   })
 
+  it('timeoutIn interrupts a scope while a bounded child holds the only permit', async () => {
+    const c = new VirtualClock(0)
+    const reason = { type: 'scope-timeout' }
+    let completed = false
+
+    const p = fx(function* () {
+      yield* forkIn(TestScope, fx(function* () {
+        yield* sleep(100)
+        completed = true
+      }))
+      yield* timeoutIn(TestScope, { ms: 10, reason: () => reason })
+    }).pipe(
+      withScope(TestScope),
+      control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
+      withBoundedConcurrency(1),
+      returnFail,
+      withClock(c),
+      runPromise
+    )
+
+    await c.step(10)
+    const r = await mustSettle(p)
+
+    assert.equal(r, reason)
+    assert.equal(completed, false)
+  })
+
+  it('timeoutIn interrupts a scope while a cooperative child holds the only permit', async () => {
+    const c = new VirtualClock(0)
+    const reason = { type: 'scope-timeout' }
+    let completed = false
+
+    const p = fx(function* () {
+      yield* forkIn(TestScope, fx(function* () {
+        yield* sleep(100)
+        completed = true
+      }))
+      yield* timeoutIn(TestScope, { ms: 10, reason: () => reason })
+    }).pipe(
+      withScope(TestScope),
+      control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
+      withCoopConcurrency({ concurrency: 1 }),
+      returnFail,
+      withClock(c),
+      runPromise
+    )
+
+    await c.step(10)
+    const r = await mustSettle(p)
+
+    assert.equal(r, reason)
+    assert.equal(completed, false)
+  })
+
   it('timeoutIn daemon timer does not delay normal scope completion', async () => {
     const c = new VirtualClock(0)
     let reasons = 0
@@ -390,3 +482,9 @@ type EffectOf<T> = T extends Fx<infer E, unknown> ? E : never
 type ResultOf<T> = T extends Fx<unknown, infer A> ? A : never
 type HasEffect<T, E> = [Extract<EffectOf<T>, E>] extends [never] ? false : true
 type IsAny<T> = 0 extends 1 & T ? true : false
+
+const mustSettle = <A>(p: Promise<A>): Promise<A> =>
+  Promise.race([
+    p,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Expected timeout program to settle')), 100))
+  ])

@@ -55,6 +55,7 @@ interface Fiber {
   readonly traceOrigin: TraceOrigin
   readonly masks: InterruptMaskState
   readonly runtimeContext: ReturnType<typeof getRuntimeContext>
+  readonly unmetered: boolean
   iterator?: Iterator<unknown, unknown, unknown>
   slotAcquired: boolean
   status: 'ready' | 'waiting' | 'done'
@@ -93,6 +94,7 @@ export class CooperativeRuntime {
       fx: fork.arg.fx,
       traceOrigin: { origin, trace },
       runtimeContext: context,
+      unmetered: fork.arg.scheduling === 'unmetered',
       masks: new InterruptMaskState(),
       slotAcquired: false,
       status: 'ready',
@@ -138,7 +140,7 @@ export class CooperativeRuntime {
 
   private async drainFork(fiber: Fiber, done: PromiseWithResolvers<unknown>, wake = new Wake()): Promise<void> {
     try {
-      while (!fiber.slotAcquired) {
+      while (!hasSlot(fiber)) {
         if (fiber.cancelRequested) {
           finishDetachedFiber(this, fiber)
           return
@@ -151,7 +153,7 @@ export class CooperativeRuntime {
           await wake.wait()
           continue
         }
-        while (!fiber.slotAcquired) {
+        while (!hasSlot(fiber)) {
           if (this.tryAcquireSlot(fiber)) break
           await this.waitForSlotPromise()
         }
@@ -189,6 +191,7 @@ export class CooperativeRuntime {
   }
 
   tryAcquireSlot(fiber: Fiber): boolean {
+    if (fiber.unmetered) return true
     if (fiber.slotAcquired) return true
     if (this.availableSlots <= 0) return false
     this.availableSlots--
@@ -197,6 +200,7 @@ export class CooperativeRuntime {
   }
 
   releaseSlot(fiber: Fiber) {
+    if (fiber.unmetered) return
     if (!fiber.slotAcquired) return
     fiber.slotAcquired = false
     this.availableSlots++
@@ -382,7 +386,7 @@ function* reacquireSlot(
   runtime: CooperativeRuntime,
   fiber: Fiber
 ): Generator<unknown, void, unknown> {
-  if (fiber.status === 'done') return
+  if (fiber.status === 'done' || fiber.unmetered) return
   while (!runtime.tryAcquireSlot(fiber)) yield* runtime.waitForSlot()
 }
 
@@ -457,6 +461,9 @@ const finishDetachedFiber = (runtime: CooperativeRuntime, fiber: Fiber) => {
   fiber.abort?.abort()
   runtime.releaseSlot(fiber)
 }
+
+const hasSlot = (fiber: Fiber): boolean =>
+  fiber.unmetered || fiber.slotAcquired
 
 const wrapFiberFailure = (fiber: Fiber, failure: Fail<unknown>): ForkError => {
   const context = runtimeContextOfEffect(failure, fiber.runtimeContext)

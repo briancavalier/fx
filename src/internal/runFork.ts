@@ -52,6 +52,19 @@ export const acquireAndRunFork = (f: ForkContext, s: Semaphore, context: readonl
   return taskWithRuntimeContext(promise, reason => disposables.interrupt(reason), runtimeContext, disposed.promise)
 }
 
+export const runForkUnmetered = (f: ForkContext, s: Semaphore, context: readonly CapturedHandler[] = [], runtimeContext: RuntimeContext | undefined = currentRuntimeContext()): Task<unknown, unknown> => {
+  const disposables = new InterruptState()
+  const disposed = Promise.withResolvers<void>()
+
+  const promise = runForkInternal(withHandlerContext(context, f.fx), context, s, disposables, disposed, f.origin, f.trace, runtimeContext)
+    .finally(() => {
+      disposables.interruptActive()
+      disposed.resolve()
+    })
+
+  return taskWithRuntimeContext(promise, reason => disposables.interrupt(reason), runtimeContext, disposed.promise)
+}
+
 const runForkInternal = <const E, const A>(
   f: Fx<E, A>,
   context: readonly CapturedHandler[],
@@ -185,7 +198,7 @@ const runIterator = async <const E, const A>(
       const effectContext = runtimeContextOfEffect(ir.value, runtimeContext)
       const forkOrigin = ir.value.arg.origin
       const forkTrace = capturePrependTraceWithContext(effectContext, forkOrigin, trace, forkFrameMetadata(ir.value.arg.trace))
-      const t = acquireAndRunFork({ ...ir.value.arg, trace: forkTrace }, semaphore, context, effectContext)
+      const t = runForkWithAdmission({ ...ir.value.arg, trace: forkTrace }, semaphore, context, effectContext)
       disposables.addTask(t)
       t.promise
         .finally(() => disposables.removeTask(t))
@@ -221,6 +234,15 @@ const runIterator = async <const E, const A>(
   }
   return ir.value as A
 }
+
+const runForkWithAdmission = (
+  f: ForkContext,
+  s: Semaphore,
+  context: readonly CapturedHandler[],
+  runtimeContext: RuntimeContext | undefined
+) => f.scheduling === 'unmetered'
+  ? runForkUnmetered(f, s, context, runtimeContext)
+  : acquireAndRunFork(f, s, context, runtimeContext)
 
 class InterruptState {
   private readonly disposables = new DisposableSet()

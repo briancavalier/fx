@@ -315,7 +315,12 @@ class ScopeController<Scope extends AnyScope> {
   }
 
   *fork(context: ScopedForkContext): Generator<unknown, Task<unknown, unknown>, unknown> {
-    const task = yield* withoutScopeExitSources(new Fork(context) as Fx<Fork, Task<unknown, unknown>>)
+    const task = yield* withoutScopeExitSources(new Fork({
+      fx: context.fx,
+      origin: context.origin,
+      trace: context.trace,
+      scheduling: context.scheduling
+    }) as Fx<Fork, Task<unknown, unknown>>)
     task._markHandled()
     this.tasks.set(task, context)
     this.watchTask(task)

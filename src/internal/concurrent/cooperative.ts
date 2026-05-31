@@ -94,7 +94,7 @@ export class CooperativeRuntime {
       fx: fork.arg.fx,
       traceOrigin: { origin, trace },
       runtimeContext: context,
-      unmetered: fork.arg.unmetered === true,
+      unmetered: fork.arg.scheduling === 'unmetered',
       masks: new InterruptMaskState(),
       slotAcquired: false,
       status: 'ready',

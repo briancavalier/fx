@@ -64,26 +64,25 @@ independently of the work it is bounding.
 
 ## Proposed Direction
 
-Add an internal scheduling mode for daemon scope-owned timer forks:
+Add a scheduling mode for forked work:
 
 ```ts
-type ScopedForkContext = TraceOrigin & {
+type ForkScheduling = 'metered' | 'unmetered'
+
+interface ForkContext extends TraceOrigin {
   readonly fx: Fx<unknown, unknown>
-  readonly failure?: 'scope' | 'task' | 'join'
-} & (
-  | { readonly daemon?: false | undefined; readonly scheduling?: undefined }
-  | { readonly daemon: true; readonly scheduling?: 'metered' | 'unmetered' }
-)
+  readonly scheduling?: ForkScheduling
+}
 ```
 
-The exact name can change, but the semantics should be narrow:
+The semantics should be narrow and explicit:
 
-- `daemon: true` means the task does not keep scope success alive.
-- `scheduling: 'unmetered'` means a daemon task does not consume a concurrency
-  permit or cooperative concurrency slot.
-- non-daemon scoped forks cannot use `scheduling: 'unmetered'`.
+- `scheduling: 'metered'` is the default and consumes normal bounded or
+  cooperative concurrency admission.
+- `scheduling: 'unmetered'` skips concurrency admission, but keeps normal task
+  lifetime, interruption, cleanup, failure, trace, and handler-capture behavior.
 
-`timeoutInWithTrace` should mark only its internal timer fork as a daemon with
+`timeoutInWithTrace` should mark its internal timer fork as a daemon with
 unmetered scheduling:
 
 ```ts
@@ -95,8 +94,9 @@ new ScopedFork(scope, {
 })
 ```
 
-This keeps the fix local to internal runtime work. It does not introduce a
-public detached-fork API, and it does not change normal user fork admission.
+The public `fork` and `forkIn` constructors may expose the same advanced
+`scheduling` option. This makes the backpressure escape explicit rather than
+an accidental hidden flag.
 
 ## Why This Is Not General Detach
 
@@ -114,8 +114,8 @@ Timeout timers need something narrower. They remain scope-owned:
   unexpected failure escapes.
 
 They are only detached from the admission budget. Calling this `detached` would
-overload a lifetime term with a scheduling meaning. Use the scoped fork
-`scheduling` mode to make that distinction explicit.
+overload a lifetime term with a scheduling meaning. Use the fork `scheduling`
+mode to make that distinction explicit.
 
 ## Bounded Runtime Changes
 
@@ -125,13 +125,13 @@ smallest change is to let fork start choose whether to acquire:
 ```ts
 const runForkWith = (s: Semaphore) =>
   (fork: Fork): Fx<never, Task<unknown, unknown>> =>
-    ok(fork.arg.unmetered
+    ok(fork.arg.scheduling === 'unmetered'
       ? runForkUnmetered(fork.arg)
       : acquireAndRunFork(fork.arg, s))
 ```
 
-`ScopeController` should lower `scheduling: 'unmetered'` to this scheduler-level
-`ForkContext.unmetered` flag only when `daemon: true`.
+`ScopeController` should pass scoped-fork scheduling through to the lowered
+`ForkContext`.
 
 The unmetered path should still use the same child runtime machinery as normal
 forks:
@@ -183,24 +183,23 @@ The existing `daemon` behavior remains correct:
 - queued bounded timer work should not start after the scope has already been
   interrupted
 
-The new scheduling flag must not imply "ignore scope cleanup". It only says
+The new scheduling mode must not imply "ignore scope cleanup". It only says
 "do not count this work against the user's concurrency limit".
 
 ## API Surface
 
-Do not expose this publicly at first.
+Expose this publicly as an advanced option on `fork` and `forkIn`.
 
-Reasons:
+Docs should be clear and succinct:
 
-- The immediate use case is internal timeout machinery.
-- A public unmetered fork can bypass backpressure and would need a stronger
-  story about fairness and resource use.
-- The existing public design questions around attached and detached forks are
-  lifetime questions, and should not be coupled to this scheduling escape.
-- The name and exact semantics are easier to change while internal.
-
-If more internal uses appear, the flag can remain internal. If user demand
-emerges, evaluate a separate public API with explicit resource caveats.
+- default scheduling is `metered`
+- `unmetered` skips only concurrency admission
+- `unmetered` does not detach the task or bypass interruption, cleanup,
+  failures, traces, or handler capture
+- use `unmetered` only for control-plane work such as timers, watchdogs,
+  cancellation coordinators, and schedulers
+- do not use `unmetered` for ordinary application work that should respect
+  bounded concurrency backpressure
 
 ## Tests
 
@@ -214,13 +213,14 @@ Add focused tests before changing implementation:
    `withCoopConcurrency({ concurrency: 1 })`.
 4. `timeoutIn()` interrupts a caller-owned scope whose body is parked under
    `withCoopConcurrency({ concurrency: 1 })`.
-5. User forks still respect `withBoundedConcurrency(1)` and
-   `withCoopConcurrency({ concurrency: 1 })`; only the internal timer fork is
-   unmetered.
-6. Timer daemon behavior is unchanged: a normally completing scope does not
+5. User forks respect `withBoundedConcurrency(1)` and
+   `withCoopConcurrency({ concurrency: 1 })` by default.
+6. Explicit `fork(..., { scheduling: 'unmetered' })` can bypass bounded and
+   cooperative admission.
+7. Timer daemon behavior is unchanged: a normally completing scope does not
    wait for its timer, and the timeout reason is not produced after normal
    completion.
-7. Queued or not-yet-started timer work is still interrupted when the owning
+8. Queued or not-yet-started timer work is still interrupted when the owning
    scope exits for another reason.
 
 The first test is the regression that currently hangs:
@@ -243,15 +243,13 @@ Use the virtual clock for deterministic timer behavior.
 
 ## Risks
 
-The main risk is creating an accidental priority class. If many unmetered forks
+The main risk is creating an explicit priority class. If many unmetered forks
 exist, they can bypass the user's concurrency limit and reduce the meaning of
-bounded concurrency. Keeping the flag internal and timeout-only controls that
-risk.
+bounded concurrency. Public docs should reserve the option for control-plane
+work.
 
-The second risk is confusing lifetime and scheduling. The scoped-fork union
-keeps them related but not independent: only daemon scoped forks may choose a
-non-default scheduling mode, and `scheduling: 'unmetered'` still does not imply
-detached lifetime ownership.
+The second risk is confusing lifetime and scheduling. `scheduling:
+'unmetered'` still does not imply detached lifetime ownership.
 
 The third risk is duplicated runtime paths. The unmetered bounded path should
 reuse the same underlying fork runner as `acquireAndRunFork`; it should only
@@ -259,10 +257,11 @@ skip semaphore acquisition.
 
 ## Recommendation
 
-Implement internal unmetered daemon forks for timeout timers.
+Implement advanced unmetered scheduling for forks and use it for timeout
+timers.
 
 This is the smallest design that matches the semantic requirement: a timeout's
 timer must not need the resource it is bounding. It preserves the existing
 scope-owned timeout architecture, avoids adding time-budget policy to
-concurrency handlers, and avoids committing to a public detached-fork API before
-the broader lifetime design is settled.
+concurrency handlers, and avoids overloading detached lifetime semantics with a
+scheduling concern.

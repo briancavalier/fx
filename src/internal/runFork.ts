@@ -240,7 +240,7 @@ const runForkWithAdmission = (
   s: Semaphore,
   context: readonly CapturedHandler[],
   runtimeContext: RuntimeContext | undefined
-) => f.unmetered === true
+) => f.scheduling === 'unmetered'
   ? runForkUnmetered(f, s, context, runtimeContext)
   : acquireAndRunFork(f, s, context, runtimeContext)
 

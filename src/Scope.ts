@@ -319,7 +319,7 @@ class ScopeController<Scope extends AnyScope> {
       fx: context.fx,
       origin: context.origin,
       trace: context.trace,
-      unmetered: context.daemon === true && context.scheduling === 'unmetered'
+      scheduling: context.scheduling
     }) as Fx<Fork, Task<unknown, unknown>>)
     task._markHandled()
     this.tasks.set(task, context)

@@ -30,7 +30,7 @@ export const withUnboundedConcurrency = withBoundedConcurrency(Infinity)
 
 const runForkWith = (s: Semaphore) =>
   (fork: Fork): Fx<never, Task<unknown, unknown>> =>
-    ok(fork.arg.unmetered === true ? runForkUnmetered(fork.arg, s) : acquireAndRunFork(fork.arg, s))
+    ok(fork.arg.scheduling === 'unmetered' ? runForkUnmetered(fork.arg, s) : acquireAndRunFork(fork.arg, s))
 
 type WithConcurrencyHandledEffects<E> =
   Handle<Handle<E, Fork>, HandlerCapture<'fx/Concurrent/Fork'>>

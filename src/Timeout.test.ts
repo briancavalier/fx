@@ -83,7 +83,7 @@ describe('Timeout', () => {
     assert.equal(r, reason)
   })
 
-  it('interrupts a parked protected computation under cooperative concurrency', async () => {
+  it('delivers cooperative timeout interruption after an opaque handled async boundary returns', async () => {
     const c = new VirtualClock(0)
     const reason = { type: 'timeout' }
 
@@ -97,6 +97,8 @@ describe('Timeout', () => {
     )
 
     await c.step(10)
+    await assertPending(p)
+    await c.step(90)
     const r = await mustSettle(p)
 
     assert.equal(r, reason)
@@ -351,7 +353,7 @@ describe('Timeout', () => {
     assert.equal(completed, false)
   })
 
-  it('timeoutIn interrupts a scope while a cooperative child holds the only permit', async () => {
+  it('timeoutIn delivers cooperative scope interruption after an opaque handled async boundary returns', async () => {
     const c = new VirtualClock(0)
     const reason = { type: 'scope-timeout' }
     let completed = false
@@ -372,6 +374,8 @@ describe('Timeout', () => {
     )
 
     await c.step(10)
+    await assertPending(p)
+    await c.step(90)
     const r = await mustSettle(p)
 
     assert.equal(r, reason)
@@ -489,3 +493,11 @@ const mustSettle = <A>(p: Promise<A>): Promise<A> =>
     p,
     new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Expected timeout program to settle')), 100))
   ])
+
+const assertPending = async <A>(p: Promise<A>): Promise<void> => {
+  const result = await Promise.race([
+    p.then(() => 'settled' as const),
+    new Promise<'pending'>(resolve => setTimeout(() => resolve('pending'), 10))
+  ])
+  assert.equal(result, 'pending')
+}

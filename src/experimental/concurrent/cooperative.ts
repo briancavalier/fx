@@ -129,8 +129,6 @@ export class CooperativeRuntime {
         } else if (fiber.masks.canInterrupt) {
           if (fiber.abort !== undefined) {
             fiber.abort.abort(reason)
-          } else if (fiber.status === 'running') {
-            void interruptRunningFiber(this, fiber)
           }
         }
         if (fiber.status === 'ready') this.enqueue(fiber)
@@ -245,12 +243,7 @@ export class CooperativeRuntime {
       }
 
       if (fiber.cancelRequested && fiber.masks.canInterrupt) {
-        await runPromise(fx(function* (this: CooperativeRuntime) { yield* closeFiber(this, fiber) }.bind(this)) as Fx<any, void>)
-        if (fiber.cleanupFailures.length > 0) {
-          finishInterruptedFiber(this, fiber, resourceReleaseFailed(fiber.cleanupFailures))
-        } else {
-          finishInterruptedFiber(this, fiber)
-        }
+        await this.interruptFiberAtBoundary(fiber)
         return
       }
 
@@ -272,6 +265,10 @@ export class CooperativeRuntime {
         }
       })
       await runPromise(withHandlerContext(this.handlers, fx(function* () { yield* step })) as Fx<any, void>)
+      if (fiber.status === 'running' && fiber.cancelRequested && fiber.masks.canInterrupt) {
+        await this.interruptFiberAtBoundary(fiber)
+        return
+      }
       if (fiber.status === 'running') {
         fiber.status = 'ready'
         this.enqueueYielded(fiber)
@@ -279,6 +276,15 @@ export class CooperativeRuntime {
     } catch (error) {
       finishFiber(this, fiber)
       fiber.done.reject(error)
+    }
+  }
+
+  private async interruptFiberAtBoundary(fiber: Fiber): Promise<void> {
+    await runPromise(fx(function* (this: CooperativeRuntime) { yield* closeFiber(this, fiber) }.bind(this)) as Fx<any, void>)
+    if (fiber.cleanupFailures.length > 0) {
+      finishInterruptedFiber(this, fiber, resourceReleaseFailed(fiber.cleanupFailures))
+    } else {
+      finishInterruptedFiber(this, fiber)
     }
   }
 
@@ -454,12 +460,24 @@ function* stepFiber(
     }
 
     if (HandlerCapture.is(ir.value)) {
-      fiber.resume = { type: 'next', value: yield ir.value as any }
+      const value = yield ir.value as any
+      if (fiber.cancelRequested && fiber.masks.canInterrupt) {
+        yield* closeFiber(runtime, fiber)
+        callbacks.cancel?.()
+        break
+      }
+      fiber.resume = { type: 'next', value }
       fiber.releaseSlotBeforeResume = true
       continue
     }
 
-    fiber.resume = { type: 'next', value: yield ir.value as any }
+    const value = yield ir.value as any
+    if (fiber.cancelRequested && fiber.masks.canInterrupt) {
+      yield* closeFiber(runtime, fiber)
+      callbacks.cancel?.()
+      break
+    }
+    fiber.resume = { type: 'next', value }
   }
 }
 
@@ -558,15 +576,6 @@ const finishInterruptedFiber = (runtime: CooperativeRuntime, fiber: Fiber, failu
   } else {
     fiber.done.reject(failure)
     fiber.interrupted.reject(failure)
-  }
-}
-
-const interruptRunningFiber = async (runtime: CooperativeRuntime, fiber: Fiber): Promise<void> => {
-  await runPromise(fx(function* () { yield* closeFiber(runtime, fiber) }) as Fx<any, void>)
-  if (fiber.cleanupFailures.length > 0) {
-    finishInterruptedFiber(runtime, fiber, resourceReleaseFailed(fiber.cleanupFailures))
-  } else {
-    finishInterruptedFiber(runtime, fiber)
   }
 }
 

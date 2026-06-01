@@ -1345,6 +1345,40 @@ describe('Fork', () => {
       assert.deepEqual(exits[0], { type: 'interrupted', scope: TestScope })
     })
 
+    it('does not close a running fiber before a handled async effect returns', async () => {
+      class Park extends Effect('test/Fork/CooperativeHandledAsyncInterrupt')<void, void> { }
+      const TestScope = scope('test/Fork/CooperativeHandledAsyncInterruptScope')
+      const events: string[] = []
+      let release!: () => void
+      const released = new Promise<void>(resolve => { release = resolve })
+
+      const task = taskOrThrow(await fx(function* () {
+        return yield* fork(fx(function* () {
+          yield* andFinallyExit(TestScope, exit => fx(function* () {
+            events.push(`finalize:${exit.type}`)
+          }))
+          events.push('before')
+          yield* new Park()
+          events.push('after')
+        }).pipe(withScope(TestScope)))
+      }).pipe(
+        withCoopConcurrency(),
+        handle(Park, () => assertPromise(() => released)),
+        runPromise
+      ))
+
+      await delay(0)
+      const interrupted = task.interrupt('stop')
+      await delay(0)
+
+      assert.deepEqual(events, ['before'])
+
+      release()
+      await withTimeout(interrupted, 50)
+
+      assert.deepEqual(events, ['before', 'finalize:interrupted'])
+    })
+
     it('shares concurrency slots between explicit forks and structured children', async () => {
       const events = [] as string[]
       let releaseFork!: () => void

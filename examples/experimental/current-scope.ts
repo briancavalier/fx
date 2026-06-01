@@ -1,4 +1,4 @@
-import { assert as assertNoFail, fx, ok, run, runPromise } from '@briancavalier/fx'
+import { assert as assertNoFail, consoleLog, defaultConsole, fx, ok, run, runPromise } from '@briancavalier/fx'
 import { withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 import {
   andFinallyExit,
@@ -19,22 +19,20 @@ const NamedRequest = scope('examples/experimental/current-scope/NamedRequest')
 const NamedEvents = scope<Yielding<string>>()('examples/experimental/current-scope/NamedEvents')
 
 const named = fx(function* () {
-  yield* andFinallyExit(NamedRequest, exit => fx(function* () {
-    console.log(`named cleanup: ${exit.type}`)
-  }))
+  yield* andFinallyExit(NamedRequest, exit => consoleLog(`named cleanup: ${exit.type}`))
   return 'named request'
 }).pipe(
   withScope(NamedRequest),
+  defaultConsole,
   assertNoFail,
   run
 )
 
 const privateScoped = scoped(fx(function* () {
-  yield* andFinallyExit(currentScope, exit => fx(function* () {
-    console.log(`private cleanup: ${exit.type}`)
-  }))
+  yield* andFinallyExit(currentScope, exit => consoleLog(`private cleanup: ${exit.type}`))
   return 'private request'
 })).pipe(
+  defaultConsole,
   assertNoFail,
   run
 )

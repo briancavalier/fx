@@ -9,8 +9,68 @@ import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { interruptFrom, InterruptFrom } from './InterruptFrom.js'
 import { returnFrom } from './ReturnFrom.js'
 import { collectScoped, scoped } from './Scoped.js'
+import { currentScope, scope, withScope, type AnyLifetimeScope } from './Scope.js'
 import { getState, modifyState } from './State.js'
 import { yieldFrom } from './YieldFrom.js'
+
+describe('currentScope', () => {
+  it('returns the nearest active lifetime scope', () => {
+    const Outer = scope('test/CurrentScope/outer')
+    const Inner = scope('test/CurrentScope/inner')
+
+    assert.equal(run(currentScope.pipe(withScope(Outer))), Outer)
+    assert.equal(run(currentScope.pipe(withScope(Inner), withScope(Outer))), Inner)
+  })
+
+  it('is eliminated by withScope', () => {
+    const TestScope = scope('test/CurrentScope/type')
+    const program = currentScope.pipe(withScope(TestScope))
+
+    const _: typeof program extends Fx<never, AnyLifetimeScope> ? true : false = true
+
+    assert.equal(run(program), TestScope)
+  })
+
+  it('supports lifetime APIs without exposing control protocols', async () => {
+    const events: string[] = []
+
+    const result = await scoped(fx(function* () {
+      const current = yield* currentScope
+      yield* andFinally(current, fx(function* () {
+        events.push('cleanup')
+      }))
+      yield* forkIn(current, fx(function* () {
+        events.push('child')
+      }))
+      events.push('parent')
+      return 'done' as const
+    })).pipe(
+      withUnboundedConcurrency,
+      assertNoFail,
+      runPromise
+    )
+
+    assert.equal(result, 'done')
+    assert.deepEqual(events, ['parent', 'child', 'cleanup'])
+  })
+
+  it('only exposes lifetime authority', () => {
+    fx(function* () {
+      const current = yield* currentScope
+      // @ts-expect-error The current scope cannot perform control return.
+      yield* returnFrom(current, 'returned' as const)
+      // @ts-expect-error The current scope cannot abort.
+      yield* abort(current)
+      // @ts-expect-error The current scope does not create a yielding protocol.
+      yield* yieldFrom(current, 'event' as const)
+      // @ts-expect-error The current scope does not create a state protocol.
+      yield* getState(current)
+      // @ts-expect-error The current scope does not create a state protocol.
+      yield* modifyState(current, state => [state, undefined] as const)
+      return 'done' as const
+    })
+  })
+})
 
 describe('scoped', () => {
   it('runs private-scope finalizers after success', () => {
@@ -73,6 +133,19 @@ describe('scoped', () => {
 
     assert.equal(result, 'parent')
     assert.deepEqual(events, ['parent done', 'child ran', 'child cleanup'])
+  })
+
+  it('handles currentScope for direct Fx programs', () => {
+    const exits: string[] = []
+
+    const result = run(scoped(fx(function* () {
+      const current = yield* currentScope
+      yield* andFinallyExit(current, exit => ok(void exits.push(exit.type)))
+      return 'done' as const
+    })).pipe(assertNoFail))
+
+    assert.equal(result, 'done')
+    assert.deepEqual(exits, ['success'])
   })
 
   it('only provides lifetime authority', () => {

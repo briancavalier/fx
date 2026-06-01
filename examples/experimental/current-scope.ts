@@ -4,6 +4,7 @@ import {
   andFinallyExit,
   collectFrom,
   collectScoped,
+  currentScope,
   recoverInterrupt,
   scoped,
   scope,
@@ -18,7 +19,9 @@ const NamedRequest = scope('examples/experimental/current-scope/NamedRequest')
 const NamedEvents = scope<Yielding<string>>()('examples/experimental/current-scope/NamedEvents')
 
 const named = fx(function* () {
-  yield* andFinallyExit(NamedRequest, exit => ok(console.log(`named cleanup: ${exit.type}`)))
+  yield* andFinallyExit(NamedRequest, exit => fx(function* () {
+    console.log(`named cleanup: ${exit.type}`)
+  }))
   return 'named request'
 }).pipe(
   withScope(NamedRequest),
@@ -26,8 +29,11 @@ const named = fx(function* () {
   run
 )
 
-const privateScoped = scoped(current => fx(function* () {
-  yield* andFinallyExit(current, exit => ok(console.log(`private cleanup: ${exit.type}`)))
+const privateScoped = scoped(fx(function* () {
+  const current = yield* currentScope
+  yield* andFinallyExit(current, exit => fx(function* () {
+    console.log(`private cleanup: ${exit.type}`)
+  }))
   return 'private request'
 })).pipe(
   assertNoFail,

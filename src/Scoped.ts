@@ -3,17 +3,24 @@ import { scope, withScope, type AnyLifetimeScope, type ScopeEffects } from './Sc
 import { collectFrom, type ExcludeYieldFrom, type Yielding } from './YieldFrom.js'
 
 /**
- * Run an Fx in a private named scope supplied to the callback.
+ * Run an Fx in a private named scope.
  *
  * This is an experimental convenience for local lifecycle and control effects.
- * The private scope is still explicit inside the callback, but cannot be named
- * by callers outside this boundary.
+ * Pass an Fx that requests `currentScope`, or use the callback form when
+ * the private scope should be explicit inside the callback.
  */
-export const scoped = <const E, const A>(
+export function scoped<const E, const A>(
+  f: Fx<E, A>
+): Fx<ScopeEffects<E, AnyLifetimeScope>, A>
+export function scoped<const E, const A>(
   f: (scope: AnyLifetimeScope) => Fx<E, A>
-): Fx<ScopeEffects<E, AnyLifetimeScope>, A> => {
+): Fx<ScopeEffects<E, AnyLifetimeScope>, A>
+export function scoped<const E, const A>(
+  f: Fx<E, A> | ((scope: AnyLifetimeScope) => Fx<E, A>)
+): Fx<ScopeEffects<E, AnyLifetimeScope>, A> {
   const privateScope = scope(Symbol('fx/Scoped/scoped'), { diagnostic: false })
-  return f(privateScope).pipe(withScope(privateScope)) as Fx<ScopeEffects<E, AnyLifetimeScope>, A>
+  const scopedFx = typeof f === 'function' ? f(privateScope) : f
+  return scopedFx.pipe(withScope(privateScope)) as Fx<ScopeEffects<E, AnyLifetimeScope>, A>
 }
 
 /**

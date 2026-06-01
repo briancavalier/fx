@@ -1,7 +1,7 @@
 import { Async } from './Async.js'
 import { at } from './Breadcrumb.js'
 import { Abort } from './Abort.js'
-import { isEffect, type AnyEffect } from './Effect.js'
+import { Effect, isEffect, type AnyEffect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { Finalizer, Finally } from './Finalization.js'
 import { Fx, fx, ok } from './Fx.js'
@@ -111,6 +111,16 @@ export interface Interrupted<Scope extends AnyScope> {
   readonly reason?: unknown
 }
 
+/**
+ * Request the nearest active lifetime scope.
+ *
+ * A `withScope(...)` handler answers this request with its own scope token,
+ * narrowed to lifetime authority only.
+ */
+export class CurrentScope extends Effect('fx/Scope/Current')<void, AnyLifetimeScope> { }
+
+export const currentScope: Fx<CurrentScope, AnyLifetimeScope> = new CurrentScope(undefined)
+
 export function withScope<const Scope extends AnyLifetimeScope>(
   scope: Scope
 ): <const E, const A>(f: Fx<E, A>) => Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>> {
@@ -125,7 +135,8 @@ export type ScopeEffects<E, Scope extends AnyLifetimeScope> =
   HandleScopeEffect<E, Scope> | ScopedForkEffects<E, Scope> | CleanupEffects<E, Scope> | CleanupFailure<E, Scope>
 
 type HandleScopeEffect<E, Scope extends AnyLifetimeScope> =
-  E extends Finally<Scope, any> ? never
+  E extends CurrentScope ? never
+  : E extends Finally<Scope, any> ? never
   : E extends ReturnFrom<Scope, any> ? never
   : E extends ScopedFork<Scope> ? never
   : E
@@ -228,7 +239,9 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
           const effectScope = (effect as { readonly scope?: AnyScope }).scope
           const matchesScope = effectScope !== undefined && sameScope(effectScope, scope)
 
-          if (matchesScope && Finally.is(effect)) {
+          if (CurrentScope.is(effect)) {
+            ir = i.next(scope)
+          } else if (matchesScope && Finally.is(effect)) {
             controller.addFinalizer(effect.arg)
             ir = i.next(undefined)
           } else if (matchesScope && ScopedFork.is(effect)) {

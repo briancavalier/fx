@@ -8,10 +8,10 @@ import { andFinally, andFinallyExit } from './Finalization.js'
 import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { interruptFrom, InterruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { returnFrom, ReturnFrom } from './ReturnFrom.js'
-import { collectScoped, scoped } from './Scoped.js'
+import { scoped } from './Scoped.js'
 import { currentScope, scope, withScope, type Control } from './Scope.js'
 import { getState, modifyState } from './State.js'
-import { yieldFrom, YieldFrom, type Yielding } from './YieldFrom.js'
+import { yieldFrom } from './YieldFrom.js'
 
 describe('currentScope', () => {
   it('is eliminated by withScope', () => {
@@ -206,43 +206,5 @@ describe('scoped', () => {
       yield* modifyState(scope, state => [state, undefined] as const)
       return 'done' as const
     }))
-  })
-})
-
-describe('collectScoped', () => {
-  it('collects private scoped yields before they escape', () => {
-    const program = collectScoped<'a' | 'b'>()(scope => fx(function* () {
-      yield* yieldFrom(scope, 'a' as const)
-      yield* yieldFrom(scope, 'b' as const)
-      return 'done' as const
-    }))
-
-    const _: typeof program extends Fx<never, readonly ['done', readonly ('a' | 'b')[]]> ? true : false = true
-
-    assert.deepEqual(run(program), ['done', ['a', 'b']])
-  })
-
-  it('does not provide control authority to the private yield protocol scope', () => {
-    collectScoped<number>()(scope => fx(function* () {
-      yield* yieldFrom(scope, 1)
-      // @ts-expect-error A private yield protocol scope is not a control scope.
-      return yield* returnFrom(scope, 'returned' as const)
-    }))
-  })
-
-  it('leaves caller-owned yield protocols visible', () => {
-    const Outer = scope<Yielding<number>>()('test/CollectScoped/outer')
-
-    const program = collectScoped<string>()(scope => fx(function* () {
-      yield* yieldFrom(scope, 'private')
-      yield* yieldFrom(Outer, 1)
-      return 'done' as const
-    }))
-
-    const _: typeof program extends Fx<YieldFrom<typeof Outer>, readonly ['done', readonly string[]]> ? true : false = true
-    const next = program[Symbol.iterator]().next()
-
-    assert.equal(next.done, false)
-    assert.equal(next.value.scope, Outer)
   })
 })

@@ -3,7 +3,6 @@ import { withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 import {
   andFinallyExit,
   collectFrom,
-  collectScoped,
   currentScope,
   recoverInterrupt,
   scoped,
@@ -37,11 +36,6 @@ const privateScoped = scoped(fx(function* () {
   run
 )
 
-const privateCollected = collectScoped<string>()(current => fx(function* () {
-  yield* yieldFrom(current, 'private event')
-  return 'private collected'
-})).pipe(run)
-
 const externallyHandled = fx(function* () {
   yield* yieldFrom(NamedEvents, 'external event')
   return 'external collected'
@@ -66,7 +60,6 @@ const deadline = await fx(function* () {
 console.log({
   named,
   privateScoped,
-  privateCollected,
   externallyHandled,
   deadline
 })

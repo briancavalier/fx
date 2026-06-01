@@ -33,6 +33,7 @@ export interface Scope<Id extends PropertyKey = PropertyKey> extends ScopeIdenti
 
 declare const LifetimeTypeId: unique symbol
 declare const ControlTypeId: unique symbol
+declare const CurrentScopeTypeId: unique symbol
 
 export type Lifetime = {
   readonly [LifetimeTypeId]: true
@@ -47,6 +48,9 @@ export type LifetimeScope<Id extends PropertyKey = PropertyKey> = Scope<Id> & Li
 export type ControlScope<Id extends PropertyKey = PropertyKey> = Scope<Id> & Lifetime & Control
 export type AnyLifetimeScope = LifetimeScope<PropertyKey>
 export type AnyControlScope = ControlScope<PropertyKey>
+export type CurrentLifetimeScope = AnyLifetimeScope & {
+  readonly [CurrentScopeTypeId]: true
+}
 
 export function scope<Brand>(): <const Id extends PropertyKey>(id: Id, metadata?: ScopeMetadata) => Scope<Id> & Lifetime & Brand
 export function scope<const Id extends PropertyKey>(id: Id, metadata?: ScopeMetadata): Scope<Id> & Lifetime
@@ -117,9 +121,9 @@ export interface Interrupted<Scope extends AnyScope> {
  * A `withScope(...)` handler answers this request with its own scope token,
  * narrowed to lifetime authority only.
  */
-export class CurrentScope extends Effect('fx/Scope/Current')<void, AnyLifetimeScope> { }
+export class CurrentScope extends Effect('fx/Scope/Current')<void, CurrentLifetimeScope> { }
 
-export const currentScope: Fx<CurrentScope, AnyLifetimeScope> = new CurrentScope(undefined)
+export const currentScope: Fx<CurrentScope, CurrentLifetimeScope> = new CurrentScope(undefined)
 
 export function withScope<const Scope extends AnyLifetimeScope>(
   scope: Scope
@@ -136,21 +140,23 @@ export type ScopeEffects<E, Scope extends AnyLifetimeScope> =
 
 type HandleScopeEffect<E, Scope extends AnyLifetimeScope> =
   E extends CurrentScope ? never
-  : E extends Finally<Scope, any> ? never
+  : E extends Finally<HandledScope<Scope>, any> ? never
   : E extends ReturnFrom<Scope, any> ? never
-  : E extends ScopedFork<Scope> ? never
+  : E extends ScopedFork<HandledScope<Scope>> ? never
   : E
 
 type ScopedForkEffects<E, Scope extends AnyLifetimeScope> =
-  E extends ScopedFork<Scope> ? Fork | Async | Fail<unknown> : never
+  E extends ScopedFork<HandledScope<Scope>> ? Fork | Async | Fail<unknown> : never
 
 type MatchingFinally<E, Scope extends AnyLifetimeScope> =
-  Extract<E, Finally<Scope, any>>
+  Extract<E, Finally<HandledScope<Scope>, any>>
+
+type HandledScope<Scope extends AnyLifetimeScope> = Scope | CurrentLifetimeScope
 
 type FinalizerEffects<E, Scope extends AnyLifetimeScope> =
   MatchingFinally<E, Scope> extends never
     ? never
-    : MatchingFinally<E, Scope> extends Finally<Scope, infer FE> ? FE : never
+    : MatchingFinally<E, Scope> extends Finally<HandledScope<Scope>, infer FE> ? FE : never
 
 type CleanupEffects<E, Scope extends AnyLifetimeScope> =
   Exclude<FinalizerEffects<E, Scope>, Fail<any>>

@@ -7,11 +7,11 @@ import { assert as assertNoFail, fail, Fail, returnFail } from './Fail.js'
 import { andFinally, andFinallyExit } from './Finalization.js'
 import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { interruptFrom, InterruptFrom } from './InterruptFrom.js'
-import { returnFrom } from './ReturnFrom.js'
+import { returnFrom, ReturnFrom } from './ReturnFrom.js'
 import { collectScoped, scoped } from './Scoped.js'
-import { currentScope, scope, withScope, type AnyLifetimeScope } from './Scope.js'
+import { currentScope, scope, withScope, type AnyLifetimeScope, type Control } from './Scope.js'
 import { getState, modifyState } from './State.js'
-import { yieldFrom } from './YieldFrom.js'
+import { yieldFrom, YieldFrom, type Yielding } from './YieldFrom.js'
 
 describe('currentScope', () => {
   it('returns the nearest active lifetime scope', () => {
@@ -148,6 +148,21 @@ describe('scoped', () => {
     assert.deepEqual(exits, ['success'])
   })
 
+  it('leaves caller-owned scoped effects visible', () => {
+    const Outer = scope<Control>()('test/Scoped/outer')
+
+    const program = scoped(fx(function* () {
+      return yield* returnFrom(Outer, 'outer' as const)
+    }))
+
+    const _: typeof program extends Fx<ReturnFrom<typeof Outer, 'outer'>, never> ? true : false = true
+    const next = program[Symbol.iterator]().next()
+
+    assert.equal(next.done, false)
+    assert.equal(ReturnFrom.is(next.value), true)
+    assert.equal(next.value.scope, Outer)
+  })
+
   it('only provides lifetime authority', () => {
     scoped(scope => fx(function* () {
       // @ts-expect-error A lifetime-only current scope cannot perform control return.
@@ -184,5 +199,21 @@ describe('collectScoped', () => {
       // @ts-expect-error A private yield protocol scope is not a control scope.
       return yield* returnFrom(scope, 'returned' as const)
     }))
+  })
+
+  it('leaves caller-owned yield protocols visible', () => {
+    const Outer = scope<Yielding<number>>()('test/CollectScoped/outer')
+
+    const program = collectScoped<string>()(scope => fx(function* () {
+      yield* yieldFrom(scope, 'private')
+      yield* yieldFrom(Outer, 1)
+      return 'done' as const
+    }))
+
+    const _: typeof program extends Fx<YieldFrom<typeof Outer>, readonly ['done', readonly string[]]> ? true : false = true
+    const next = program[Symbol.iterator]().next()
+
+    assert.equal(next.done, false)
+    assert.equal(next.value.scope, Outer)
   })
 })

@@ -128,7 +128,7 @@ describe('Timeout', () => {
 
     assert.equal(r, reason)
     assert.equal(completed, false)
-    assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope }])
+    assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope, reason }])
   })
 
   it('uses a trace-bearing TimeoutInterrupt as the default reason', async () => {
@@ -160,7 +160,7 @@ describe('Timeout', () => {
     assert.match(reason.cause.stack ?? '', /Timeout\.test\.ts/)
     assert.deepEqual(traceMessages(reason).slice(0, 1), ['Timeout interrupted timeout after 50ms'])
     assert.equal(exit.type, 'interrupted')
-    assert.equal(exit.reason, undefined)
+    assert.equal(exit.reason, reason)
   })
 
   it('uses timeout label in private timeout traces', async () => {

@@ -6,8 +6,8 @@ import { Finally, andFinallyExit } from './Finalization.js'
 import { Fx, flatMap, fx, map, ok } from './Fx.js'
 import { withCapturedHandlers, type HandlerCapture } from './HandlerCapture.js'
 import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
-import { returnFrom } from './ReturnFrom.js'
-import { scope, scopeLabel, withScope, type AnyLifetimeScope, type Control, type Exit } from './Scope.js'
+import { scope, scopeLabel, withScope, type AnyLifetimeScope, type Exit } from './Scope.js'
+import { wait } from './Task.js'
 import { Sleep, sleep } from './Time.js'
 import type { TraceOrigin } from './Trace.js'
 import { attachTrace, captureTrace } from './Trace.js'
@@ -25,7 +25,7 @@ export function timeout<const Options extends AnyTimeoutOptions>(
   options: Options
 ): <const E, const A>(f: Fx<E, A>) => Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<AnyLifetimeScope, TimeoutReasonOf<Options>>, A> {
   const { ms, label } = options
-  const timeoutScope = scope<Control>()(Symbol('fx/Timeout'), {
+  const timeoutScope = scope(Symbol('fx/Timeout'), {
     label: label ?? 'timeout',
     diagnostic: false
   })
@@ -34,16 +34,14 @@ export function timeout<const Options extends AnyTimeoutOptions>(
 
   return <const E, const A>(f: Fx<E, A>): Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<AnyLifetimeScope, TimeoutReasonOf<Options>>, A> =>
     fx(function* () {
-      yield* forkIn(timeoutScope, attempt(f).pipe(
-        flatMap(result => returnFrom(timeoutScope, result))
-      ), { origin, trace })
+      const task = yield* forkIn(timeoutScope, attempt(f), { origin, trace })
 
       yield* timeoutInWithTrace(timeoutScope, options, { origin, trace })
+
+      return yield* wait(task)
     }).pipe(
       withScope(timeoutScope),
-      // The private timeout scope token cannot be named by callers, but
-      // TypeScript cannot prove a generic E has no matching ReturnFrom.
-      flatMap(result => unwrapAttempt(result as AttemptResult<ErrorsOf<E>, A> | void))
+      flatMap(unwrapAttempt)
     ) as Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<AnyLifetimeScope, TimeoutReasonOf<Options>>, A>
 }
 
@@ -149,12 +147,10 @@ const exitReason = (exit: Exit) =>
 
 type AttemptResult<E, A> = Success<A> | Failure<E>
 
-const unwrapAttempt = <E, A>(result: AttemptResult<E, A> | void): Fx<Fail<E>, A> => {
-  if (result === undefined) throw new Error('Timeout scope completed without a winner')
-  return result.type === 'success'
+const unwrapAttempt = <E, A>(result: AttemptResult<E, A>): Fx<Fail<E>, A> =>
+  result.type === 'success'
     ? ok(result.value)
     : fail(result.failure)
-}
 
 interface Success<A> {
   readonly type: 'success'

@@ -102,8 +102,8 @@ describe('scoped', () => {
   it('runs private-scope finalizers after success', () => {
     const exits: string[] = []
 
-    const result = run(scoped(scope => fx(function* () {
-      yield* andFinallyExit(scope, exit => ok(void exits.push(exit.type)))
+    const result = run(scoped(fx(function* () {
+      yield* andFinallyExit(currentScope, exit => ok(void exits.push(exit.type)))
       return 'done' as const
     })).pipe(assertNoFail))
 
@@ -115,8 +115,8 @@ describe('scoped', () => {
     const failure = new Error('boom')
     const exits: string[] = []
 
-    const result = run(scoped(scope => fx(function* () {
-      yield* andFinallyExit(scope, exit => ok(void exits.push(exit.type)))
+    const result = run(scoped(fx(function* () {
+      yield* andFinallyExit(currentScope, exit => ok(void exits.push(exit.type)))
       return yield* fail(failure)
     })).pipe(returnFail))
 
@@ -128,9 +128,9 @@ describe('scoped', () => {
   it('runs private-scope finalizers before re-yielding interruption', () => {
     const reason = new Error('stop')
     const exits: string[] = []
-    const program = scoped(scope => fx(function* () {
-      yield* andFinallyExit(scope, exit => ok(void exits.push(exit.type)))
-      return yield* interruptFrom(scope, reason)
+    const program = scoped(fx(function* () {
+      yield* andFinallyExit(currentScope, exit => ok(void exits.push(exit.type)))
+      return yield* interruptFrom(currentScope, reason)
     }))
 
     const next = program[Symbol.iterator]().next()
@@ -143,10 +143,10 @@ describe('scoped', () => {
   it('owns forkIn child lifetime with the private scope', async () => {
     const events: string[] = []
 
-    const result = await scoped(scope => fx(function* () {
-      yield* forkIn(scope, fx(function* () {
+    const result = await scoped(fx(function* () {
+      yield* forkIn(currentScope, fx(function* () {
         events.push('child ran')
-        yield* andFinally(scope, ok(void events.push('child cleanup')))
+        yield* andFinally(currentScope, ok(void events.push('child cleanup')))
         return 'child' as const
       }))
       events.push('parent done')
@@ -189,21 +189,21 @@ describe('scoped', () => {
   })
 
   it('only provides lifetime authority', () => {
-    scoped(scope => fx(function* () {
+    scoped(fx(function* () {
       // @ts-expect-error A lifetime-only current scope cannot perform control return.
-      yield* returnFrom(scope, 'returned' as const)
+      yield* returnFrom(currentScope, 'returned' as const)
       // @ts-expect-error The ReturnFrom constructor also requires control scope authority.
-      yield* new ReturnFrom(scope, 'constructed' as const)
+      yield* new ReturnFrom(currentScope, 'constructed' as const)
       // @ts-expect-error A lifetime-only current scope cannot abort.
-      yield* abort(scope)
+      yield* abort(currentScope)
       // @ts-expect-error The Abort constructor also requires control scope authority.
-      yield* new Abort(scope, undefined)
+      yield* new Abort(currentScope, undefined)
       // @ts-expect-error A lifetime-only current scope does not create a yielding protocol.
-      yield* yieldFrom(scope, 'event' as const)
+      yield* yieldFrom(currentScope, 'event' as const)
       // @ts-expect-error A lifetime-only current scope does not create a state protocol.
-      yield* getState(scope)
+      yield* getState(currentScope)
       // @ts-expect-error A lifetime-only current scope does not create a state protocol.
-      yield* modifyState(scope, state => [state, undefined] as const)
+      yield* modifyState(currentScope, state => [state, undefined] as const)
       return 'done' as const
     }))
   })

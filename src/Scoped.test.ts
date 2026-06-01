@@ -9,37 +9,28 @@ import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { interruptFrom, InterruptFrom } from './InterruptFrom.js'
 import { returnFrom, ReturnFrom } from './ReturnFrom.js'
 import { collectScoped, scoped } from './Scoped.js'
-import { currentScope, scope, withScope, type AnyLifetimeScope, type Control } from './Scope.js'
+import { currentScope, scope, withScope, type Control } from './Scope.js'
 import { getState, modifyState } from './State.js'
 import { yieldFrom, YieldFrom, type Yielding } from './YieldFrom.js'
 
 describe('currentScope', () => {
-  it('returns the nearest active lifetime scope', () => {
-    const Outer = scope('test/CurrentScope/outer')
-    const Inner = scope('test/CurrentScope/inner')
-
-    assert.equal(run(currentScope.pipe(withScope(Outer))), Outer)
-    assert.equal(run(currentScope.pipe(withScope(Inner), withScope(Outer))), Inner)
-  })
-
   it('is eliminated by withScope', () => {
     const TestScope = scope('test/CurrentScope/type')
-    const program = currentScope.pipe(withScope(TestScope))
+    const program = andFinally(currentScope, ok(undefined)).pipe(withScope(TestScope))
 
-    const _: typeof program extends Fx<never, AnyLifetimeScope> ? true : false = true
+    const _: typeof program extends Fx<Fail<AggregateError>, void> ? true : false = true
 
-    assert.equal(run(program), TestScope)
+    assert.equal(run(program.pipe(returnFail)) instanceof Fail, false)
   })
 
   it('supports lifetime APIs without exposing control protocols', async () => {
     const events: string[] = []
 
     const result = await scoped(fx(function* () {
-      const current = yield* currentScope
-      yield* andFinally(current, fx(function* () {
+      yield* andFinally(currentScope, fx(function* () {
         events.push('cleanup')
       }))
-      yield* forkIn(current, fx(function* () {
+      yield* forkIn(currentScope, fx(function* () {
         events.push('child')
       }))
       events.push('parent')
@@ -56,19 +47,39 @@ describe('currentScope', () => {
 
   it('only exposes lifetime authority', () => {
     fx(function* () {
-      const current = yield* currentScope
       // @ts-expect-error The current scope cannot perform control return.
-      yield* returnFrom(current, 'returned' as const)
+      yield* returnFrom(currentScope, 'returned' as const)
       // @ts-expect-error The current scope cannot abort.
-      yield* abort(current)
+      yield* abort(currentScope)
       // @ts-expect-error The current scope does not create a yielding protocol.
-      yield* yieldFrom(current, 'event' as const)
+      yield* yieldFrom(currentScope, 'event' as const)
       // @ts-expect-error The current scope does not create a state protocol.
-      yield* getState(current)
+      yield* getState(currentScope)
       // @ts-expect-error The current scope does not create a state protocol.
-      yield* modifyState(current, state => [state, undefined] as const)
+      yield* modifyState(currentScope, state => [state, undefined] as const)
       return 'done' as const
     })
+  })
+
+  it('is a logical nearest-scope token, not a snapshot', () => {
+    const events: string[] = []
+    const saved = currentScope
+
+    const result = run(scoped(fx(function* () {
+      yield* andFinally(saved, fx(function* () {
+        events.push('outer cleanup')
+      }))
+      yield* scoped(fx(function* () {
+        yield* andFinally(saved, fx(function* () {
+          events.push('inner cleanup')
+        }))
+      }))
+      events.push('body done')
+      return 'done' as const
+    })).pipe(assertNoFail))
+
+    assert.equal(result, 'done')
+    assert.deepEqual(events, ['inner cleanup', 'body done', 'outer cleanup'])
   })
 })
 
@@ -139,8 +150,7 @@ describe('scoped', () => {
     const exits: string[] = []
 
     const result = run(scoped(fx(function* () {
-      const current = yield* currentScope
-      yield* andFinallyExit(current, exit => ok(void exits.push(exit.type)))
+      yield* andFinallyExit(currentScope, exit => ok(void exits.push(exit.type)))
       return 'done' as const
     })).pipe(assertNoFail))
 

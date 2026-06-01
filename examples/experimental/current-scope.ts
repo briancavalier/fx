@@ -30,8 +30,7 @@ const named = fx(function* () {
 )
 
 const privateScoped = scoped(fx(function* () {
-  const current = yield* currentScope
-  yield* andFinallyExit(current, exit => fx(function* () {
+  yield* andFinallyExit(currentScope, exit => fx(function* () {
     console.log(`private cleanup: ${exit.type}`)
   }))
   return 'private request'

@@ -1,7 +1,7 @@
 import { Async } from './Async.js'
 import { at } from './Breadcrumb.js'
 import { Abort } from './Abort.js'
-import { Effect, isEffect, type AnyEffect } from './Effect.js'
+import { isEffect, type AnyEffect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { Finalizer, Finally } from './Finalization.js'
 import { Fx, fx, ok } from './Fx.js'
@@ -34,6 +34,7 @@ export interface Scope<Id extends PropertyKey = PropertyKey> extends ScopeIdenti
 declare const LifetimeTypeId: unique symbol
 declare const ControlTypeId: unique symbol
 declare const CurrentScopeTypeId: unique symbol
+const CurrentScopeId = Symbol('fx/Scope/current')
 
 export type Lifetime = {
   readonly [LifetimeTypeId]: true
@@ -48,7 +49,7 @@ export type LifetimeScope<Id extends PropertyKey = PropertyKey> = Scope<Id> & Li
 export type ControlScope<Id extends PropertyKey = PropertyKey> = Scope<Id> & Lifetime & Control
 export type AnyLifetimeScope = LifetimeScope<PropertyKey>
 export type AnyControlScope = ControlScope<PropertyKey>
-export type CurrentLifetimeScope = AnyLifetimeScope & {
+export type CurrentLifetimeScope = LifetimeScope<typeof CurrentScopeId> & {
   readonly [CurrentScopeTypeId]: true
 }
 
@@ -116,14 +117,14 @@ export interface Interrupted<Scope extends AnyScope> {
 }
 
 /**
- * Request the nearest active lifetime scope.
+ * Logical nearest lifetime scope token.
  *
- * A `withScope(...)` handler answers this request with its own scope token,
- * narrowed to lifetime authority only.
+ * A `withScope(...)` handler treats lifetime effects addressed to this token as
+ * requests for that handler's own scope boundary.
  */
-export class CurrentScope extends Effect('fx/Scope/Current')<void, CurrentLifetimeScope> { }
-
-export const currentScope: Fx<CurrentScope, CurrentLifetimeScope> = new CurrentScope(undefined)
+export const currentScope: CurrentLifetimeScope = scope<{
+  readonly [CurrentScopeTypeId]: true
+}>()(CurrentScopeId, { diagnostic: false })
 
 export function withScope<const Scope extends AnyLifetimeScope>(
   scope: Scope
@@ -139,8 +140,7 @@ export type ScopeEffects<E, Scope extends AnyLifetimeScope> =
   HandleScopeEffect<E, Scope> | ScopedForkEffects<E, Scope> | CleanupEffects<E, Scope> | CleanupFailure<E, Scope>
 
 type HandleScopeEffect<E, Scope extends AnyLifetimeScope> =
-  E extends CurrentScope ? never
-  : E extends Finally<HandledScope<Scope>, any> ? never
+  E extends Finally<HandledScope<Scope>, any> ? never
   : E extends ReturnFrom<Scope, any> ? never
   : E extends ScopedFork<HandledScope<Scope>> ? never
   : E
@@ -244,13 +244,12 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
           const effect = ir.value
           const effectScope = (effect as { readonly scope?: AnyScope }).scope
           const matchesScope = effectScope !== undefined && sameScope(effectScope, scope)
+          const matchesLifetimeScope = matchesScope || (effectScope !== undefined && sameScope(effectScope, currentScope))
 
-          if (CurrentScope.is(effect)) {
-            ir = i.next(scope)
-          } else if (matchesScope && Finally.is(effect)) {
+          if (matchesLifetimeScope && Finally.is(effect)) {
             controller.addFinalizer(effect.arg)
             ir = i.next(undefined)
-          } else if (matchesScope && ScopedFork.is(effect)) {
+          } else if (matchesLifetimeScope && ScopedFork.is(effect)) {
             const task = yield* controller.fork(effect.arg)
             ir = i.next(task)
           } else if (matchesScope && ReturnFrom.is(effect)) {
@@ -267,7 +266,7 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
               return undefined as A
             }
             return yield* finishRoot(exit, effect)
-          } else if (matchesScope && InterruptFrom.is(effect)) {
+          } else if (matchesLifetimeScope && InterruptFrom.is(effect)) {
             const exit = interruptedExit(scope, effect.arg)
             if (!root) {
               controller.requestExit(exit)

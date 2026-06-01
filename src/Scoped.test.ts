@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { abort } from './Abort.js'
+import { abort, Abort } from './Abort.js'
 import { forkIn, withUnboundedConcurrency } from './Concurrent.js'
 import { assert as assertNoFail, fail, Fail, returnFail } from './Fail.js'
 import { andFinally, andFinallyExit } from './Finalization.js'
@@ -192,8 +192,12 @@ describe('scoped', () => {
     scoped(scope => fx(function* () {
       // @ts-expect-error A lifetime-only current scope cannot perform control return.
       yield* returnFrom(scope, 'returned' as const)
+      // @ts-expect-error The ReturnFrom constructor also requires control scope authority.
+      yield* new ReturnFrom(scope, 'constructed' as const)
       // @ts-expect-error A lifetime-only current scope cannot abort.
       yield* abort(scope)
+      // @ts-expect-error The Abort constructor also requires control scope authority.
+      yield* new Abort(scope, undefined)
       // @ts-expect-error A lifetime-only current scope does not create a yielding protocol.
       yield* yieldFrom(scope, 'event' as const)
       // @ts-expect-error A lifetime-only current scope does not create a state protocol.

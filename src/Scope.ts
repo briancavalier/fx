@@ -141,7 +141,7 @@ export type ScopeEffects<E, Scope extends AnyLifetimeScope> =
 
 type HandleScopeEffect<E, Scope extends AnyLifetimeScope> =
   E extends Finally<HandledScope<Scope>, any> ? never
-  : E extends ReturnFrom<Scope, any> ? never
+  : E extends ReturnFrom<ControlScopeOf<Scope>, any> ? never
   : E extends ScopedFork<HandledScope<Scope>> ? never
   : E extends InterruptFrom<CurrentLifetimeScope, infer Reason> ? InterruptFrom<Scope, Reason>
   : E
@@ -153,6 +153,9 @@ type MatchingFinally<E, Scope extends AnyLifetimeScope> =
   Extract<E, Finally<HandledScope<Scope>, any>>
 
 type HandledScope<Scope extends AnyLifetimeScope> = Scope | CurrentLifetimeScope
+
+type ControlScopeOf<Scope extends AnyLifetimeScope> =
+  Scope extends AnyControlScope ? Scope : never
 
 type FinalizerEffects<E, Scope extends AnyLifetimeScope> =
   MatchingFinally<E, Scope> extends never
@@ -166,11 +169,11 @@ type CleanupFailure<E, Scope extends AnyLifetimeScope> =
   MatchingFinally<E, Scope> extends never ? never : Fail<AggregateError>
 
 export type ReturnValue<E, Scope extends AnyScope> =
-  E extends ReturnFrom<infer EffectScope extends AnyScope, infer A>
+  E extends ReturnFrom<infer EffectScope extends AnyControlScope, infer A>
     ? Extract<EffectScope, Scope> extends never ? never : A
     : never
 
-class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pipeable, CapturedHandler {
+class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown, A>, Pipeable, CapturedHandler {
   public readonly pipe = pipeThis as Pipeable['pipe']
 
   private readonly controller?: ScopeController<Scope>
@@ -233,7 +236,13 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
       const cleanupFailures = allFailures.flatMap(cleanupFailuresOf)
       if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup(cleanupFailures))) as A
       if (finalExit.type === 'returnFrom') return finalExit.value as A
-      if (finalExit.type === 'abort') return (yield (Abort.is(unhandledEffect) ? unhandledEffect : new Abort(finalExit.scope, undefined))) as A
+      if (finalExit.type === 'abort') {
+        // Abort exits are only produced by Abort effects, whose public constructors require control scopes.
+        const abort = Abort.is(unhandledEffect)
+          ? unhandledEffect
+          : new Abort(finalExit.scope as unknown as AnyControlScope, undefined)
+        return (yield abort) as A
+      }
       if (finalExit.type === 'interrupted') {
         return (yield (InterruptFrom.is(unhandledEffect) ? unhandledEffect : new InterruptFrom(finalExit.scope, finalExit.reason))) as A
       }
@@ -531,8 +540,9 @@ const interruptedExit = <Scope extends AnyScope>(scope: Scope, reason: unknown):
 
 const propagateRuntimeScopeExit = function* <A>(result: RuntimeScopeExit): Generator<unknown, A> {
   const exit = result.exit as Exit<AnyScope>
-  if (exit.type === 'returnFrom') return (yield new ReturnFrom(result.scope, exit.value)) as A
-  if (exit.type === 'abort') return (yield new Abort(result.scope, undefined)) as A
+  // Return/abort runtime exits originate from control effects before being transported across scope boundaries.
+  if (exit.type === 'returnFrom') return (yield new ReturnFrom(result.scope as unknown as AnyControlScope, exit.value)) as A
+  if (exit.type === 'abort') return (yield new Abort(result.scope as unknown as AnyControlScope, undefined)) as A
   if (exit.type === 'interrupted') return (yield new InterruptFrom(result.scope, exit.reason)) as A
   if (exit.type === 'failure') return (yield exit.failure) as A
   return exit.value as A

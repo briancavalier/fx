@@ -2,13 +2,13 @@ import { at } from './Breadcrumb.js'
 import { ScopedEffect, withOrigin } from './Effect.js'
 import { Fx, fx, ok } from './Fx.js'
 import { control } from './Handler.js'
-import { withScope, type AnyControlScope, type AnyScope, type ReturnValue, type ScopeEffects } from './Scope.js'
+import { withScope, type AnyControlScope, type ReturnValue, type ScopeEffects } from './Scope.js'
 import { sameScope } from './internal/scopeIdentity.js'
 
 /**
  * Abort the named scope without returning a result.
  */
-export class Abort<const Scope extends AnyScope> extends ScopedEffect('fx/Abort')<Scope, void, never> { }
+export class Abort<const Scope extends AnyControlScope> extends ScopedEffect('fx/Abort')<Scope, void, never> { }
 
 export const abort = <const Scope extends AnyControlScope>(scope: Scope): Fx<Abort<Scope>, never> =>
   withOrigin(new Abort(scope, undefined), at('fx/Abort/abort', abort))

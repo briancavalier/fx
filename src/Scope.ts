@@ -120,7 +120,9 @@ export interface Interrupted<Scope extends AnyScope> {
  * Logical nearest lifetime scope token.
  *
  * A `withScope(...)` handler treats lifetime effects addressed to this token as
- * requests for that handler's own scope boundary.
+ * requests for that handler's own scope boundary. This token is not a captured
+ * snapshot: saving it and using it inside a nested `withScope(...)` targets the
+ * nested boundary.
  */
 export const currentScope: CurrentLifetimeScope = scope<{
   readonly [CurrentScopeTypeId]: true

@@ -6,7 +6,7 @@ import { forkIn, withUnboundedConcurrency } from './Concurrent.js'
 import { assert as assertNoFail, fail, Fail, returnFail } from './Fail.js'
 import { andFinally, andFinallyExit } from './Finalization.js'
 import { fx, ok, run, runPromise, type Fx } from './Fx.js'
-import { interruptFrom, InterruptFrom } from './InterruptFrom.js'
+import { interruptFrom, InterruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { returnFrom, ReturnFrom } from './ReturnFrom.js'
 import { collectScoped, scoped } from './Scoped.js'
 import { currentScope, scope, withScope, type Control } from './Scope.js'
@@ -80,6 +80,21 @@ describe('currentScope', () => {
 
     assert.equal(result, 'done')
     assert.deepEqual(events, ['inner cleanup', 'body done', 'outer cleanup'])
+  })
+
+  it('re-yields current-scope interruption as the handled concrete scope', () => {
+    const TestScope = scope('test/CurrentScope/interrupt')
+    const reason = { type: 'stop' }
+
+    const result = run(fx(function* () {
+      return yield* interruptFrom(currentScope, reason)
+    }).pipe(
+      withScope(TestScope),
+      recoverInterrupt(TestScope, r => ok(r)),
+      assertNoFail
+    ))
+
+    assert.equal(result, reason)
   })
 })
 

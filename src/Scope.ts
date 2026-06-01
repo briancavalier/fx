@@ -143,6 +143,7 @@ type HandleScopeEffect<E, Scope extends AnyLifetimeScope> =
   E extends Finally<HandledScope<Scope>, any> ? never
   : E extends ReturnFrom<Scope, any> ? never
   : E extends ScopedFork<HandledScope<Scope>> ? never
+  : E extends InterruptFrom<CurrentLifetimeScope, infer Reason> ? InterruptFrom<Scope, Reason>
   : E
 
 type ScopedForkEffects<E, Scope extends AnyLifetimeScope> =
@@ -268,11 +269,12 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
             return yield* finishRoot(exit, effect)
           } else if (matchesLifetimeScope && InterruptFrom.is(effect)) {
             const exit = interruptedExit(scope, effect.arg)
+            const interrupt = matchesScope ? effect : new InterruptFrom(scope, effect.arg)
             if (!root) {
               controller.requestExit(exit)
               return undefined as A
             }
-            return yield* finishRoot(exit, effect)
+            return yield* finishRoot(exit, interrupt)
           } else if (Fail.is(effect)) {
             const exit = { type: 'failure', failure: effect } satisfies Exit
             if (!root) {

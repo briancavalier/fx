@@ -1367,7 +1367,7 @@ describe('Fork', () => {
       await task.interrupt('stop')
 
       assert.deepEqual(exits.map(exit => exit.type), ['interrupted'])
-      assert.deepEqual(exits[0], { type: 'interrupted', scope: TestScope })
+      assert.deepEqual(exits[0], { type: 'interrupted', scope: TestScope, reason: 'stop' })
     })
 
     it('aborts handler-produced async work before closing an interrupted fiber', async () => {

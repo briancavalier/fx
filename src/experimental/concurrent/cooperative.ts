@@ -1,6 +1,6 @@
 import { Async } from '../../Async.js'
 import { at } from '../../Breadcrumb.js'
-import { Effect } from '../../Effect.js'
+import { Effect, isEffect } from '../../Effect.js'
 import { Fork } from '../../internal/concurrent/effects.js'
 import { Fail } from '../../Fail.js'
 import { flatMap, flatten, Fx, fx, ok, runPromise } from '../../Fx.js'
@@ -14,7 +14,7 @@ import { captureTrace, getTrace } from '../../Trace.js'
 import { ForkError, capturePrependTraceWithContext, originOfUnhandledFail, runtimeContextOfEffect, traceUnhandledFail, traceWithCause } from '../../internal/forkDiagnostics.js'
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from '../../internal/interrupt.js'
 import { withInterpretedReturn } from '../../internal/iteratorClose.js'
-import { attachRuntimeContext, currentRuntimeContext, getRuntimeContext, runtimeScopeExit, RuntimeScopeExit, withActiveRuntimeContext } from '../../internal/runtimeContext.js'
+import { attachRuntimeContext, currentRuntimeContext, getRuntimeContext, runtimeScopeExit, RuntimeScopeExit, withActiveRuntimeContext, withInterruptionReason } from '../../internal/runtimeContext.js'
 import { shouldReleaseSlotForAsync } from '../../internal/concurrent/cooperativeAsync.js'
 
 export interface CooperativeConfig {
@@ -74,6 +74,7 @@ interface Fiber {
   resume: Resume
   abort?: AbortController
   cancelRequested: boolean
+  cancelReason?: unknown
   cleanupFailures: unknown[]
   releaseSlotBeforeResume: boolean
   queued: boolean
@@ -123,6 +124,7 @@ export class CooperativeRuntime {
       status: 'ready',
       resume: { type: 'next', value: undefined },
       cancelRequested: false,
+      cancelReason: undefined,
       cleanupFailures: [],
       releaseSlotBeforeResume: false,
       queued: false
@@ -131,6 +133,7 @@ export class CooperativeRuntime {
       done.promise,
       reason => {
         fiber.cancelRequested = true
+        fiber.cancelReason = reason
         if (fiber.masks.canInterrupt && fiber.status === 'waiting') {
           fiber.status = 'ready'
           this.enqueue(fiber)
@@ -414,8 +417,8 @@ function* stepFiber(
     try {
       const iterator = fiberIterator(fiber)
       ir = fiber.resume.type === 'throw'
-        ? iterator.throw?.(fiber.resume.error) ?? throwIntoMissingIterator(fiber.resume.error)
-        : iterator.next(fiber.resume.value)
+        ? throwFiber(fiber, iterator, fiber.resume.error)
+        : resumeFiber(fiber, iterator, fiber.resume.value)
     } catch (e) {
       callbacks.fail(wrapThrownFiberError(fiber, e))
       break
@@ -495,13 +498,14 @@ function* closeFiber(
   runtime: CooperativeRuntime,
   fiber: Fiber
 ): Generator<unknown, void, unknown> {
-  fiber.abort?.abort()
+  fiber.abort?.abort(fiber.cancelReason)
   fiber.abort = undefined
   const iterator = fiber.iterator
   if (iterator === undefined) return
+  const cleanupContext = withInterruptionReason(fiber.runtimeContext, fiber.cancelReason)
   let ir: IteratorResult<unknown, unknown>
   try {
-    ir = withInterpretedReturn(() => iterator.return?.() ?? { done: true, value: undefined })
+    ir = returnFiber(iterator, cleanupContext)
   } catch (e) {
     fiber.cleanupFailures.push(e)
     return
@@ -510,28 +514,28 @@ function* closeFiber(
   while (!ir.done) {
     try {
       if (Async.is(ir.value)) {
-        ir = iterator.next(yield ir.value as any)
+        ir = resumeFiberWithContext(iterator, cleanupContext, yield ir.value as any)
       } else if (Fork.is(ir.value)) {
-        ir = iterator.next(runtime.startFork(runtime.wrapFork(ir.value)))
+        ir = resumeFiberWithContext(iterator, cleanupContext, runtime.startFork(runtime.wrapFork(ir.value)))
       } else if (Fail.is(ir.value)) {
         fiber.cleanupFailures.push(ir.value.arg)
         return
       } else if (InterruptMaskBegin.is(ir.value)) {
         fiber.masks.mask(ir.value.arg)
-        ir = iterator.next()
+        ir = resumeFiberWithContext(iterator, cleanupContext, undefined)
       } else if (InterruptMaskEnd.is(ir.value)) {
         fiber.masks.unmask(ir.value.arg)
-        ir = iterator.next()
+        ir = resumeFiberWithContext(iterator, cleanupContext, undefined)
       } else if (HandlerCapture.is(ir.value)) {
         const releaseSlotBeforeResume = fiber.slotAcquired
         if (releaseSlotBeforeResume) runtime.releaseSlot(fiber)
         try {
-          ir = iterator.next(yield* runCleanupEffect(runtime, fiber, ir.value))
+          ir = resumeFiberWithContext(iterator, cleanupContext, yield* runCleanupEffect(runtime, fiber, ir.value))
         } finally {
           if (releaseSlotBeforeResume) yield* reacquireSlot(runtime, fiber)
         }
       } else {
-        ir = iterator.next(yield* runCleanupEffect(runtime, fiber, ir.value))
+        ir = resumeFiberWithContext(iterator, cleanupContext, yield* runCleanupEffect(runtime, fiber, ir.value))
       }
     } catch (e) {
       fiber.cleanupFailures.push(e)
@@ -562,7 +566,7 @@ const runCleanupEffect = (
 const finishFiber = (runtime: CooperativeRuntime, fiber: Fiber) => {
   if (fiber.status === 'done') return
   fiber.status = 'done'
-  fiber.abort?.abort()
+  fiber.abort?.abort(fiber.cancelReason)
   runtime.releaseSlot(fiber)
   fiber.interrupted.resolve()
 }
@@ -570,7 +574,7 @@ const finishFiber = (runtime: CooperativeRuntime, fiber: Fiber) => {
 const finishInterruptedFiber = (runtime: CooperativeRuntime, fiber: Fiber, failure?: unknown) => {
   if (fiber.status === 'done') return
   fiber.status = 'done'
-  fiber.abort?.abort()
+  fiber.abort?.abort(fiber.cancelReason)
   runtime.releaseSlot(fiber)
   if (failure === undefined) {
     fiber.interrupted.resolve()
@@ -636,6 +640,56 @@ const wrapAsyncFiberError = (fiber: Fiber, async: Async, error: unknown, fallbac
 
 const throwIntoMissingIterator = (error: unknown): never => {
   throw error
+}
+
+const resumeFiber = (
+  fiber: Fiber,
+  iterator: Iterator<unknown, unknown, unknown>,
+  value: unknown
+): IteratorResult<unknown, unknown> =>
+  resumeFiberWithContext(iterator, fiber.runtimeContext, value)
+
+const resumeFiberWithContext = (
+  iterator: Iterator<unknown, unknown, unknown>,
+  context: ReturnType<typeof getRuntimeContext>,
+  value: unknown
+): IteratorResult<unknown, unknown> =>
+  context === undefined
+    ? attachRuntimeContextToResume(() => iterator.next(value))
+    : withActiveRuntimeContext(context, () => attachRuntimeContextToResume(() => iterator.next(value)))
+
+const throwFiber = (
+  fiber: Fiber,
+  iterator: Iterator<unknown, unknown, unknown>,
+  error: unknown
+): IteratorResult<unknown, unknown> =>
+  fiber.runtimeContext === undefined
+    ? attachRuntimeContextToResume(() => iterator.throw?.(error) ?? throwIntoMissingIterator(error))
+    : withActiveRuntimeContext(fiber.runtimeContext, () =>
+      attachRuntimeContextToResume(() => iterator.throw?.(error) ?? throwIntoMissingIterator(error))
+    )
+
+const returnFiber = (
+  iterator: Iterator<unknown, unknown, unknown>,
+  context: ReturnType<typeof getRuntimeContext>
+): IteratorResult<unknown, unknown> =>
+  context === undefined
+    ? attachRuntimeContextToResume(() => withInterpretedReturn(() => iterator.return?.() ?? { done: true, value: undefined }))
+    : withActiveRuntimeContext(context, () =>
+      attachRuntimeContextToResume(() => withInterpretedReturn(() => iterator.return?.() ?? { done: true, value: undefined }))
+    )
+
+const attachRuntimeContextToResume = (
+  resume: () => IteratorResult<unknown, unknown>
+): IteratorResult<unknown, unknown> => {
+  try {
+    const result = resume()
+    if (!result.done && isEffect(result.value)) attachRuntimeContext(result.value)
+    return result
+  } catch (e) {
+    attachRuntimeContext(e)
+    throw e
+  }
 }
 
 const fiberIterator = (fiber: Fiber): Iterator<unknown, unknown, unknown> => {

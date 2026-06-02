@@ -8,6 +8,11 @@ import { getRuntimeContext, withActiveRuntimeContext, withRuntimeContext } from 
 export type Answer<E extends EffectType> = InstanceType<E>['R']
 export type Arg<E extends EffectType> = InstanceType<E>['arg']
 
+type InstrumentableCapturedHandler = CapturedHandler & {
+  readonly effectId: unknown
+  readonly handler: (effect: any) => Fx<unknown, unknown>
+}
+
 export class Handler<E, A> implements Fx<E, A>, Pipeable, CapturedHandler {
   public readonly pipe = pipeThis as Pipeable['pipe']
 
@@ -24,7 +29,7 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, CapturedHandler {
   *[Symbol.iterator](): Iterator<E, A> {
     const { effectId, handler, fx } = this
     const i = fx[Symbol.iterator]()
-    let captured: CapturedHandler | undefined
+    let captured: InstrumentableCapturedHandler | undefined
     const step = function* (ir: IteratorResult<E, A>): Generator<E, A, unknown> {
       while (!ir.done) {
         if (isEffect(ir.value)) {
@@ -37,6 +42,8 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, CapturedHandler {
             ir = i.next(yield* withRuntimeContext(context, handled) as any)
           } else if (effect._fxEffectId === HandlerCapture._fxEffectId) {
             captured ??= {
+              effectId,
+              handler,
               wrap: fx => new Handler(fx, effectId, handler)
             }
             ir = i.next([captured, ...(yield effect) as any])

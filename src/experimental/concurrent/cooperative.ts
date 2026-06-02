@@ -1,11 +1,13 @@
 import { Async } from '../../Async.js'
 import { at } from '../../Breadcrumb.js'
+import { Effect } from '../../Effect.js'
 import { Fork } from '../../internal/concurrent/effects.js'
 import { Fail } from '../../Fail.js'
 import { flatMap, flatten, Fx, fx, ok, runPromise } from '../../Fx.js'
 import { Handle } from '../../Handler.js'
 import { HandlerCapture, captureHandlers, closeHandlerCapture, handleCaptured, withCapturedHandlers, withHandlerContext } from '../../HandlerCapture.js'
 import type { CapturedHandler } from '../../HandlerCapture.js'
+import { Handler as InternalHandler } from '../../internal/Handler.js'
 import { Task } from '../../Task.js'
 import type { TraceOrigin } from '../../Trace.js'
 import { captureTrace, getTrace } from '../../Trace.js'
@@ -49,6 +51,10 @@ type CoopConcurrencyHandledEffects<E> =
 const isRootBoundaryHandler = (handler: CapturedHandler): boolean =>
   (handler as { readonly rootBoundary?: boolean }).rootBoundary === true
 
+class CooperativeYield extends Effect('fx/Concurrent/CooperativeYield')<void, void> { }
+
+const cooperativeYield = new CooperativeYield()
+
 type Resume =
   | { readonly type: 'next', readonly value: unknown }
   | { readonly type: 'throw', readonly error: unknown }
@@ -79,6 +85,7 @@ type PrimaryFailure =
 export class CooperativeRuntime {
   private readonly readyFibers = [] as Fiber[]
   private readonly yieldedFibers = [] as Fiber[]
+  private readonly cooperativeHandlers: readonly CapturedHandler[]
   private slotWaiters = [] as (() => void)[]
   private availableSlots: number
   private pumpScheduled = false
@@ -89,6 +96,7 @@ export class CooperativeRuntime {
     readonly handlers: readonly CapturedHandler[] = []
   ) {
     this.availableSlots = Math.floor(config.concurrency)
+    this.cooperativeHandlers = handlers.map(cooperativeHandler)
   }
 
   readonly runFork = (fork: Fork): Fx<never, Task<unknown, unknown>> =>
@@ -104,7 +112,7 @@ export class CooperativeRuntime {
     const interrupted = Promise.withResolvers<void>()
     const fiber: Fiber = {
       index: -1,
-      fx: fork.arg.fx,
+      fx: withHandlerContext(this.cooperativeHandlers, fork.arg.fx),
       traceOrigin: { origin, trace },
       runtimeContext: context,
       done,
@@ -247,7 +255,7 @@ export class CooperativeRuntime {
         return
       }
 
-      const step = stepFiber(this, fiber, {
+      for (const _ of stepFiber(this, fiber, {
         succeed: value => {
           finishFiber(this, fiber)
           fiber.done.resolve(value)
@@ -263,8 +271,7 @@ export class CooperativeRuntime {
             finishInterruptedFiber(this, fiber)
           }
         }
-      })
-      await runPromise(withHandlerContext(this.handlers, fx(function* () { yield* step })) as Fx<any, void>)
+      })) { }
       if (fiber.status === 'running' && fiber.cancelRequested && fiber.masks.canInterrupt) {
         await this.interruptFiberAtBoundary(fiber)
         return
@@ -422,6 +429,11 @@ function* stepFiber(
       break
     }
 
+    if (CooperativeYield.is(ir.value)) {
+      fiber.resume = { type: 'next', value: undefined }
+      continue
+    }
+
     if (Async.is(ir.value)) {
       startCooperativeAsync(runtime, fiber, ir.value, (_fiber, failure) => {
         callbacks.fail(failure.error)
@@ -460,24 +472,12 @@ function* stepFiber(
     }
 
     if (HandlerCapture.is(ir.value)) {
-      const value = yield ir.value as any
-      if (fiber.cancelRequested && fiber.masks.canInterrupt) {
-        yield* closeFiber(runtime, fiber)
-        callbacks.cancel?.()
-        break
-      }
-      fiber.resume = { type: 'next', value }
-      fiber.releaseSlotBeforeResume = true
+      fiber.resume = { type: 'next', value: [] }
       continue
     }
 
-    const value = yield ir.value as any
-    if (fiber.cancelRequested && fiber.masks.canInterrupt) {
-      yield* closeFiber(runtime, fiber)
-      callbacks.cancel?.()
-      break
-    }
-    fiber.resume = { type: 'next', value }
+    callbacks.fail(wrapUnhandledFiberEffect(fiber, ir.value))
+    break
   }
 }
 
@@ -582,6 +582,33 @@ const finishInterruptedFiber = (runtime: CooperativeRuntime, fiber: Fiber, failu
 const hasSlot = (fiber: Fiber): boolean =>
   fiber.unmetered || fiber.slotAcquired
 
+const cooperativeHandler = (handler: CapturedHandler): CapturedHandler => {
+  const captured = handler as {
+    readonly effectId?: unknown
+    readonly handler?: (effect: any) => Fx<unknown, unknown>
+  }
+  const effectId = handler instanceof InternalHandler ? handler.effectId : captured.effectId
+  const handleEffect = handler instanceof InternalHandler ? handler.handler : captured.handler
+  if (effectId === undefined || handleEffect === undefined) return handler
+  const instrumented = {
+    effectId,
+    handler: handleEffect,
+    wrap: (f: Fx<unknown, unknown>) => new InternalHandler(f, effectId, effect => fx(function* () {
+      const value = yield* handleEffect(effect)
+      yield* cooperativeYield
+      return value
+    }))
+  }
+  if (isRootBoundaryHandler(handler)) {
+    Object.defineProperty(instrumented, 'rootBoundary', {
+      value: true,
+      enumerable: false,
+      configurable: true
+    })
+  }
+  return instrumented
+}
+
 const wrapFiberFailure = (fiber: Fiber, failure: Fail<unknown>): ForkError => {
   const context = runtimeContextOfEffect(failure, fiber.runtimeContext)
   const causeTrace = getTrace(failure.arg)
@@ -593,6 +620,11 @@ const wrapFiberFailure = (fiber: Fiber, failure: Fail<unknown>): ForkError => {
 const wrapThrownFiberError = (fiber: Fiber, error: unknown): ForkError => {
   const context = runtimeContextOfEffect(error, fiber.runtimeContext)
   return new ForkError('FX_UNHANDLED_EXCEPTION', 'Unhandled exception in forked task', fiber.traceOrigin.origin, traceWithCause(fiber.traceOrigin.trace, error, context, getTrace(error)), context, { cause: error })
+}
+
+const wrapUnhandledFiberEffect = (fiber: Fiber, effect: unknown): ForkError => {
+  const context = runtimeContextOfEffect(effect, fiber.runtimeContext)
+  return new ForkError('FX_UNHANDLED_FAILURE', 'Unhandled failure in forked task', fiber.traceOrigin.origin, traceWithCause(fiber.traceOrigin.trace, effect, context, getTrace(effect)), context, { cause: effect })
 }
 
 const wrapAsyncFiberError = (fiber: Fiber, async: Async, error: unknown, fallbackContext?: ReturnType<typeof getRuntimeContext>): ForkError => {

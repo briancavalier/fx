@@ -7,7 +7,7 @@ import { RaceAllFailed, all, withBoundedConcurrency, firstSuccess, fork, forkEac
 import { withCoopConcurrency } from './experimental/concurrent/cooperative.js'
 import { andFinally, andFinallyExit } from './Finalization.js'
 import { bracket, flatMap, fx, ok, runPromise, runTask, type Fx } from './Fx.js'
-import { handle } from './Handler.js'
+import { control, handle } from './Handler.js'
 import { type HandlerCapture } from './HandlerCapture.js'
 import { interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible } from './Interrupt.js'
@@ -884,6 +884,26 @@ describe('Fork', () => {
       assert.deepEqual(result, ['handled'])
     })
 
+    it('preserves non-resuming control handlers inside cooperative children', async () => {
+      class Stop extends Effect('test/Fork/CooperativeControlStop')<void, string> { }
+      const events: string[] = []
+
+      const result = await all([fx(function* () {
+        events.push('before')
+        const value = yield* new Stop()
+        events.push('after')
+        return value
+      }).pipe(
+        control(Stop, () => ok('stopped'))
+      )]).pipe(
+        withCoopConcurrency(),
+        runPromise
+      )
+
+      assert.deepEqual(result, ['stopped'])
+      assert.deepEqual(events, ['before'])
+    })
+
     it('runs mapped children with handlers between mapAll and withCoopConcurrency', async () => {
       class CurrentValue extends Effect('test/Fork/CooperativeMapAllCurrentValue')<void, string> { }
 
@@ -1345,7 +1365,7 @@ describe('Fork', () => {
       assert.deepEqual(exits[0], { type: 'interrupted', scope: TestScope })
     })
 
-    it('does not close a running fiber before a handled async effect returns', async () => {
+    it('aborts handler-produced async work before closing an interrupted fiber', async () => {
       class Park extends Effect('test/Fork/CooperativeHandledAsyncInterrupt')<void, void> { }
       const TestScope = scope('test/Fork/CooperativeHandledAsyncInterruptScope')
       const events: string[] = []
@@ -1369,12 +1389,9 @@ describe('Fork', () => {
 
       await delay(0)
       const interrupted = task.interrupt('stop')
-      await delay(0)
-
-      assert.deepEqual(events, ['before'])
+      await withTimeout(interrupted, 50)
 
       release()
-      await withTimeout(interrupted, 50)
 
       assert.deepEqual(events, ['before', 'finalize:interrupted'])
     })

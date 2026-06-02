@@ -8,7 +8,6 @@ import { scope, withScope, type Control } from './Scope.js'
 import { Task } from './Task.js'
 import type { TraceFrameKind, TraceOptions, TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
-import { withCoopConcurrency } from './internal/concurrent/cooperative.js'
 import { Fork, RaceAllFailed } from './internal/concurrent/effects.js'
 import type { EffectsOf, ErrorsOf, ForkScheduling, ResultOf } from './internal/concurrent/effects.js'
 import { withBoundedConcurrency, withUnboundedConcurrency } from './internal/concurrent/fork.js'
@@ -24,7 +23,6 @@ export {
   Fork,
   RaceAllFailed,
   withBoundedConcurrency,
-  withCoopConcurrency,
   withUnboundedConcurrency
 }
 export type {
@@ -34,7 +32,6 @@ export type {
   ForkScheduling,
   ResultOf
 } from './internal/concurrent/effects.js'
-export type { CoopConcurrencyOptions } from './internal/concurrent/cooperative.js'
 
 export type ForkOptions = TraceOptions & {
   /**

@@ -2,7 +2,8 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise, tryPromise } from './Async.js'
 import { at } from './Breadcrumb.js'
-import { RaceAllFailed, all, withCoopConcurrency, firstSuccess, fork, forkIn, mapAll, race, withUnboundedConcurrency } from './Concurrent.js'
+import { RaceAllFailed, all, firstSuccess, fork, forkIn, mapAll, race, withUnboundedConcurrency } from './Concurrent.js'
+import { withCoopConcurrency } from './experimental/concurrent/cooperative.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
 import { fx, runPromise } from './Fx.js'
@@ -394,12 +395,12 @@ describe('Trace', () => {
 
       assert.ok(Fail.is(allResult))
       assert.ok(Fail.is(mapAllResult))
-      assert.deepEqual(traceMessages(allResult.arg).slice(0, 2), ['fx/Concurrent/all[0]', 'fx/Concurrent/all'])
-      assert.equal(snapshotError(allResult.arg).trace?.frames[0]?.kind, 'fork')
-      assert.equal(snapshotError(allResult.arg).trace?.frames[0]?.index, 0)
-      assert.deepEqual(traceMessages(mapAllResult.arg).slice(0, 2), ['fx/Concurrent/mapAll[0]', 'fx/Concurrent/mapAll'])
-      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[0]?.kind, 'fork')
-      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[0]?.index, 0)
+      assert.deepEqual(traceMessages(allResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/all[0]', 'fx/Concurrent/all'])
+      assert.equal(snapshotError(allResult.arg).trace?.frames[1]?.kind, 'fork')
+      assert.equal(snapshotError(allResult.arg).trace?.frames[1]?.index, 0)
+      assert.deepEqual(traceMessages(mapAllResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/mapAll[0]', 'fx/Concurrent/mapAll'])
+      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[1]?.kind, 'fork')
+      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[1]?.index, 0)
     } finally {
       setTraceCapturePolicy(previous)
     }
@@ -428,15 +429,15 @@ describe('Trace', () => {
       assert.ok(Fail.is(allResult))
       assert.ok(Fail.is(mapAllResult))
       assert.ok(Fail.is(raceResult))
-      assert.deepEqual(traceMessages(allResult.arg).slice(0, 2), ['fx/Concurrent/all[0]', 'fx/Concurrent/all'])
-      assert.equal(snapshotError(allResult.arg).trace?.frames[0]?.kind, 'fork')
-      assert.equal(snapshotError(allResult.arg).trace?.frames[0]?.index, 0)
-      assert.deepEqual(traceMessages(mapAllResult.arg).slice(0, 2), ['fx/Concurrent/mapAll[0]', 'fx/Concurrent/mapAll'])
-      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[0]?.kind, 'fork')
-      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[0]?.index, 0)
-      assert.deepEqual(traceMessages(raceResult.arg).slice(0, 2), ['fx/Concurrent/race[0]', 'fx/Concurrent/race'])
-      assert.equal(snapshotError(raceResult.arg).trace?.frames[0]?.kind, 'fork')
-      assert.equal(snapshotError(raceResult.arg).trace?.frames[0]?.index, 0)
+      assert.deepEqual(traceMessages(allResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/all[0]', 'fx/Concurrent/all'])
+      assert.equal(snapshotError(allResult.arg).trace?.frames[1]?.kind, 'fork')
+      assert.equal(snapshotError(allResult.arg).trace?.frames[1]?.index, 0)
+      assert.deepEqual(traceMessages(mapAllResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/mapAll[0]', 'fx/Concurrent/mapAll'])
+      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[1]?.kind, 'fork')
+      assert.equal(snapshotError(mapAllResult.arg).trace?.frames[1]?.index, 0)
+      assert.deepEqual(traceMessages(raceResult.arg).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/race[0]', 'fx/Concurrent/race'])
+      assert.equal(snapshotError(raceResult.arg).trace?.frames[1]?.kind, 'fork')
+      assert.equal(snapshotError(raceResult.arg).trace?.frames[1]?.index, 0)
     } finally {
       setTraceCapturePolicy(previous)
     }
@@ -457,9 +458,9 @@ describe('Trace', () => {
 
       assert.ok(Fail.is(raceResult))
       assert.ok(raceResult.arg instanceof RaceAllFailed)
-      assert.deepEqual(traceMessages(raceResult.arg.errors[0]).slice(0, 2), ['fx/Concurrent/firstSuccess[0]', 'fx/Concurrent/firstSuccess'])
-      assert.equal(snapshotError(raceResult.arg.errors[0]).trace?.frames[0]?.kind, 'fork')
-      assert.equal(snapshotError(raceResult.arg.errors[0]).trace?.frames[0]?.index, 0)
+      assert.deepEqual(traceMessages(raceResult.arg.errors[0]).slice(0, 3), ['fx/Fail/fail', 'fx/Concurrent/firstSuccess[0]', 'fx/Concurrent/firstSuccess'])
+      assert.equal(snapshotError(raceResult.arg.errors[0]).trace?.frames[1]?.kind, 'fork')
+      assert.equal(snapshotError(raceResult.arg.errors[0]).trace?.frames[1]?.index, 0)
     } finally {
       setTraceCapturePolicy(previous)
     }

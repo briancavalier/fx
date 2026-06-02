@@ -1,7 +1,8 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Fail, fail, returnFail } from './Fail.js'
-import { forkIn, withBoundedConcurrency, withCoopConcurrency, withUnboundedConcurrency } from './Concurrent.js'
+import { forkIn, withBoundedConcurrency, withUnboundedConcurrency } from './Concurrent.js'
+import { withCoopConcurrency } from './experimental/concurrent/cooperative.js'
 import { fx, ok, run, runPromise } from './Fx.js'
 import { andFinallyIn } from './Finalization.js'
 import type { Fx } from './Fx.js'
@@ -82,7 +83,7 @@ describe('Timeout', () => {
     assert.equal(r, reason)
   })
 
-  it('interrupts a parked protected computation under cooperative concurrency', async () => {
+  it('interrupts handler-produced async under cooperative concurrency', async () => {
     const c = new VirtualClock(0)
     const reason = { type: 'timeout' }
 
@@ -350,7 +351,7 @@ describe('Timeout', () => {
     assert.equal(completed, false)
   })
 
-  it('timeoutIn interrupts a scope while a cooperative child holds the only permit', async () => {
+  it('timeoutIn interrupts handler-produced async while a cooperative child holds the only permit', async () => {
     const c = new VirtualClock(0)
     const reason = { type: 'scope-timeout' }
     let completed = false

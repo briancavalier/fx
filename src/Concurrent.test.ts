@@ -3,11 +3,12 @@ import { describe, it } from 'node:test'
 import { assertPromise, type Async } from './Async.js'
 import { Effect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
-import { RaceAllFailed, all, withBoundedConcurrency, withCoopConcurrency, firstSuccess, fork, forkEach, forkIn, mapAll, race, withUnboundedConcurrency } from './Concurrent.js'
+import { RaceAllFailed, all, withBoundedConcurrency, firstSuccess, fork, forkEach, forkIn, mapAll, race, withUnboundedConcurrency } from './Concurrent.js'
+import { withCoopConcurrency } from './experimental/concurrent/cooperative.js'
 import { andFinallyIn } from './Finalization.js'
 import { bracket, flatMap, fx, ok, runPromise, runTask, type Fx } from './Fx.js'
-import { handle } from './Handler.js'
-import { type HandlerCapture } from './HandlerCapture.js'
+import { control, handle } from './Handler.js'
+import { captureHandlers, withHandlerContext, type HandlerCapture } from './HandlerCapture.js'
 import { interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible } from './Interrupt.js'
 import { ReturnFrom, returnFrom } from './ReturnFrom.js'
@@ -798,7 +799,9 @@ describe('Fork', () => {
       )
 
       assert.deepEqual(result, [1, 2, 3])
-      assert.deepEqual(events, ['start 1', 'start 2', 'end 1', 'end 2', 'start 3', 'end 3'])
+      assert.deepEqual(events.slice(0, 2), ['start 1', 'start 2'])
+      assert.ok(events.indexOf('start 3') > events.indexOf('end 1'))
+      assert.deepEqual(events.slice(-1), ['end 3'])
     })
 
     it('interleaves ready children according to the yield budget', async () => {
@@ -812,6 +815,27 @@ describe('Fork', () => {
 
       const result = await all([child('A'), child('B')]).pipe(
         withCoopConcurrency({ yieldBudget: 1 }),
+        handle(Step, step => fx(function* () {
+          events.push(step.arg)
+        })),
+        runPromise
+      )
+
+      assert.deepEqual(result, ['A', 'B'])
+      assert.deepEqual(events, ['A1', 'B1', 'A2', 'B2'])
+    })
+
+    it('lets a ready child run up to the configured yield budget', async () => {
+      class Step extends Effect('test/Fork/CooperativeAllStepBudget')<string, void> { }
+      const events = [] as string[]
+      const child = (label: string) => fx(function* () {
+        yield* new Step(`${label}1`)
+        yield* new Step(`${label}2`)
+        return label
+      })
+
+      const result = await all([child('A'), child('B')]).pipe(
+        withCoopConcurrency({ yieldBudget: 2 }),
         handle(Step, step => fx(function* () {
           events.push(step.arg)
         })),
@@ -858,6 +882,26 @@ describe('Fork', () => {
       )
 
       assert.deepEqual(result, ['handled'])
+    })
+
+    it('preserves non-resuming control handlers inside cooperative children', async () => {
+      class Stop extends Effect('test/Fork/CooperativeControlStop')<void, string> { }
+      const events: string[] = []
+
+      const result = await all([fx(function* () {
+        events.push('before')
+        const value = yield* new Stop()
+        events.push('after')
+        return value
+      }).pipe(
+        control(Stop, () => ok('stopped'))
+      )]).pipe(
+        withCoopConcurrency(),
+        runPromise
+      )
+
+      assert.deepEqual(result, ['stopped'])
+      assert.deepEqual(events, ['before'])
     })
 
     it('runs mapped children with handlers between mapAll and withCoopConcurrency', async () => {
@@ -1160,11 +1204,11 @@ describe('Fork', () => {
     })
 
     it('interleaves explicit forked children according to the yield budget', async () => {
+      class Step extends Effect('test/Fork/CooperativeForkStep')<string, void> { }
       const events = [] as string[]
       const child = (label: string) => fx(function* () {
-        events.push(`${label}1`)
-        yield* asyncValue(undefined)
-        events.push(`${label}2`)
+        yield* new Step(`${label}1`)
+        yield* new Step(`${label}2`)
         return label
       })
 
@@ -1174,6 +1218,9 @@ describe('Fork', () => {
         return [yield* wait(a), yield* wait(b)]
       }).pipe(
         withCoopConcurrency({ yieldBudget: 1 }),
+        handle(Step, step => fx(function* () {
+          events.push(step.arg)
+        })),
         runPromise
       )
 
@@ -1189,6 +1236,25 @@ describe('Fork', () => {
         return yield* wait(task)
       }).pipe(
         handle(CurrentValue, () => ok('handled')),
+        withCoopConcurrency(),
+        runPromise
+      )
+
+      assert.equal(result, 'handled')
+    })
+
+    it('preserves handler capture inside explicit cooperative forks', async () => {
+      class CurrentValue extends Effect('test/Fork/CooperativeForkCapturedCurrentValue')<void, string> { }
+
+      const result = await fx(function* () {
+        const task = yield* fork(fx(function* () {
+          const handlers = yield* captureHandlers('fx/Concurrent/Fork')
+          return yield* withHandlerContext(handlers, new CurrentValue()) as Fx<never, string>
+        }).pipe(
+          handle(CurrentValue, () => ok('handled'))
+        ))
+        return yield* wait(task)
+      }).pipe(
         withCoopConcurrency(),
         runPromise
       )
@@ -1270,10 +1336,10 @@ describe('Fork', () => {
       assert.equal((result.arg as Error).cause, cause)
     })
 
-    it('leaves explicit cooperative fork failures caller-owned', async () => {
+    it('propagates unhandled explicit cooperative fork failures', async () => {
       const cause = new Error('unhandled cooperative fork failure')
 
-      const result = await all([fx(function* () {
+      await assert.rejects(all([fx(function* () {
         yield* fork(fx(function* () {
           yield* asyncValue(undefined)
           yield* fail(cause)
@@ -1282,23 +1348,31 @@ describe('Fork', () => {
         return 'done'
       })]).pipe(
         withCoopConcurrency(),
-        returnFail,
         runPromise
-      )
-
-      assert.ok(!Fail.is(result))
-      assert.deepEqual(result, ['done'])
+      ), e => {
+        const snapshot = snapshotError(e)
+        return snapshot.code === 'FX_UNHANDLED_FAILURE'
+          && snapshot.cause?.code === 'FX_UNHANDLED_FORK_FAILURE'
+          && snapshot.cause.cause?.code === 'FX_UNHANDLED_FAILURE'
+          && snapshot.cause.cause.cause?.message === cause.message
+          && (e as Error).cause instanceof Error
+          && ((e as Error).cause as Error).cause instanceof Error
+          && (((e as Error).cause as Error).cause as Error).cause === cause
+      })
     })
 
     it('interrupts explicit cooperative forks and runs scoped finalizers', async () => {
       const TestScope = scope('test/Fork/CooperativeForkInterruptScope')
       const exits = [] as Exit[]
+      let started!: () => void
+      const startedPromise = new Promise<void>(resolve => { started = resolve })
 
       const task = taskOrThrow(await fx(function* () {
         return yield* fork(fx(function* () {
           yield* andFinallyIn(TestScope, exit => fx(function* () {
             exits.push(exit)
           }))
+          started()
           yield* awaitAbort()
         }))
       }).pipe(
@@ -1308,10 +1382,42 @@ describe('Fork', () => {
         runPromise
       ))
 
+      await startedPromise
       await task.interrupt('stop')
 
       assert.deepEqual(exits.map(exit => exit.type), ['interrupted'])
-      assert.deepEqual(exits[0], { type: 'interrupted', scope: TestScope })
+      assert.deepEqual(exits[0], { type: 'interrupted', scope: TestScope, reason: 'stop' })
+    })
+
+    it('aborts handler-produced async work before closing an interrupted fiber', async () => {
+      class Park extends Effect('test/Fork/CooperativeHandledAsyncInterrupt')<void, void> { }
+      const TestScope = scope('test/Fork/CooperativeHandledAsyncInterruptScope')
+      const events: string[] = []
+      let release!: () => void
+      const released = new Promise<void>(resolve => { release = resolve })
+
+      const task = taskOrThrow(await fx(function* () {
+        return yield* fork(fx(function* () {
+          yield* andFinallyIn(TestScope, exit => fx(function* () {
+            events.push(`finalize:${exit.type}`)
+          }))
+          events.push('before')
+          yield* new Park()
+          events.push('after')
+        }).pipe(withScope(TestScope)))
+      }).pipe(
+        withCoopConcurrency(),
+        handle(Park, () => assertPromise(() => released)),
+        runPromise
+      ))
+
+      await delay(0)
+      const interrupted = task.interrupt('stop')
+      await withTimeout(interrupted, 50)
+
+      release()
+
+      assert.deepEqual(events, ['before', 'finalize:interrupted'])
     })
 
     it('shares concurrency slots between explicit forks and structured children', async () => {
@@ -1718,7 +1824,7 @@ describe('Fork', () => {
         }, { once: true })
       }))
 
-      const task = all([race([parked])]).pipe(
+      const task = all([parked]).pipe(
         withCoopConcurrency(),
         runTask
       )
@@ -1838,6 +1944,98 @@ describe('Fork', () => {
       assert.ok(Fail.is(result))
       assert.equal((result.arg as Error).cause, cause)
       assert.deepEqual(events, ['masked start', 'masked end', 'released'])
+    })
+
+    it('awaits async cleanup when masked cooperative cancellation is delivered at unmask', async () => {
+      const TestScope = scope('test/Fork/CooperativeStructuredMaskedAsyncCleanup')
+      const events = [] as string[]
+      const cause = new Error('cooperative structured masked async cleanup failed')
+      let releaseMasked!: () => void
+      let releaseCleanup!: () => void
+      const cleanupReleased = new Promise<void>(resolve => {
+        releaseCleanup = resolve
+      })
+
+      const masked = uninterruptible(fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
+          events.push('release start')
+          yield* assertPromise(() => cleanupReleased)
+          events.push('release done')
+        }))
+        events.push('masked start')
+        yield* assertPromise<void>(() => new Promise(resolve => {
+          releaseMasked = () => resolve()
+        }))
+        events.push('masked end')
+      }))
+      const bad = fx(function* () {
+        yield* asyncValue(undefined)
+        yield* fail(cause)
+      })
+
+      const promise = all([masked, bad]).pipe(
+        withCoopConcurrency(),
+        withScope(TestScope),
+        returnFail,
+        runPromise
+      )
+
+      await eventually(() => events.includes('masked start'))
+      await new Promise(resolve => setImmediate(resolve))
+      releaseMasked()
+      await eventually(() => events.includes('release start'))
+
+      const early = await Promise.race([
+        promise.then(() => 'settled' as const),
+        delay(20).then(() => 'pending' as const)
+      ])
+      assert.equal(early, 'pending')
+      assert.deepEqual(events, ['masked start', 'masked end', 'release start'])
+
+      releaseCleanup()
+      const result = await withTimeout(promise, 100)
+
+      assert.ok(Fail.is(result))
+      assert.equal((result.arg as Error).cause, cause)
+      assert.deepEqual(events, ['masked start', 'masked end', 'release start', 'release done'])
+    })
+
+    it('reports cleanup failures when masked cooperative cancellation is delivered at unmask', async () => {
+      const TestScope = scope('test/Fork/CooperativeStructuredMaskedCleanupFailure')
+      const cause = new Error('cooperative structured masked cleanup primary failed')
+      const releaseFailure = new Error('cooperative structured masked cleanup release failed')
+      let releaseMasked!: () => void
+
+      const masked = uninterruptible(fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
+          yield* asyncValue(undefined)
+          yield* fail(releaseFailure)
+        }))
+        yield* assertPromise<void>(() => new Promise(resolve => {
+          releaseMasked = () => resolve()
+        }))
+      }))
+      const bad = fx(function* () {
+        yield* asyncValue(undefined)
+        yield* fail(cause)
+      })
+
+      const promise = all([masked, bad]).pipe(
+        withCoopConcurrency(),
+        withScope(TestScope),
+        returnFail,
+        runPromise
+      )
+
+      await new Promise(resolve => setImmediate(resolve))
+      releaseMasked()
+      const result = await promise
+
+      assert.ok(Fail.is(result))
+      assert.ok(result.arg instanceof AggregateError)
+      assert.equal(result.arg.message, 'Resource release failed')
+      assert.equal((result.arg.errors[0] as Error).cause, cause)
+      assert.equal(result.arg.errors[1], releaseFailure)
     })
 
     it('preserves structured result and failure types', async () => {

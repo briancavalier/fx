@@ -1,5 +1,5 @@
-import { all, withCoopConcurrency, withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
-// import { all, withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
+import { all, withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
+import { withCoopConcurrency } from '@briancavalier/fx/experimental/concurrent'
 import { catchAll, consoleError, consoleLog, defaultConsole, fail, fx, runPromise } from '@briancavalier/fx'
 
 import { nodeSourceLookup } from '@briancavalier/fx/platform-node'

@@ -1,10 +1,12 @@
 import * as assert from 'node:assert/strict'
 import { createServer, request as nodeRequest, type IncomingHttpHeaders } from 'node:http'
 import { describe, it } from 'node:test'
-import { Async } from './Async.js'
+import { Async, assertPromise } from './Async.js'
+import { forkIn } from './Concurrent.js'
 import { Get, provideFrom } from './Env.js'
 import { Effect } from './Effect.js'
 import { Fail, assert as assertNoFail, fail } from './Fail.js'
+import { andFinally } from './Finalization.js'
 import { ok, fx, run, runPromise, runTask, type Fx } from './Fx.js'
 import { handle } from './Handler.js'
 import {
@@ -27,7 +29,7 @@ import {
 import { NodeHttpError, nodeHttp, type NodeHttpServerFactory } from './HttpServerNode.js'
 import { HandlerCapture } from './HandlerCapture.js'
 import type { Interrupt } from './Interrupt.js'
-import { scope } from './Scope.js'
+import { currentScope, scope } from './Scope.js'
 import { YieldFrom, yieldFrom, type Yielding } from './YieldFrom.js'
 
 const HttpServerEvents = scope<Yielding<ServerEvent>>()('test/HttpServer/events')
@@ -507,6 +509,113 @@ describe('HttpServer', () => {
       })
     })
 
+    it('interrupts route handlers when the response closes before finishing', async () => {
+      let interrupted = false
+      const events: ServerEvent[] = []
+      const app = route('GET', '/slow', fx(function* () {
+        yield* waitForInterrupt(() => {
+          interrupted = true
+        })
+        return text('late')
+      }))
+
+      await withServer(createServer => serve(app, {
+        port: 0,
+        host: '127.0.0.1',
+        observe: event => ok(void events.push(event))
+      }).pipe(
+        nodeHttp({ createServer })
+      ), async port => {
+        await httpAbortGet(port, '/slow')
+        await eventually(() => interrupted)
+        const event = await waitForEvent(events, isRequestFailed)
+
+        assert.equal(event.path, '/slow')
+        assert.equal(event.status, undefined)
+      })
+    })
+
+    it('runs current-scope finalizers when the response closes before finishing', async () => {
+      const exits: string[] = []
+      const app = route('GET', '/slow', fx(function* () {
+        yield* andFinally(exit => ok(void exits.push(exit.type)))
+        yield* waitForInterrupt()
+        return text('late')
+      }))
+
+      const runnable = serve(app, { port: 0, host: '127.0.0.1' }).pipe(
+        nodeHttp()
+      )
+      const _: Fx<Async | Interrupt | HandlerCapture<string> | Fail<NodeHttpError>, void> = runnable
+      void _
+
+      await withServer(createServer => serve(app, { port: 0, host: '127.0.0.1' }).pipe(
+        nodeHttp({ createServer })
+      ), async port => {
+        await httpAbortGet(port, '/slow')
+        await eventually(() => exits.includes('interrupted'))
+      })
+    })
+
+    it('does not treat normal response close after finish as a failed request', async () => {
+      const app = route('GET', '/health', ok(text('ok')))
+      const events: ServerEvent[] = []
+
+      await withServer(createServer => serve(app, {
+        port: 0,
+        host: '127.0.0.1',
+        observe: event => ok(void events.push(event))
+      }).pipe(
+        nodeHttp({ createServer })
+      ), async port => {
+        const response = await httpGet(port, '/health')
+        const event = await waitForEvent(events, isRequest)
+
+        assert.equal(response.status, 200)
+        assert.equal(event.status, 200)
+        assert.equal(events.some(isRequestFailed), false)
+      })
+    })
+
+    it('interrupts route handlers when the request body closes before completion', async () => {
+      let interrupted = false
+      const events: ServerEvent[] = []
+      const app = route('POST', '/upload', fx(function* () {
+        yield* waitForInterrupt(() => {
+          interrupted = true
+        })
+        return text('late')
+      }))
+
+      await withServer(createServer => serve(app, {
+        port: 0,
+        host: '127.0.0.1',
+        observe: event => ok(void events.push(event))
+      }).pipe(
+        nodeHttp({ createServer })
+      ), async port => {
+        await httpAbortUpload(port, '/upload')
+        await eventually(() => interrupted)
+        const event = await waitForEvent(events, isRequestFailed)
+
+        assert.equal(event.path, '/upload')
+        assert.equal(event.status, undefined)
+      })
+    })
+
+    it('does not expose request-owned current-scope forks from server program types', () => {
+      const app = route('GET', '/fork', fx(function* () {
+        yield* forkIn(currentScope, ok('child'))
+        return text('ok')
+      }))
+
+      const runnable = serve(app, { port: 0, host: '127.0.0.1' }).pipe(
+        nodeHttp()
+      )
+      const _: Fx<Async | Interrupt | HandlerCapture<string> | Fail<NodeHttpError>, void> = runnable
+      void _
+    })
+
     it('keeps observer yield effects visible until handled', () => {
       const app = route('GET', '/health', ok(text('ok')))
 
@@ -666,6 +775,14 @@ const assertTimestamp = (timestamp: number, before: number, after: number): void
   assert.equal(timestamp <= after, true)
 }
 
+const waitForInterrupt = (onInterrupt: () => void = () => { }): Fx<Async, void> =>
+  assertPromise(signal => new Promise<void>(resolve => {
+    signal.addEventListener('abort', () => {
+      onInterrupt()
+      resolve()
+    }, { once: true })
+  }))
+
 const httpGet = (
   port: number,
   path: string
@@ -683,6 +800,50 @@ const httpGet = (
     request.on('error', reject)
     request.end()
   })
+
+const httpAbortGet = (
+  port: number,
+  path: string
+): Promise<void> =>
+  new Promise(resolve => {
+    const request = nodeRequest({ host: '127.0.0.1', port, path }, response => {
+      response.resume()
+    })
+    request.on('error', () => resolve())
+    request.end()
+    setTimeout(() => {
+      request.destroy()
+      resolve()
+    }, 5)
+  })
+
+const httpAbortUpload = (
+  port: number,
+  path: string
+): Promise<void> =>
+  new Promise(resolve => {
+    const request = nodeRequest({
+      host: '127.0.0.1',
+      port,
+      path,
+      method: 'POST',
+      headers: { 'content-length': '1048576' }
+    })
+    request.on('error', () => resolve())
+    request.write(new Uint8Array(1024))
+    setTimeout(() => {
+      request.destroy()
+      resolve()
+    }, 5)
+  })
+
+const eventually = async (predicate: () => boolean): Promise<void> => {
+  for (let i = 0; i < 100; i++) {
+    if (predicate()) return
+    await new Promise(resolve => setTimeout(resolve, 1))
+  }
+  throw new Error('Timed out waiting for condition')
+}
 
 const toHeaderRecord = (headers: IncomingHttpHeaders): Record<string, string> =>
   Object.fromEntries(Object.entries(headers).flatMap(([name, value]) =>

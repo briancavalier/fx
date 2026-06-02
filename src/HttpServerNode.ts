@@ -3,7 +3,7 @@ import { Readable } from 'node:stream'
 import { finished, pipeline } from 'node:stream/promises'
 import { Async, tryPromise } from './Async.js'
 import { Fail, catchAll, fail, returnFail, returnAll } from './Fail.js'
-import { Fx, assertSync, bracket, flatMap, flatten, fx, ok, runPromise, trySync, unit } from './Fx.js'
+import { Fx, assertSync, bracket, flatMap, flatten, fx, ok, runTask, trySync, unit } from './Fx.js'
 import { Handle } from './Handler.js'
 import { type Headers, type Method } from './HttpClient.js'
 import {
@@ -22,6 +22,7 @@ import {
 import { HandlerCapture, handleCaptured, withCapturedHandlers, withHandlerContext } from './HandlerCapture.js'
 import type { Interrupt } from './Interrupt.js'
 import * as Queue from './internal/Queue.js'
+import { scope, withScope } from './Scope.js'
 
 export type NodeHttpOptions = {
   readonly createServer?: NodeHttpServerFactory
@@ -219,6 +220,8 @@ const runNodeRequest = async <E>(
   const start = performance.now()
   let status = 500
   let failure: { readonly error: unknown } | undefined
+  const requestScope = scope(Symbol('fx/HttpServer/Request'), { label: 'http request' })
+  const clientDisconnect = watchClientDisconnect(incoming, outgoing)
 
   const program = fx(function* () {
     const response = yield* dispatch(compiled, request)
@@ -226,19 +229,33 @@ const runNodeRequest = async <E>(
     yield* writeNodeResponse(outgoing, response)
   })
 
+  const task = withHandlerContext(context, program as Fx<unknown, void>).pipe(
+    withScope(requestScope),
+    catchAll(cause => {
+      failure = { error: cause }
+      return outgoing.destroyed
+        ? unit
+        : writeInternalServerError(outgoing)
+    }),
+    returnAll,
+    f => runTask(f as Fx<Async | HandlerCapture<string>, void>)
+  )
+
   try {
-    await withHandlerContext(context, program as Fx<unknown, void>).pipe(
-      catchAll(cause => {
-        failure = { error: cause }
-        return writeInternalServerError(outgoing)
-      }),
-      returnAll,
-      f => runPromise(f as Fx<Async | HandlerCapture<string>, void>)
-    )
+    const result = await Promise.race([
+      task.promise.then(() => undefined),
+      clientDisconnect.promise
+    ])
+
+    if (result !== undefined) {
+      failure = { error: result }
+      await task.interrupt(result)
+    }
   } catch (cause) {
     failure ??= { error: cause }
     outgoing.destroy()
   } finally {
+    clientDisconnect[Symbol.dispose]()
     const durationMs = performance.now() - start
     const finalStatus = outgoing.headersSent ? outgoing.statusCode : status
     const event = failure ? {
@@ -246,7 +263,7 @@ const runNodeRequest = async <E>(
       timestamp: eventTimestamp(),
       method: request.method,
       path: request.path,
-      status: finalStatus,
+      ...(outgoing.headersSent ? { status: finalStatus } : {}),
       durationMs,
       error: failure.error
     } : {
@@ -259,6 +276,60 @@ const runNodeRequest = async <E>(
     }
 
     events.enqueue(event)
+  }
+}
+
+type ClientClosedRequest = {
+  readonly type: 'clientClosedRequest'
+  readonly phase: 'request' | 'response'
+}
+
+type ClientDisconnectWatcher = {
+  readonly promise: Promise<ClientClosedRequest>
+  readonly [Symbol.dispose]: () => void
+}
+
+const watchClientDisconnect = (
+  request: IncomingMessage,
+  response: NodeServerResponse
+): ClientDisconnectWatcher => {
+  const disconnected = Promise.withResolvers<ClientClosedRequest>()
+  let responseFinished = false
+  let settled = false
+  const disconnect = (reason: ClientClosedRequest) => {
+    if (settled) return
+    settled = true
+    cleanup()
+    disconnected.resolve(reason)
+  }
+  const onFinish = () => {
+    responseFinished = true
+  }
+  const onResponseClose = () => {
+    if (!responseFinished) disconnect({ type: 'clientClosedRequest', phase: 'response' })
+  }
+  const onRequestClose = () => {
+    if (!request.complete) disconnect({ type: 'clientClosedRequest', phase: 'request' })
+  }
+  const cleanup = () => {
+    response.off('finish', onFinish)
+    response.off('close', onResponseClose)
+    request.off('close', onRequestClose)
+  }
+
+  // Node emits response "close" after normal completion too. Treat it as a
+  // client disconnect only if response "finish" has not happened. For request
+  // bodies, request.complete distinguishes aborted uploads from complete reads.
+  response.on('finish', onFinish)
+  response.on('close', onResponseClose)
+  request.on('close', onRequestClose)
+
+  return {
+    promise: disconnected.promise,
+    [Symbol.dispose]() {
+      settled = true
+      cleanup()
+    }
   }
 }
 

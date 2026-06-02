@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { abort, Abort } from './Abort.js'
 import { forkIn, withUnboundedConcurrency } from './Concurrent.js'
 import { assert as assertNoFail, fail, Fail, returnFail } from './Fail.js'
-import { andFinally, andFinallyExit } from './Finalization.js'
+import { andFinally, andFinallyIn } from './Finalization.js'
 import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { interruptFrom, InterruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { returnFrom, ReturnFrom } from './ReturnFrom.js'
@@ -16,7 +16,7 @@ import { yieldFrom } from './YieldFrom.js'
 describe('currentScope', () => {
   it('is eliminated by withScope', () => {
     const TestScope = scope('test/CurrentScope/type')
-    const program = andFinally(currentScope, ok(undefined)).pipe(withScope(TestScope))
+    const program = andFinally(ok(undefined)).pipe(withScope(TestScope))
 
     const _: typeof program extends Fx<Fail<AggregateError>, void> ? true : false = true
 
@@ -27,7 +27,7 @@ describe('currentScope', () => {
     const events: string[] = []
 
     const result = await scoped(fx(function* () {
-      yield* andFinally(currentScope, fx(function* () {
+      yield* andFinally(fx(function* () {
         events.push('cleanup')
       }))
       yield* forkIn(currentScope, fx(function* () {
@@ -66,11 +66,11 @@ describe('currentScope', () => {
     const saved = currentScope
 
     const result = run(scoped(fx(function* () {
-      yield* andFinally(saved, fx(function* () {
+      yield* andFinallyIn(saved, fx(function* () {
         events.push('outer cleanup')
       }))
       yield* scoped(fx(function* () {
-        yield* andFinally(saved, fx(function* () {
+        yield* andFinallyIn(saved, fx(function* () {
           events.push('inner cleanup')
         }))
       }))
@@ -103,7 +103,7 @@ describe('scoped', () => {
     const exits: string[] = []
 
     const result = run(scoped(fx(function* () {
-      yield* andFinallyExit(currentScope, exit => ok(void exits.push(exit.type)))
+      yield* andFinally(exit => ok(void exits.push(exit.type)))
       return 'done' as const
     })).pipe(assertNoFail))
 
@@ -116,7 +116,7 @@ describe('scoped', () => {
     const exits: string[] = []
 
     const result = run(scoped(fx(function* () {
-      yield* andFinallyExit(currentScope, exit => ok(void exits.push(exit.type)))
+      yield* andFinally(exit => ok(void exits.push(exit.type)))
       return yield* fail(failure)
     })).pipe(returnFail))
 
@@ -129,7 +129,7 @@ describe('scoped', () => {
     const reason = new Error('stop')
     const exits: string[] = []
     const program = scoped(fx(function* () {
-      yield* andFinallyExit(currentScope, exit => ok(void exits.push(exit.type)))
+      yield* andFinally(exit => ok(void exits.push(exit.type)))
       return yield* interruptFrom(currentScope, reason)
     }))
 
@@ -146,7 +146,7 @@ describe('scoped', () => {
     const result = await scoped(fx(function* () {
       yield* forkIn(currentScope, fx(function* () {
         events.push('child ran')
-        yield* andFinally(currentScope, ok(void events.push('child cleanup')))
+        yield* andFinally(ok(void events.push('child cleanup')))
         return 'child' as const
       }))
       events.push('parent done')
@@ -165,7 +165,7 @@ describe('scoped', () => {
     const exits: string[] = []
 
     const result = run(scoped(fx(function* () {
-      yield* andFinallyExit(currentScope, exit => ok(void exits.push(exit.type)))
+      yield* andFinally(exit => ok(void exits.push(exit.type)))
       return 'done' as const
     })).pipe(assertNoFail))
 

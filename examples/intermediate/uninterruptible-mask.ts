@@ -1,7 +1,7 @@
 import { assert as assertNoFail, consoleLog, control, defaultConsole, fx, runPromise, uninterruptibleMask } from '@briancavalier/fx'
 import { withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 
-import { andFinallyExit, InterruptFrom, scope, withScope } from '@briancavalier/fx/scope'
+import { andFinallyIn, InterruptFrom, scope, withScope } from '@briancavalier/fx/scope'
 
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 import { timeout } from '@briancavalier/fx/timeout'
@@ -32,7 +32,7 @@ const useResource = (resource: string) => fx(function* () {
 
 const slow = uninterruptibleMask(restore => fx(function* () {
   const resource = yield* acquireResource
-  yield* andFinallyExit(ExampleScope, exit => fx(function* () {
+  yield* andFinallyIn(ExampleScope, exit => fx(function* () {
     const reason = exit.type === 'interrupted' && exit.reason instanceof Error
       ? ` (${exit.reason.message})`
       : ''

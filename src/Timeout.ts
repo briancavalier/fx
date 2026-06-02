@@ -2,7 +2,7 @@ import { Async, assertPromise } from './Async.js'
 import { at } from './Breadcrumb.js'
 import { Fork, forkIn } from './Concurrent.js'
 import { Fail, catchAll, fail } from './Fail.js'
-import { Finally, andFinallyExit } from './Finalization.js'
+import { Finally, andFinallyIn } from './Finalization.js'
 import { Fx, flatMap, fx, map, ok } from './Fx.js'
 import { withCapturedHandlers, type HandlerCapture } from './HandlerCapture.js'
 import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
@@ -78,7 +78,7 @@ function timeoutInWithTrace<const Scope extends AnyLifetimeScope, const Options 
     )).pipe(
       flatMap(fx => new ScopedFork(scope, { fx, ...traceOrigin, daemon: true, scheduling: 'unmetered' }))
     )
-    yield* andFinallyExit(scope, exit => assertPromise(() => task.interrupt(exitReason(exit))))
+    yield* andFinallyIn(scope, exit => assertPromise(() => task.interrupt(exitReason(exit))))
   })
 }
 

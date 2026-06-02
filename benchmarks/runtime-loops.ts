@@ -5,7 +5,7 @@ import { performance } from 'node:perf_hooks'
 import { assertPromise } from '../src/Async.js'
 import { all, withBoundedConcurrency, fork, race, withUnboundedConcurrency } from '../src/Concurrent.js'
 import { Effect } from '../src/Effect.js'
-import { andFinally } from '../src/Finalization.js'
+import { andFinallyIn } from '../src/Finalization.js'
 import { fx, ok, run, runPromise, runTask } from '../src/Fx.js'
 import { control, handle } from '../src/Handler.js'
 import { captureHandlers, closeHandlerCapture, mapCapturedHandlers, withHandlerContext } from '../src/HandlerCapture.js'
@@ -69,7 +69,7 @@ const allFanout16 = all(fanoutValues(16))
 const raceFanout16 = race(fanoutValues(16))
 const blocked = assertPromise<void>(() => new Promise(() => { }))
 const blockedWithFinalizer = fx(function* () {
-  yield* andFinally(InterruptScope, ok(undefined))
+  yield* andFinallyIn(InterruptScope, ok(undefined))
   return yield* blocked
 }).pipe(withScope(InterruptScope))
 
@@ -367,7 +367,7 @@ function applyScopes(f: Fx<unknown, unknown>, depth: number) {
 function finalizerProgram(count: number) {
   return fx(function* () {
     for (let i = 0; i < count; i++) {
-      yield* andFinally(ScopeFinalizer, ok(undefined))
+      yield* andFinallyIn(ScopeFinalizer, ok(undefined))
     }
   })
 }

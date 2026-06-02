@@ -2,7 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise, type Async } from './Async.js'
 import { assert as assertNoFail } from './Fail.js'
-import { andFinally } from './Finalization.js'
+import { andFinallyIn } from './Finalization.js'
 import { fx, type Fx } from './Fx.js'
 import { runNodeMain, runNodePromise, type NodeSignalName, type NodeSignalProcess } from './NodeRuntime.js'
 import { scope, withScope } from './Scope.js'
@@ -42,7 +42,7 @@ describe('NodeRuntime', () => {
     let released = false
 
     const running = runNodePromise(fx(function* () {
-      yield* andFinally(TestScope, fx(function* () {
+      yield* andFinallyIn(TestScope, fx(function* () {
         released = true
       }))
       yield* awaitAbort(() => {

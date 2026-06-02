@@ -4,10 +4,10 @@ import { describe, it } from 'node:test'
 import { abort, Abort, orReturn } from './Abort.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { fx, ok, run, type Fx } from './Fx.js'
-import { andFinally, andFinallyExit, managed, using, usingManaged, type Finally, type Managed } from './Finalization.js'
+import { andFinally, andFinallyIn, managed, using, usingIn, usingManaged, usingManagedIn, type Finally, type Managed } from './Finalization.js'
 import type { Interrupt } from './Interrupt.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope, withScope, type Control, type Exit } from './Scope.js'
+import { currentScope, scope, withScope, type Control, type Exit } from './Scope.js'
 import { collectFrom, YieldFrom, yieldFrom, type Yielding } from './YieldFrom.js'
 
 describe('Finalization', () => {
@@ -16,21 +16,32 @@ describe('Finalization', () => {
 
   it('preserves finalizer effects in constructor types', () => {
     const releaseFailure = new Error('release failed')
-    const finalizer = andFinally(TestScope, yieldFrom(CleanupEvents, 'cleanup'))
-    const exitFinalizer = andFinallyExit(TestScope, () => fail(releaseFailure))
+    const finalizer = andFinallyIn(TestScope, yieldFrom(CleanupEvents, 'cleanup'))
+    const exitFinalizer = andFinallyIn(TestScope, () => fail(releaseFailure))
+    const currentFinalizer = andFinally(yieldFrom(CleanupEvents, 'cleanup'))
+    const currentExitFinalizer = andFinally(() => fail(releaseFailure))
 
     const _: typeof finalizer extends Fx<Finally<typeof TestScope, YieldFrom<typeof CleanupEvents>>, void> ? true : false = true
     const __: typeof exitFinalizer extends Fx<Finally<typeof TestScope, Fail<Error>>, void> ? true : false = true
+    const ___: typeof currentFinalizer extends Fx<Finally<typeof currentScope, YieldFrom<typeof CleanupEvents>>, void> ? true : false = true
+    const ____: typeof currentExitFinalizer extends Fx<Finally<typeof currentScope, Fail<Error>>, void> ? true : false = true
 
     assert.equal(typeof _, 'boolean')
     assert.equal(typeof __, 'boolean')
+    assert.equal(typeof ___, 'boolean')
+    assert.equal(typeof ____, 'boolean')
   })
 
   it('preserves finalizer effects in resource helper types', () => {
     const releaseFailure = new Error('release failed')
-    const resource = using(TestScope, ok('resource'), () => yieldFrom(CleanupEvents, 'cleanup'))
-    const exitResource = using(TestScope, ok('resource'), () => fail(releaseFailure))
-    const managedResource = usingManaged(TestScope, ok(managed(
+    const resource = usingIn(TestScope, ok('resource'), () => yieldFrom(CleanupEvents, 'cleanup'))
+    const exitResource = usingIn(TestScope, ok('resource'), () => fail(releaseFailure))
+    const managedResource = usingManagedIn(TestScope, ok(managed(
+      'resource',
+      () => yieldFrom(CleanupEvents, 'cleanup')
+    )))
+    const currentResource = using(ok('resource'), () => yieldFrom(CleanupEvents, 'cleanup'))
+    const currentManagedResource = usingManaged(ok(managed(
       'resource',
       () => yieldFrom(CleanupEvents, 'cleanup')
     )))
@@ -38,15 +49,35 @@ describe('Finalization', () => {
     const _: typeof resource extends Fx<Finally<typeof TestScope, YieldFrom<typeof CleanupEvents>> | Interrupt, 'resource'> ? true : false = true
     const __: typeof exitResource extends Fx<Finally<typeof TestScope, Fail<Error>> | Interrupt, 'resource'> ? true : false = true
     const ___: typeof managedResource extends Fx<Finally<typeof TestScope, YieldFrom<typeof CleanupEvents>> | Interrupt, 'resource'> ? true : false = true
+    const ____: typeof currentResource extends Fx<Finally<typeof currentScope, YieldFrom<typeof CleanupEvents>> | Interrupt, 'resource'> ? true : false = true
+    const _____: typeof currentManagedResource extends Fx<Finally<typeof currentScope, YieldFrom<typeof CleanupEvents>> | Interrupt, 'resource'> ? true : false = true
 
     assert.equal(typeof _, 'boolean')
     assert.equal(typeof __, 'boolean')
     assert.equal(typeof ___, 'boolean')
+    assert.equal(typeof ____, 'boolean')
+    assert.equal(typeof _____, 'boolean')
+  })
+
+  it('eliminates current-scope resource helpers at a scope boundary', () => {
+    const scoped = fx(function* () {
+      yield* andFinally(yieldFrom(CleanupEvents, 'cleanup'))
+      const resource = yield* using(ok('resource' as const), () => yieldFrom(CleanupEvents, 'cleanup'))
+      const managedResource = yield* usingManaged(ok(managed(
+        'managed' as const,
+        () => yieldFrom(CleanupEvents, 'cleanup')
+      )))
+      return [resource, managedResource] as const
+    }).pipe(withScope(TestScope))
+
+    const _: typeof scoped extends Fx<YieldFrom<typeof CleanupEvents> | Fail<AggregateError> | Interrupt, readonly ['resource', 'managed']> ? true : false = true
+
+    assert.equal(typeof _, 'boolean')
   })
 
   it('exposes non-failure finalizer effects after scope', () => {
     const scoped = fx(function* () {
-      yield* andFinally(TestScope, yieldFrom(CleanupEvents, 'cleanup'))
+      yield* andFinallyIn(TestScope, yieldFrom(CleanupEvents, 'cleanup'))
       return 'done'
     }).pipe(withScope(TestScope))
 
@@ -64,7 +95,7 @@ describe('Finalization', () => {
   it('exposes cleanup failures as AggregateError after scope', () => {
     const releaseFailure = new Error('release failed')
     const scoped = fx(function* () {
-      yield* andFinally(TestScope, fail(releaseFailure))
+      yield* andFinallyIn(TestScope, fail(releaseFailure))
       return 'done'
     }).pipe(withScope(TestScope))
 
@@ -81,7 +112,7 @@ describe('Finalization', () => {
   it('leaves finalizers from a different scope visible after scope', () => {
     const OtherScope = scope<Control>()('test/Finalization/other')
     const scoped = fx(function* () {
-      yield* andFinally(OtherScope, yieldFrom(CleanupEvents, 'cleanup'))
+      yield* andFinallyIn(OtherScope, yieldFrom(CleanupEvents, 'cleanup'))
       return 'done'
     }).pipe(withScope(TestScope))
 
@@ -97,9 +128,9 @@ describe('Finalization', () => {
     const released = [] as string[]
 
     const result = run(fx(function* () {
-      yield* andFinally(TestScope, record(released, 'A'))
-      yield* andFinally(TestScope, record(released, 'B'))
-      yield* andFinally(TestScope, record(released, 'C'))
+      yield* andFinallyIn(TestScope, record(released, 'A'))
+      yield* andFinallyIn(TestScope, record(released, 'B'))
+      yield* andFinallyIn(TestScope, record(released, 'C'))
       return 'done'
     }).pipe(withScope(TestScope), returnFail))
 
@@ -112,9 +143,9 @@ describe('Finalization', () => {
     const programFailure = new Error('program failed')
 
     const result = run(fx(function* () {
-      yield* andFinally(TestScope, record(released, 'A'))
-      yield* andFinally(TestScope, record(released, 'B'))
-      yield* andFinally(TestScope, record(released, 'C'))
+      yield* andFinallyIn(TestScope, record(released, 'A'))
+      yield* andFinallyIn(TestScope, record(released, 'B'))
+      yield* andFinallyIn(TestScope, record(released, 'C'))
       yield* fail(programFailure)
     }).pipe(withScope(TestScope), returnFail))
 
@@ -129,9 +160,9 @@ describe('Finalization', () => {
     const cFailure = new Error('C release failed')
 
     const result = run(fx(function* () {
-      yield* andFinally(TestScope, record(released, 'A', aFailure))
-      yield* andFinally(TestScope, record(released, 'B'))
-      yield* andFinally(TestScope, record(released, 'C', cFailure))
+      yield* andFinallyIn(TestScope, record(released, 'A', aFailure))
+      yield* andFinallyIn(TestScope, record(released, 'B'))
+      yield* andFinallyIn(TestScope, record(released, 'C', cFailure))
       return 'done'
     }).pipe(withScope(TestScope), returnFail))
 
@@ -148,9 +179,9 @@ describe('Finalization', () => {
     const cFailure = new Error('C release failed')
 
     const result = run(fx(function* () {
-      yield* andFinally(TestScope, record(released, 'A', aFailure))
-      yield* andFinally(TestScope, record(released, 'B'))
-      yield* andFinally(TestScope, record(released, 'C', cFailure))
+      yield* andFinallyIn(TestScope, record(released, 'A', aFailure))
+      yield* andFinallyIn(TestScope, record(released, 'B'))
+      yield* andFinallyIn(TestScope, record(released, 'C', cFailure))
       yield* fail(programFailure)
     }).pipe(withScope(TestScope), returnFail))
 
@@ -164,7 +195,7 @@ describe('Finalization', () => {
     const exits = [] as Exit[]
 
     const result = run(fx(function* () {
-      yield* andFinallyExit(TestScope, exit => fx(function* () {
+      yield* andFinallyIn(TestScope, exit => fx(function* () {
         exits.push(exit)
       }))
       return 'done'
@@ -179,7 +210,7 @@ describe('Finalization', () => {
     const programFailure = new Error('program failed')
 
     const result = run(fx(function* () {
-      yield* andFinallyExit(TestScope, exit => fx(function* () {
+      yield* andFinallyIn(TestScope, exit => fx(function* () {
         exits.push(exit)
       }))
       yield* fail(programFailure)
@@ -198,11 +229,11 @@ describe('Finalization', () => {
     const exits = [] as Exit[]
 
     const result = run(fx(function* () {
-      yield* andFinallyExit(TestScope, exit => fx(function* () {
+      yield* andFinallyIn(TestScope, exit => fx(function* () {
         released.push('A')
         exits.push(exit)
       }))
-      yield* andFinallyExit(TestScope, exit => fx(function* () {
+      yield* andFinallyIn(TestScope, exit => fx(function* () {
         released.push('B')
         exits.push(exit)
       }))
@@ -216,11 +247,11 @@ describe('Finalization', () => {
     assert.deepEqual(exits[0], { type: 'success', value: 'done' })
   })
 
-  it('using returns the initialized value and registers cleanup', () => {
+  it('usingIn returns the initialized value and registers cleanup', () => {
     const released = [] as string[]
 
     const result = run(fx(function* () {
-      return yield* using(TestScope, ok('resource'),
+      return yield* usingIn(TestScope, ok('resource'),
         resource => record(released, resource)
       )
     }).pipe(withScope(TestScope), returnFail))
@@ -229,12 +260,12 @@ describe('Finalization', () => {
     assert.deepEqual(released, ['resource'])
   })
 
-  it('using does not register cleanup when initialization fails', () => {
+  it('usingIn does not register cleanup when initialization fails', () => {
     const released = [] as string[]
     const initFailure = new Error('init failed')
 
     const result = run(fx(function* () {
-      return yield* using(TestScope, fail(initFailure),
+      return yield* usingIn(TestScope, fail(initFailure),
         resource => record(released, String(resource))
       )
     }).pipe(withScope(TestScope), returnFail))
@@ -244,12 +275,12 @@ describe('Finalization', () => {
     assert.deepEqual(released, [])
   })
 
-  it('using runs cleanup when later work fails', () => {
+  it('usingIn runs cleanup when later work fails', () => {
     const released = [] as string[]
     const programFailure = new Error('program failed')
 
     const result = run(fx(function* () {
-      yield* using(TestScope,
+      yield* usingIn(TestScope,
         ok('resource'),
         resource => record(released, resource)
       )
@@ -261,11 +292,11 @@ describe('Finalization', () => {
     assert.deepEqual(released, ['resource'])
   })
 
-  it('using delays finalizer construction until scope exit', () => {
+  it('usingIn delays finalizer construction until scope exit', () => {
     const events = [] as string[]
 
     const result = run(fx(function* () {
-      const resource = yield* using(TestScope, ok('resource'),
+      const resource = yield* usingIn(TestScope, ok('resource'),
         resource => {
           events.push(`release ${resource}`)
           return record(events, 'cleanup')
@@ -279,12 +310,12 @@ describe('Finalization', () => {
     assert.deepEqual(events, ['use resource', 'release resource', 'cleanup'])
   })
 
-  it('using provides the resource and success exit', () => {
+  it('usingIn provides the resource and success exit', () => {
     const released = [] as string[]
     const exits = [] as Exit[]
 
     const result = run(fx(function* () {
-      return yield* using(TestScope, ok('resource'),
+      return yield* usingIn(TestScope, ok('resource'),
         (resource, exit) => fx(function* () {
           released.push(resource)
           exits.push(exit)
@@ -297,13 +328,13 @@ describe('Finalization', () => {
     assert.deepEqual(exits, [{ type: 'success', value: 'resource' }])
   })
 
-  it('using provides the resource and failure exit', () => {
+  it('usingIn provides the resource and failure exit', () => {
     const released = [] as string[]
     const exits = [] as Exit[]
     const programFailure = new Error('program failed')
 
     const result = run(fx(function* () {
-      yield* using(TestScope,
+      yield* usingIn(TestScope,
         ok('resource'),
         (resource, exit) => fx(function* () {
           released.push(resource)
@@ -322,12 +353,12 @@ describe('Finalization', () => {
     if (exit.type === 'failure') assert.equal(exit.failure.arg, programFailure)
   })
 
-  it('using release failure participates in cleanup aggregation', () => {
+  it('usingIn release failure participates in cleanup aggregation', () => {
     const programFailure = new Error('program failed')
     const releaseFailure = new Error('release failed')
 
     const result = run(fx(function* () {
-      yield* using(TestScope,
+      yield* usingIn(TestScope,
         ok('resource'),
         () => fail(releaseFailure)
       )
@@ -350,11 +381,11 @@ describe('Finalization', () => {
     assert.deepEqual(exits, ['success'])
   })
 
-  it('usingManaged returns the managed value and registers its finalizer', () => {
+  it('usingManagedIn returns the managed value and registers its finalizer', () => {
     const released = [] as string[]
 
     const result = run(fx(function* () {
-      return yield* usingManaged(TestScope, ok(managed(
+      return yield* usingManagedIn(TestScope, ok(managed(
         'resource',
         () => record(released, 'resource')
       )))
@@ -364,12 +395,12 @@ describe('Finalization', () => {
     assert.deepEqual(released, ['resource'])
   })
 
-  it('usingManaged does not register cleanup when initialization fails', () => {
+  it('usingManagedIn does not register cleanup when initialization fails', () => {
     const released = [] as string[]
     const initFailure = new Error('init failed')
 
     const result = run(fx(function* () {
-      return yield* usingManaged(TestScope, fail(initFailure) as Fx<Fail<Error>, Managed<string>>)
+      return yield* usingManagedIn(TestScope, fail(initFailure) as Fx<Fail<Error>, Managed<string>>)
     }).pipe(withScope(TestScope), returnFail))
 
     assert.ok(Fail.is(result))
@@ -377,12 +408,12 @@ describe('Finalization', () => {
     assert.deepEqual(released, [])
   })
 
-  it('usingManaged finalizer receives the scope exit', () => {
+  it('usingManagedIn finalizer receives the scope exit', () => {
     const exits = [] as Exit[]
     const programFailure = new Error('program failed')
 
     const result = run(fx(function* () {
-      yield* usingManaged(TestScope, ok(managed(
+      yield* usingManagedIn(TestScope, ok(managed(
         'resource',
         exit => fx(function* () {
           exits.push(exit)
@@ -403,8 +434,8 @@ describe('Finalization', () => {
     const released = [] as string[]
 
     const result = run(fx(function* () {
-      yield* andFinally(TestScope, record(released, 'A'))
-      yield* andFinally(TestScope, record(released, 'B'))
+      yield* andFinallyIn(TestScope, record(released, 'A'))
+      yield* andFinallyIn(TestScope, record(released, 'B'))
       yield* returnFrom(TestScope, 'returned')
     }).pipe(withScope(TestScope), returnFail))
 
@@ -416,7 +447,7 @@ describe('Finalization', () => {
     const exits = [] as Exit[]
 
     const result = run(fx(function* () {
-      yield* andFinallyExit(TestScope, exit => fx(function* () {
+      yield* andFinallyIn(TestScope, exit => fx(function* () {
         exits.push(exit)
       }))
       yield* returnFrom(TestScope, 'returned')
@@ -434,8 +465,8 @@ describe('Finalization', () => {
     const released = [] as string[]
 
     const result = run(fx(function* () {
-      yield* andFinally(TestScope, record(released, 'A'))
-      yield* andFinally(TestScope, record(released, 'B'))
+      yield* andFinallyIn(TestScope, record(released, 'A'))
+      yield* andFinallyIn(TestScope, record(released, 'B'))
       yield* abort(TestScope)
     }).pipe(withScope(TestScope), orReturn(TestScope, 'aborted'), returnFail))
 
@@ -447,7 +478,7 @@ describe('Finalization', () => {
     const exits = [] as Exit[]
 
     const f = fx(function* () {
-      yield* andFinallyExit(TestScope, exit => fx(function* () {
+      yield* andFinallyIn(TestScope, exit => fx(function* () {
         exits.push(exit)
       }))
       yield* abort(TestScope)
@@ -464,7 +495,7 @@ describe('Finalization', () => {
     const released = [] as string[]
 
     const f = fx(function* () {
-      yield* andFinally(OtherScope, record(released, 'other'))
+      yield* andFinallyIn(OtherScope, record(released, 'other'))
       return 'done'
     }).pipe(withScope(TestScope))
 

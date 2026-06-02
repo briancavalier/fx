@@ -17,7 +17,7 @@ import {
   withCoopConcurrency,
   withUnboundedConcurrency
 } from '@briancavalier/fx/concurrent'
-import { sameScope, scope, scopeId, scopeLabel, withScope, type AnyScope } from '@briancavalier/fx/scope'
+import { andFinally, andFinallyIn, sameScope, scope, scopeId, scopeLabel, using, usingIn, usingManaged, usingManagedIn, withScope, type AnyScope } from '@briancavalier/fx/scope'
 import { TimeoutInterrupt, timeout, timeoutIn } from '@briancavalier/fx/timeout'
 
 type EffectOf<T> = T extends Fx<infer E, unknown> ? E : never
@@ -43,6 +43,12 @@ describe('package import inference', () => {
     assert.equal(typeof scopeLabel, 'function')
     assert.equal(typeof sameScope, 'function')
     assert.equal(typeof withScope, 'function')
+    assert.equal(typeof andFinally, 'function')
+    assert.equal(typeof andFinallyIn, 'function')
+    assert.equal(typeof using, 'function')
+    assert.equal(typeof usingIn, 'function')
+    assert.equal(typeof usingManaged, 'function')
+    assert.equal(typeof usingManagedIn, 'function')
 
     assert.equal(typeof timeout, 'function')
     assert.equal(typeof timeoutIn, 'function')

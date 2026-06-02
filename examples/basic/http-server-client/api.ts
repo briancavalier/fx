@@ -101,9 +101,7 @@ function readText(request: ServerRequest) {
   )
 }
 
-const requestAudit = (user: User) => fx(function* () {
-  const { request } = yield* get<RouteContext>()
-
+const requestAudit = (user: User) => fx(function* ({ request }: RouteContext) {
   return yield* using(
     openRequestAudit(request, user),
     closeRequestAudit

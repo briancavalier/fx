@@ -24,7 +24,13 @@ const loadDashboard = fx(function* () {
 
 `all` describes the structured operator. The scheduler handler chooses when
 forks run:
-`withBoundedConcurrency`, `withUnboundedConcurrency`, or `withCoopConcurrency`.
+`withBoundedConcurrency` or `withUnboundedConcurrency`.
+
+Experimental cooperative scheduling is available from a separate subpath:
+
+```ts
+import { withCoopConcurrency } from "@briancavalier/fx/experimental/concurrent"
+```
 
 Handler pipeline:
 
@@ -79,8 +85,9 @@ request.pipe(
 
 Scope-owned forks are not an ambient runtime fiber registry. They are explicit
 effects handled by a matching scope boundary and scheduled by an outer fork
-scheduler such as `withBoundedConcurrency`, `withUnboundedConcurrency`, or
-`withCoopConcurrency`.
+scheduler such as `withBoundedConcurrency` or `withUnboundedConcurrency`.
+For experimental cooperative scheduling, import `withCoopConcurrency` from
+`@briancavalier/fx/experimental/concurrent`.
 
 For a runnable example with scoped child work, a scope deadline, and cleanup,
 see `examples/intermediate/scope-owned-forks.ts`.

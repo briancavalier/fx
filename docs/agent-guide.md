@@ -166,7 +166,14 @@ named boundary is real and useful for the application.
 
 Use `all`, `race`, and `firstSuccess` as structured concurrency operators.
 Then choose a scheduling strategy with `withBoundedConcurrency`,
-`withUnboundedConcurrency`, or `withCoopConcurrency`.
+or `withUnboundedConcurrency`.
+
+Experimental cooperative scheduling is available separately from
+`@briancavalier/fx/experimental/concurrent`:
+
+```ts
+import { withCoopConcurrency } from "@briancavalier/fx/experimental/concurrent"
+```
 
 Use named scopes and finalization helpers when resources need cleanup. Keep
 acquire/register critical sections small and explicit.

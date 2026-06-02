@@ -463,8 +463,6 @@ function* stepFiber(
     if (InterruptMaskEnd.is(ir.value)) {
       fiber.masks.unmask(ir.value.arg)
       if (fiber.cancelRequested && fiber.masks.canInterrupt) {
-        yield* closeFiber(runtime, fiber)
-        callbacks.cancel?.()
         break
       }
       fiber.resume = { type: 'next', value: undefined }

@@ -1922,6 +1922,98 @@ describe('Fork', () => {
       assert.deepEqual(events, ['masked start', 'masked end', 'released'])
     })
 
+    it('awaits async cleanup when masked cooperative cancellation is delivered at unmask', async () => {
+      const TestScope = scope('test/Fork/CooperativeStructuredMaskedAsyncCleanup')
+      const events = [] as string[]
+      const cause = new Error('cooperative structured masked async cleanup failed')
+      let releaseMasked!: () => void
+      let releaseCleanup!: () => void
+      const cleanupReleased = new Promise<void>(resolve => {
+        releaseCleanup = resolve
+      })
+
+      const masked = uninterruptible(fx(function* () {
+        yield* andFinally(TestScope, fx(function* () {
+          events.push('release start')
+          yield* assertPromise(() => cleanupReleased)
+          events.push('release done')
+        }))
+        events.push('masked start')
+        yield* assertPromise<void>(() => new Promise(resolve => {
+          releaseMasked = () => resolve()
+        }))
+        events.push('masked end')
+      }))
+      const bad = fx(function* () {
+        yield* asyncValue(undefined)
+        yield* fail(cause)
+      })
+
+      const promise = all([masked, bad]).pipe(
+        withCoopConcurrency(),
+        withScope(TestScope),
+        returnFail,
+        runPromise
+      )
+
+      await eventually(() => events.includes('masked start'))
+      await new Promise(resolve => setImmediate(resolve))
+      releaseMasked()
+      await eventually(() => events.includes('release start'))
+
+      const early = await Promise.race([
+        promise.then(() => 'settled' as const),
+        delay(20).then(() => 'pending' as const)
+      ])
+      assert.equal(early, 'pending')
+      assert.deepEqual(events, ['masked start', 'masked end', 'release start'])
+
+      releaseCleanup()
+      const result = await withTimeout(promise, 100)
+
+      assert.ok(Fail.is(result))
+      assert.equal((result.arg as Error).cause, cause)
+      assert.deepEqual(events, ['masked start', 'masked end', 'release start', 'release done'])
+    })
+
+    it('reports cleanup failures when masked cooperative cancellation is delivered at unmask', async () => {
+      const TestScope = scope('test/Fork/CooperativeStructuredMaskedCleanupFailure')
+      const cause = new Error('cooperative structured masked cleanup primary failed')
+      const releaseFailure = new Error('cooperative structured masked cleanup release failed')
+      let releaseMasked!: () => void
+
+      const masked = uninterruptible(fx(function* () {
+        yield* andFinally(TestScope, fx(function* () {
+          yield* asyncValue(undefined)
+          yield* fail(releaseFailure)
+        }))
+        yield* assertPromise<void>(() => new Promise(resolve => {
+          releaseMasked = () => resolve()
+        }))
+      }))
+      const bad = fx(function* () {
+        yield* asyncValue(undefined)
+        yield* fail(cause)
+      })
+
+      const promise = all([masked, bad]).pipe(
+        withCoopConcurrency(),
+        withScope(TestScope),
+        returnFail,
+        runPromise
+      )
+
+      await new Promise(resolve => setImmediate(resolve))
+      releaseMasked()
+      const result = await promise
+
+      assert.ok(Fail.is(result))
+      assert.ok(result.arg instanceof AggregateError)
+      assert.equal(result.arg.message, 'Resource release failed')
+      assert.equal((result.arg.errors[0] as Error).cause, cause)
+      assert.equal(result.arg.errors[1], releaseFailure)
+    })
+
     it('preserves structured result and failure types', async () => {
       class FirstError extends Error { readonly first = true }
       class SecondError extends Error { readonly second = true }

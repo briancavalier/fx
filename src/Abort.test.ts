@@ -4,7 +4,7 @@ import { abort, Abort, orReturn, restartOnAbort } from './Abort.js'
 import { at } from './Breadcrumb.js'
 import { originOf, withOrigin } from './Effect.js'
 import { fail, Fail, returnFail } from './Fail.js'
-import { andFinally } from './Finalization.js'
+import { andFinallyIn } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { returnFrom } from './ReturnFrom.js'
 import { scope, withScope, type Control } from './Scope.js'
@@ -98,7 +98,7 @@ describe('Abort', () => {
       const result = fx(function* () {
         attempts += 1
         const attempt = attempts
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           released.push(`release:${attempt}`)
         }))
 
@@ -180,7 +180,7 @@ describe('Abort', () => {
 
       const result = fx(function* () {
         attempts += 1
-        yield* andFinally(TestScope, fail(cleanupFailure))
+        yield* andFinallyIn(TestScope, fail(cleanupFailure))
         yield* abort(TestScope)
       }).pipe(
         restartOnAbort(TestScope, { restarts: 2 }),

@@ -4,7 +4,7 @@ import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
 import { fail, Fail, returnFail } from './Fail.js'
 import { race, withUnboundedConcurrency } from './Concurrent.js'
-import { andFinally, andFinallyExit, managed, using, usingManaged } from './Finalization.js'
+import { andFinallyIn, managed, usingIn, usingManagedIn } from './Finalization.js'
 import { bracket, fx, ok, run, runPromise, runTask, type Fx } from './Fx.js'
 import { control, handle } from './Handler.js'
 import { InterruptFrom, interruptFrom, recoverInterrupt } from './InterruptFrom.js'
@@ -20,7 +20,7 @@ describe('Typed interruption', () => {
     let recoveredReason: unknown
 
     const result = fx(function* () {
-      yield* andFinallyExit(TestScope, exit => fx(function* () {
+      yield* andFinallyIn(TestScope, exit => fx(function* () {
         exits.push(exit)
       }))
       yield* interruptFrom(TestScope, reason)
@@ -85,7 +85,7 @@ describe('Typed interruption', () => {
     const cleanupFailure = new Error('cleanup failed')
 
     const result = fx(function* () {
-      yield* andFinally(TestScope, fail(cleanupFailure))
+      yield* andFinallyIn(TestScope, fail(cleanupFailure))
       yield* interruptFrom(TestScope)
     }).pipe(
       withScope(TestScope),
@@ -104,7 +104,7 @@ describe('Typed interruption', () => {
     const exits = [] as Exit[]
 
     const result = fx(function* () {
-      yield* andFinallyExit(TestScope, exit => fx(function* () {
+      yield* andFinallyIn(TestScope, exit => fx(function* () {
         exits.push(exit)
       }))
       yield* interruptFrom(TestScope, reason)
@@ -144,7 +144,7 @@ describe('Typed interruption', () => {
     const cleanupFailure = new Error('cleanup failed')
 
     const result = fx(function* () {
-      yield* andFinally(TestScope, fail(cleanupFailure))
+      yield* andFinallyIn(TestScope, fail(cleanupFailure))
       yield* interruptFrom(TestScope)
     }).pipe(
       withScope(TestScope),
@@ -240,12 +240,12 @@ describe('Interrupt masking', () => {
   })
 
   it('runs registered finalizers when interrupted after masked acquire/register', async () => {
-    const TestScope = scope('test/Interrupt/using')
+    const TestScope = scope('test/Interrupt/usingIn')
     const exits = [] as Exit[]
     let resolve!: (value: string) => void
 
     const task = fx(function* () {
-      yield* using(
+      yield* usingIn(
         TestScope,
         assertPromise<string>(() => new Promise(r => {
           resolve = r
@@ -268,13 +268,13 @@ describe('Interrupt masking', () => {
     assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope }])
   })
 
-  it('usingManaged registers finalizers when interrupted after masked acquire/register', async () => {
-    const TestScope = scope('test/Interrupt/usingManaged')
+  it('usingManagedIn registers finalizers when interrupted after masked acquire/register', async () => {
+    const TestScope = scope('test/Interrupt/usingManagedIn')
     const exits = [] as Exit[]
     let resolve!: (value: ReturnType<typeof managed<string, never>>) => void
 
     const task = fx(function* () {
-      yield* usingManaged(
+      yield* usingManagedIn(
         TestScope,
         assertPromise(() => new Promise<ReturnType<typeof managed<string, never>>>(r => {
           resolve = r
@@ -450,7 +450,7 @@ describe('Interrupt masking', () => {
     let settled = false
 
     const loser = fx(function* () {
-      yield* using(
+      yield* usingIn(
         TestScope,
         assertPromise<string>(() => new Promise(r => {
           resolveAcquire = r

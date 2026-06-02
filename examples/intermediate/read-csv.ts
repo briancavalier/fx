@@ -1,6 +1,6 @@
 import { assert as assertNoFail, type Console, consoleLog, defaultConsole, fx, type Fx, handleScoped, run } from '@briancavalier/fx'
 
-import { managed, returnFrom, scope, withScope, usingManaged, yieldFrom, YieldFrom, type Control, type Yielding } from '@briancavalier/fx/scope'
+import { managed, returnFrom, scope, withScope, usingManagedIn, yieldFrom, YieldFrom, type Control, type Yielding } from '@briancavalier/fx/scope'
 
 const ImportCsv = scope<Control>()('examples/intermediate/ImportCsv')
 
@@ -93,7 +93,7 @@ const importRows = (file: CsvFile) => fx(function* () {
 })
 
 const importCsv = (path: string, text: string): Fx<Console, ImportResult> => fx(function* () {
-  const file = yield* usingManaged(ImportCsv, openCsv(path, text))
+  const file = yield* usingManagedIn(ImportCsv, openCsv(path, text))
   const count = yield* importRows(file)
 
   return { type: 'imported', count } satisfies ImportResult

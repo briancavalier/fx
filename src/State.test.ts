@@ -2,7 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
 import { Fail, fail, returnFail } from './Fail.js'
-import { andFinally } from './Finalization.js'
+import { andFinallyIn } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { scope, withScope } from './Scope.js'
 import { GetState, getState, modifyState, type ModifyState, type Stateful, withState, withStateInit } from './State.js'
@@ -117,7 +117,7 @@ describe('State', () => {
     let finalizerState = 0
     const program = fx(function* () {
       yield* modifyState(CounterState, count => [count + 1, undefined])
-      yield* andFinally(CounterState, fx(function* () {
+      yield* andFinallyIn(CounterState, fx(function* () {
         finalizerState = yield* modifyState(CounterState, count => [count + 1, count])
       }))
 
@@ -130,7 +130,7 @@ describe('State', () => {
 
   it('leaves cleanup state effects typed when withState is inside the scope boundary', () => {
     const program = fx(function* () {
-      yield* andFinally(CounterState, modifyState(CounterState, count => [count + 1, undefined]))
+      yield* andFinallyIn(CounterState, modifyState(CounterState, count => [count + 1, undefined]))
       return 'done'
     })
     const wrongOrder = program.pipe(withState(CounterState, 1), withScope(CounterState))

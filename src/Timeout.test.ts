@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { Fail, fail, returnFail } from './Fail.js'
 import { forkIn, withBoundedConcurrency, withCoopConcurrency, withUnboundedConcurrency } from './Concurrent.js'
 import { fx, ok, run, runPromise } from './Fx.js'
-import { andFinallyExit } from './Finalization.js'
+import { andFinallyIn } from './Finalization.js'
 import type { Fx } from './Fx.js'
 import { control } from './Handler.js'
 import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
@@ -108,7 +108,7 @@ describe('Timeout', () => {
     let completed = false
 
     const p = fx(function* () {
-      yield* andFinallyExit(TestScope, exit => fx(function* () {
+      yield* andFinallyIn(TestScope, exit => fx(function* () {
         exits.push(exit)
       }))
       yield* sleep(100)
@@ -136,7 +136,7 @@ describe('Timeout', () => {
     let exit!: Exit
 
     const p = fx(function* () {
-      yield* andFinallyExit(TestScope, e => fx(function* () {
+      yield* andFinallyIn(TestScope, e => fx(function* () {
         exit = e
       }))
       yield* sleep(100)
@@ -212,7 +212,7 @@ describe('Timeout', () => {
     let settled = false
 
     const p = fx(function* () {
-      yield* andFinallyExit(TestScope, () => fx(function* () {
+      yield* andFinallyIn(TestScope, () => fx(function* () {
         events.push('cleanup:start')
         yield* sleep(25)
         events.push('cleanup:end')
@@ -275,7 +275,7 @@ describe('Timeout', () => {
     const p = fx(function* () {
       yield* timeoutIn(TestScope, { ms: 50, reason: () => reason })
       yield* forkIn(TestScope, fx(function* () {
-        yield* andFinallyExit(TestScope, exit => fx(function* () {
+        yield* andFinallyIn(TestScope, exit => fx(function* () {
           exits.push(exit)
         }))
         yield* sleep(100)
@@ -413,7 +413,7 @@ describe('Timeout', () => {
     const p = fx(function* () {
       yield* forkIn(TestScope, fx(function* () {
         events.push('child:start')
-        yield* andFinallyExit(TestScope, exit => fx(function* () {
+        yield* andFinallyIn(TestScope, exit => fx(function* () {
           events.push(`child:finalize:${exit.type}`)
         }))
         yield* sleep(100)

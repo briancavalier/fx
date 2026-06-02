@@ -1317,10 +1317,10 @@ describe('Fork', () => {
       assert.equal((result.arg as Error).cause, cause)
     })
 
-    it('leaves explicit cooperative fork failures caller-owned', async () => {
+    it('propagates unhandled explicit cooperative fork failures', async () => {
       const cause = new Error('unhandled cooperative fork failure')
 
-      const result = await all([fx(function* () {
+      await assert.rejects(all([fx(function* () {
         yield* fork(fx(function* () {
           yield* asyncValue(undefined)
           yield* fail(cause)
@@ -1329,12 +1329,17 @@ describe('Fork', () => {
         return 'done'
       })]).pipe(
         withCoopConcurrency(),
-        returnFail,
         runPromise
-      )
-
-      assert.ok(!Fail.is(result))
-      assert.deepEqual(result, ['done'])
+      ), e => {
+        const snapshot = snapshotError(e)
+        return snapshot.code === 'FX_UNHANDLED_FAILURE'
+          && snapshot.cause?.code === 'FX_UNHANDLED_FORK_FAILURE'
+          && snapshot.cause.cause?.code === 'FX_UNHANDLED_FAILURE'
+          && snapshot.cause.cause.cause?.message === cause.message
+          && (e as Error).cause instanceof Error
+          && ((e as Error).cause as Error).cause instanceof Error
+          && (((e as Error).cause as Error).cause as Error).cause === cause
+      })
     })
 
     it('interrupts explicit cooperative forks and runs scoped finalizers', async () => {

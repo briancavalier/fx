@@ -444,7 +444,10 @@ function* stepFiber(
     if (Fork.is(ir.value)) {
       fiber.resume = {
         type: 'next',
-        value: runtime.startFork(ir.value)
+        value: runtime.startFork(ir.value, error => {
+          if (fiber.status === 'done') return
+          callbacks.fail(error)
+        })
       }
       continue
     }

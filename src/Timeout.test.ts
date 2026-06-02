@@ -4,7 +4,7 @@ import { Fail, fail, returnFail } from './Fail.js'
 import { forkIn, withBoundedConcurrency, withUnboundedConcurrency } from './Concurrent.js'
 import { withCoopConcurrency } from './experimental/concurrent/cooperative.js'
 import { fx, ok, run, runPromise } from './Fx.js'
-import { andFinallyExit } from './Finalization.js'
+import { andFinallyIn } from './Finalization.js'
 import type { Fx } from './Fx.js'
 import { control } from './Handler.js'
 import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
@@ -109,7 +109,7 @@ describe('Timeout', () => {
     let completed = false
 
     const p = fx(function* () {
-      yield* andFinallyExit(TestScope, exit => fx(function* () {
+      yield* andFinallyIn(TestScope, exit => fx(function* () {
         exits.push(exit)
       }))
       yield* sleep(100)
@@ -129,7 +129,7 @@ describe('Timeout', () => {
 
     assert.equal(r, reason)
     assert.equal(completed, false)
-    assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope }])
+    assert.deepEqual(exits, [{ type: 'interrupted', scope: TestScope, reason }])
   })
 
   it('uses a trace-bearing TimeoutInterrupt as the default reason', async () => {
@@ -137,7 +137,7 @@ describe('Timeout', () => {
     let exit!: Exit
 
     const p = fx(function* () {
-      yield* andFinallyExit(TestScope, e => fx(function* () {
+      yield* andFinallyIn(TestScope, e => fx(function* () {
         exit = e
       }))
       yield* sleep(100)
@@ -161,7 +161,7 @@ describe('Timeout', () => {
     assert.match(reason.cause.stack ?? '', /Timeout\.test\.ts/)
     assert.deepEqual(traceMessages(reason).slice(0, 1), ['Timeout interrupted timeout after 50ms'])
     assert.equal(exit.type, 'interrupted')
-    assert.equal(exit.reason, undefined)
+    assert.equal(exit.reason, reason)
   })
 
   it('uses timeout label in private timeout traces', async () => {
@@ -213,7 +213,7 @@ describe('Timeout', () => {
     let settled = false
 
     const p = fx(function* () {
-      yield* andFinallyExit(TestScope, () => fx(function* () {
+      yield* andFinallyIn(TestScope, () => fx(function* () {
         events.push('cleanup:start')
         yield* sleep(25)
         events.push('cleanup:end')
@@ -276,7 +276,7 @@ describe('Timeout', () => {
     const p = fx(function* () {
       yield* timeoutIn(TestScope, { ms: 50, reason: () => reason })
       yield* forkIn(TestScope, fx(function* () {
-        yield* andFinallyExit(TestScope, exit => fx(function* () {
+        yield* andFinallyIn(TestScope, exit => fx(function* () {
           exits.push(exit)
         }))
         yield* sleep(100)
@@ -414,7 +414,7 @@ describe('Timeout', () => {
     const p = fx(function* () {
       yield* forkIn(TestScope, fx(function* () {
         events.push('child:start')
-        yield* andFinallyExit(TestScope, exit => fx(function* () {
+        yield* andFinallyIn(TestScope, exit => fx(function* () {
           events.push(`child:finalize:${exit.type}`)
         }))
         yield* sleep(100)

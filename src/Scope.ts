@@ -31,10 +31,30 @@ export interface Scope<Id extends PropertyKey = PropertyKey> extends ScopeIdenti
   readonly diagnostic?: boolean
 }
 
-export type AnyScope = Scope<PropertyKey>
+declare const LifetimeTypeId: unique symbol
+declare const ControlTypeId: unique symbol
+declare const CurrentScopeTypeId: unique symbol
+const CurrentScopeId = Symbol('fx/Scope/current')
 
-export function scope<Brand>(): <const Id extends PropertyKey>(id: Id, metadata?: ScopeMetadata) => Scope<Id> & Brand
-export function scope<const Id extends PropertyKey>(id: Id, metadata?: ScopeMetadata): Scope<Id>
+export type Lifetime = {
+  readonly [LifetimeTypeId]: true
+}
+
+export type Control = {
+  readonly [ControlTypeId]: true
+}
+
+export type AnyScope = Scope<PropertyKey>
+export type LifetimeScope<Id extends PropertyKey = PropertyKey> = Scope<Id> & Lifetime
+export type ControlScope<Id extends PropertyKey = PropertyKey> = Scope<Id> & Lifetime & Control
+export type AnyLifetimeScope = LifetimeScope<PropertyKey>
+export type AnyControlScope = ControlScope<PropertyKey>
+export type CurrentLifetimeScope = LifetimeScope<typeof CurrentScopeId> & {
+  readonly [CurrentScopeTypeId]: true
+}
+
+export function scope<Brand>(): <const Id extends PropertyKey>(id: Id, metadata?: ScopeMetadata) => Scope<Id> & Lifetime & Brand
+export function scope<const Id extends PropertyKey>(id: Id, metadata?: ScopeMetadata): Scope<Id> & Lifetime
 export function scope(id?: PropertyKey, metadata: ScopeMetadata = {}): any {
   if (id === undefined) return scope
   const token = { ...metadata }
@@ -96,7 +116,19 @@ export interface Interrupted<Scope extends AnyScope> {
   readonly reason?: unknown
 }
 
-export function withScope<const Scope extends AnyScope>(
+/**
+ * Logical nearest lifetime scope token.
+ *
+ * A `withScope(...)` handler treats lifetime effects addressed to this token as
+ * requests for that handler's own scope boundary. This token is not a captured
+ * snapshot: saving it and using it inside a nested `withScope(...)` targets the
+ * nested boundary.
+ */
+export const currentScope: CurrentLifetimeScope = scope<{
+  readonly [CurrentScopeTypeId]: true
+}>()(CurrentScopeId, { diagnostic: false })
+
+export function withScope<const Scope extends AnyLifetimeScope>(
   scope: Scope
 ): <const E, const A>(f: Fx<E, A>) => Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>> {
   return <const E, const A>(f: Fx<E, A>) => {
@@ -106,36 +138,44 @@ export function withScope<const Scope extends AnyScope>(
   }
 }
 
-export type ScopeEffects<E, Scope extends AnyScope> =
+export type ScopeEffects<E, Scope extends AnyLifetimeScope> =
   HandleScopeEffect<E, Scope> | ScopedForkEffects<E, Scope> | CleanupEffects<E, Scope> | CleanupFailure<E, Scope>
 
-type HandleScopeEffect<E, Scope extends AnyScope> =
-  E extends Finally<Scope, any> ? never
-  : E extends ReturnFrom<Scope, any> ? never
-  : E extends ScopedFork<Scope> ? never
+type HandleScopeEffect<E, Scope extends AnyLifetimeScope> =
+  E extends Finally<HandledScope<Scope>, any> ? never
+  : E extends ReturnFrom<ControlScopeOf<Scope>, any> ? never
+  : E extends ScopedFork<HandledScope<Scope>> ? never
+  : E extends InterruptFrom<CurrentLifetimeScope, infer Reason> ? InterruptFrom<Scope, Reason>
   : E
 
-type ScopedForkEffects<E, Scope extends AnyScope> =
-  E extends ScopedFork<Scope> ? Fork | Async | Fail<unknown> : never
+type ScopedForkEffects<E, Scope extends AnyLifetimeScope> =
+  E extends ScopedFork<HandledScope<Scope>> ? Fork | Async | Fail<unknown> : never
 
-type MatchingFinally<E, Scope extends AnyScope> =
-  Extract<E, Finally<Scope, any>>
+type MatchingFinally<E, Scope extends AnyLifetimeScope> =
+  Extract<E, Finally<HandledScope<Scope>, any>>
 
-type FinalizerEffects<E, Scope extends AnyScope> =
+type HandledScope<Scope extends AnyLifetimeScope> = Scope | CurrentLifetimeScope
+
+type ControlScopeOf<Scope extends AnyLifetimeScope> =
+  Scope extends AnyControlScope ? Scope : never
+
+type FinalizerEffects<E, Scope extends AnyLifetimeScope> =
   MatchingFinally<E, Scope> extends never
     ? never
-    : MatchingFinally<E, Scope> extends Finally<Scope, infer FE> ? FE : never
+    : MatchingFinally<E, Scope> extends Finally<HandledScope<Scope>, infer FE> ? FE : never
 
-type CleanupEffects<E, Scope extends AnyScope> =
+type CleanupEffects<E, Scope extends AnyLifetimeScope> =
   Exclude<FinalizerEffects<E, Scope>, Fail<any>>
 
-type CleanupFailure<E, Scope extends AnyScope> =
+type CleanupFailure<E, Scope extends AnyLifetimeScope> =
   MatchingFinally<E, Scope> extends never ? never : Fail<AggregateError>
 
 export type ReturnValue<E, Scope extends AnyScope> =
-  E extends ReturnFrom<Scope, infer A> ? A : never
+  E extends ReturnFrom<infer EffectScope extends AnyControlScope, infer A>
+    ? Extract<EffectScope, Scope> extends never ? never : A
+    : never
 
-class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pipeable, CapturedHandler {
+class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown, A>, Pipeable, CapturedHandler {
   public readonly pipe = pipeThis as Pipeable['pipe']
 
   private readonly controller?: ScopeController<Scope>
@@ -200,7 +240,13 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
       const cleanupFailures = allFailures.flatMap(cleanupFailuresOf)
       if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup(cleanupFailures))) as A
       if (finalExit.type === 'returnFrom') return finalExit.value as A
-      if (finalExit.type === 'abort') return (yield (Abort.is(unhandledEffect) ? unhandledEffect : new Abort(finalExit.scope, undefined))) as A
+      if (finalExit.type === 'abort') {
+        // Abort exits are only produced by Abort effects, whose public constructors require control scopes.
+        const abort = Abort.is(unhandledEffect)
+          ? unhandledEffect
+          : new Abort(finalExit.scope as unknown as AnyControlScope, undefined)
+        return (yield abort) as A
+      }
       if (finalExit.type === 'interrupted') {
         return (yield (InterruptFrom.is(unhandledEffect) ? unhandledEffect : new InterruptFrom(finalExit.scope, finalExit.reason))) as A
       }
@@ -212,11 +258,12 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
           const effect = ir.value
           const effectScope = (effect as { readonly scope?: AnyScope }).scope
           const matchesScope = effectScope !== undefined && sameScope(effectScope, scope)
+          const matchesLifetimeScope = matchesScope || (effectScope !== undefined && sameScope(effectScope, currentScope))
 
-          if (matchesScope && Finally.is(effect)) {
+          if (matchesLifetimeScope && Finally.is(effect)) {
             controller.addFinalizer(effect.arg)
             ir = i.next(undefined)
-          } else if (matchesScope && ScopedFork.is(effect)) {
+          } else if (matchesLifetimeScope && ScopedFork.is(effect)) {
             const task = yield* controller.fork(effect.arg)
             ir = i.next(task)
           } else if (matchesScope && ReturnFrom.is(effect)) {
@@ -233,13 +280,14 @@ class ScopeBoundary<E, A, Scope extends AnyScope> implements Fx<unknown, A>, Pip
               return undefined as A
             }
             return yield* finishRoot(exit, effect)
-          } else if (matchesScope && InterruptFrom.is(effect)) {
+          } else if (matchesLifetimeScope && InterruptFrom.is(effect)) {
             const exit = interruptedExit(scope, effect.arg)
+            const interrupt = matchesScope ? effect : new InterruptFrom(scope, effect.arg)
             if (!root) {
               controller.requestExit(exit)
               return undefined as A
             }
-            return yield* finishRoot(exit, effect)
+            return yield* finishRoot(exit, interrupt)
           } else if (Fail.is(effect)) {
             const exit = { type: 'failure', failure: effect } satisfies Exit
             if (!root) {
@@ -496,8 +544,9 @@ const interruptedExit = <Scope extends AnyScope>(scope: Scope, reason: unknown):
 
 const propagateRuntimeScopeExit = function* <A>(result: RuntimeScopeExit): Generator<unknown, A> {
   const exit = result.exit as Exit<AnyScope>
-  if (exit.type === 'returnFrom') return (yield new ReturnFrom(result.scope, exit.value)) as A
-  if (exit.type === 'abort') return (yield new Abort(result.scope, undefined)) as A
+  // Return/abort runtime exits originate from control effects before being transported across scope boundaries.
+  if (exit.type === 'returnFrom') return (yield new ReturnFrom(result.scope as unknown as AnyControlScope, exit.value)) as A
+  if (exit.type === 'abort') return (yield new Abort(result.scope as unknown as AnyControlScope, undefined)) as A
   if (exit.type === 'interrupted') return (yield new InterruptFrom(result.scope, exit.reason)) as A
   if (exit.type === 'failure') return (yield exit.failure) as A
   return exit.value as A

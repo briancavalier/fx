@@ -1,7 +1,7 @@
 import { all, firstSuccess, mapAll, type Fork } from '@briancavalier/fx/concurrent'
 import { Async, Effect, fail, type Fail, fx, type Fx, handle, type Interrupt, ok } from '@briancavalier/fx'
 
-import { managed, scope, using, usingManaged, type Finally, type Managed } from '@briancavalier/fx/scope'
+import { managed, scope, usingIn, usingManagedIn, type Finally, type Managed } from '@briancavalier/fx/scope'
 
 import { info, type Log } from '@briancavalier/fx/log'
 import { sleep, type Time } from '@briancavalier/fx/time'
@@ -124,7 +124,7 @@ export const fetchRuntimeStatus = (source: string) => new FetchRuntimeStatus(sou
 export const collectIncidentSnapshot = (
   request: SnapshotRequest
 ): Fx<IncidentCollectorEffects | Interrupt, SnapshotSummary> => fx(function* () {
-  const bundle = yield* usingManaged(BundleScope, openBundle(request.incidentId))
+  const bundle = yield* usingManagedIn(BundleScope, openBundle(request.incidentId))
   yield* info('snapshot started', { incidentId: request.incidentId, bundle: bundle.id })
 
   const [logs, _metrics, deploy, runtime] = yield* all([
@@ -303,8 +303,8 @@ const collectRuntime = (bundle: Bundle) => withCollector('runtime', fx(function*
 }))
 
 const withCollector = <E, A>(collector: CollectorName, program: Fx<E, A>): Fx<E | StartCollector | Log | Finally<typeof CollectorScope, Log> | Interrupt, A> => fx(function* () {
-  const name = yield* usingManaged(CollectorScope, startCollector(collector))
-  yield* using(
+  const name = yield* usingManagedIn(CollectorScope, startCollector(collector))
+  yield* usingIn(
     CollectorScope,
     ok(name),
     (name, exit) => info('collector finalized', { name, exit: exit.type })

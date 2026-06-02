@@ -6,7 +6,7 @@ import { Effect } from './Effect.js'
 import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { handle, handleScoped } from './Handler.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope, withScope } from './Scope.js'
+import { scope, withScope, type Control } from './Scope.js'
 import { next as nextSink, Sink } from './Sink.js'
 import type { Receiving } from './Sink.js'
 import {
@@ -151,7 +151,7 @@ describe('YieldFrom', () => {
   })
 
   it('allows ReturnFrom from a yield handler', () => {
-    const ReturnScope = scope('test/YieldFrom/return')
+    const ReturnScope = scope<Control>()('test/YieldFrom/return')
 
     const result = fx(function* () {
       yield* yieldFrom(ItemScope, 'item')
@@ -166,7 +166,7 @@ describe('YieldFrom', () => {
   })
 
   it('allows Abort from a yield handler', () => {
-    const AbortScope = scope('test/YieldFrom/abort')
+    const AbortScope = scope<Control>()('test/YieldFrom/abort')
 
     const result = fx(function* () {
       yield* yieldFrom(ItemScope, 'item')

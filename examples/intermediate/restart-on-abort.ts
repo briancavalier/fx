@@ -1,7 +1,7 @@
-import { abort, managed, orReturn, restartOnAbort, scope, usingManaged } from '@briancavalier/fx/scope'
+import { abort, managed, orReturn, restartOnAbort, scope, usingManagedIn, type Control } from '@briancavalier/fx/scope'
 import { assert as assertNoFail, consoleLog, defaultConsole, fx, run } from '@briancavalier/fx'
 
-const SubmitOrder = scope('examples/intermediate/restart-on-abort/SubmitOrder')
+const SubmitOrder = scope<Control>()('examples/intermediate/restart-on-abort/SubmitOrder')
 
 type AuthToken = {
   readonly value: string
@@ -52,7 +52,7 @@ const submitToGateway = (session: OrderSession) => fx(function* () {
 })
 
 const submitOrder = fx(function* () {
-  const session = yield* usingManaged(SubmitOrder, openOrderSession())
+  const session = yield* usingManagedIn(SubmitOrder, openOrderSession())
   return yield* submitToGateway(session)
 }).pipe(
   restartOnAbort(SubmitOrder, { restarts: 1 }),

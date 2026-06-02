@@ -5,14 +5,14 @@ import { Effect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { RaceAllFailed, all, withBoundedConcurrency, firstSuccess, fork, forkEach, forkIn, mapAll, race, withUnboundedConcurrency } from './Concurrent.js'
 import { withCoopConcurrency } from './experimental/concurrent/cooperative.js'
-import { andFinally, andFinallyExit } from './Finalization.js'
+import { andFinallyIn } from './Finalization.js'
 import { bracket, flatMap, fx, ok, runPromise, runTask, type Fx } from './Fx.js'
 import { control, handle } from './Handler.js'
 import { type HandlerCapture } from './HandlerCapture.js'
 import { interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible } from './Interrupt.js'
 import { ReturnFrom, returnFrom } from './ReturnFrom.js'
-import { scope, withScope, type Exit } from './Scope.js'
+import { scope, withScope, type Control, type Exit } from './Scope.js'
 import { Task, wait } from './Task.js'
 import { getTrace, snapshotError } from './Trace.js'
 
@@ -30,7 +30,7 @@ void noPublicMarkHandled
 describe('Fork', () => {
   describe('fork schedulers', () => {
     it('keeps public concurrency helper inference from degrading to any', () => {
-      const TestScope = scope('test/Fork/NoAnyInference')
+      const TestScope = scope<Control>()('test/Fork/NoAnyInference')
       const forked = fork(ok('value' as const))
       const forkedIn = forkIn(TestScope, ok('scoped' as const))
       const forkedEach = forkEach([ok(1), ok('two')] as const)
@@ -75,9 +75,9 @@ describe('Fork', () => {
     })
 
     it('keeps internal operator scope identities private from caller string scope ids', async () => {
-      const allScope = scope('fx/Concurrent/all/0')
-      const raceScope = scope('fx/Concurrent/race/0')
-      const firstSuccessScope = scope('fx/Concurrent/firstSuccess/0')
+      const allScope = scope<Control>()('fx/Concurrent/all/0')
+      const raceScope = scope<Control>()('fx/Concurrent/race/0')
+      const firstSuccessScope = scope<Control>()('fx/Concurrent/firstSuccess/0')
 
       const allProgram = all([fx(function* () {
         return yield* returnFrom(allScope, 'collided' as const)
@@ -462,7 +462,7 @@ describe('Fork', () => {
       const cause = new Error('all scope failed')
 
       const result = await all([fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           released.push('child')
         }))
         yield* fail(cause)
@@ -484,7 +484,7 @@ describe('Fork', () => {
       const cause = new Error('all failed')
 
       const slow = fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           released.push('slow')
         }))
         yield* awaitAbort()
@@ -512,7 +512,7 @@ describe('Fork', () => {
       const releaseFailure = new Error('release failed')
 
       const slow = fx(function* () {
-        yield* andFinally(TestScope, fail(releaseFailure))
+        yield* andFinallyIn(TestScope, fail(releaseFailure))
         yield* awaitAbort()
       })
       const bad = fx(function* () {
@@ -542,7 +542,7 @@ describe('Fork', () => {
       const secondReleaseFailure = new Error('second release failed')
 
       const slow = (releaseFailure: Error) => fx(function* () {
-        yield* andFinally(TestScope, fail(releaseFailure))
+        yield* andFinallyIn(TestScope, fail(releaseFailure))
         yield* awaitAbort()
       })
       const bad = fx(function* () {
@@ -1022,7 +1022,7 @@ describe('Fork', () => {
       const cause = new Error('cooperative all failed')
 
       const slow = fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           released.push('slow')
         }))
         yield* awaitAbort()
@@ -1049,7 +1049,7 @@ describe('Fork', () => {
       const events = [] as string[]
 
       const slow = fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           events.push('cleanup before')
           yield* all([fx(function* () {
             events.push('cleanup all child')
@@ -1083,7 +1083,7 @@ describe('Fork', () => {
       const events = [] as string[]
 
       const slow = fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           events.push('cleanup before')
           const task = yield* fork(fx(function* () {
             events.push('cleanup fork child')
@@ -1119,7 +1119,7 @@ describe('Fork', () => {
       const events = [] as string[]
 
       const slow = fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           events.push('cleanup before')
           const task = yield* fork(new CurrentValue())
           events.push(yield* wait(task))
@@ -1350,7 +1350,7 @@ describe('Fork', () => {
 
       const task = taskOrThrow(await fx(function* () {
         return yield* fork(fx(function* () {
-          yield* andFinallyExit(TestScope, exit => fx(function* () {
+          yield* andFinallyIn(TestScope, exit => fx(function* () {
             exits.push(exit)
           }))
           started()
@@ -1379,7 +1379,7 @@ describe('Fork', () => {
 
       const task = taskOrThrow(await fx(function* () {
         return yield* fork(fx(function* () {
-          yield* andFinallyExit(TestScope, exit => fx(function* () {
+          yield* andFinallyIn(TestScope, exit => fx(function* () {
             events.push(`finalize:${exit.type}`)
           }))
           events.push('before')
@@ -1521,7 +1521,7 @@ describe('Fork', () => {
       let releaseMasked!: () => void
 
       const masked = uninterruptible(fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           events.push('released')
         }))
         events.push('masked start')
@@ -1894,7 +1894,7 @@ describe('Fork', () => {
       let releaseMasked!: () => void
 
       const masked = uninterruptible(fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           events.push('released')
         }))
         events.push('masked start')
@@ -1938,7 +1938,7 @@ describe('Fork', () => {
       })
 
       const masked = uninterruptible(fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           events.push('release start')
           yield* assertPromise(() => cleanupReleased)
           events.push('release done')
@@ -1988,7 +1988,7 @@ describe('Fork', () => {
       let releaseMasked!: () => void
 
       const masked = uninterruptible(fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           yield* asyncValue(undefined)
           yield* fail(releaseFailure)
         }))
@@ -2088,7 +2088,7 @@ describe('Fork', () => {
       const released = [] as string[]
 
       const slow = fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           released.push('slow')
         }))
         yield* awaitAbort()
@@ -2110,7 +2110,7 @@ describe('Fork', () => {
       const releaseFailure = new Error('release failed')
 
       const slow = fx(function* () {
-        yield* andFinally(TestScope, fail(releaseFailure))
+        yield* andFinallyIn(TestScope, fail(releaseFailure))
         yield* awaitAbort()
       })
 
@@ -2194,7 +2194,7 @@ describe('Fork', () => {
       const releaseFailure = new Error('release failed')
 
       const slow = fx(function* () {
-        yield* andFinally(TestScope, fail(releaseFailure))
+        yield* andFinallyIn(TestScope, fail(releaseFailure))
         yield* awaitAbort()
       })
 
@@ -2281,7 +2281,7 @@ describe('Scope-owned fork lifetime', () => {
     const exits = [] as Exit[]
 
     const child = () => fx(function* () {
-      yield* andFinallyExit(TestScope, exit => fx(function* () {
+      yield* andFinallyIn(TestScope, exit => fx(function* () {
         exits.push(exit)
       }))
       yield* awaitAbort()
@@ -2309,7 +2309,7 @@ describe('Scope-owned fork lifetime', () => {
   })
 
   it('lets a forkIn child return from the owning scope and finalize siblings', async () => {
-    const RaceScope = scope('test/ForkIn/race-return')
+    const RaceScope = scope<Control>()('test/ForkIn/race-return')
     const events = [] as string[]
 
     const result = await fx(function* () {
@@ -2319,7 +2319,7 @@ describe('Scope-owned fork lifetime', () => {
       }))
 
       yield* forkIn(RaceScope, fx(function* () {
-        yield* andFinallyExit(RaceScope, exit => fx(function* () {
+        yield* andFinallyIn(RaceScope, exit => fx(function* () {
           events.push(exit.type)
         }))
         yield* awaitAbort()
@@ -2339,7 +2339,7 @@ describe('Scope-owned fork lifetime', () => {
   })
 
   it('propagates child returns to an outer owning scope while an inner scope is parked', async () => {
-    const OuterScope = scope('test/ForkIn/nested-outer-return')
+    const OuterScope = scope<Control>()('test/ForkIn/nested-outer-return')
     const InnerScope = scope('test/ForkIn/nested-inner-parked')
     const events = [] as string[]
 
@@ -2350,7 +2350,7 @@ describe('Scope-owned fork lifetime', () => {
       }))
 
       yield* fx(function* () {
-        yield* andFinally(InnerScope, fx(function* () {
+        yield* andFinallyIn(InnerScope, fx(function* () {
           events.push('inner cleanup')
         }))
         yield* awaitAbort()
@@ -2383,7 +2383,7 @@ describe('Scope-owned fork lifetime', () => {
       }))
 
       yield* forkIn(TestScope, fx(function* () {
-        yield* andFinallyExit(TestScope, exit => fx(function* () {
+        yield* andFinallyIn(TestScope, exit => fx(function* () {
           exits.push(exit)
         }))
         yield* awaitAbort()
@@ -2415,7 +2415,7 @@ describe('Scope-owned fork lifetime', () => {
       }))
 
       yield* forkIn(TestScope, fx(function* () {
-        yield* andFinallyExit(TestScope, exit => fx(function* () {
+        yield* andFinallyIn(TestScope, exit => fx(function* () {
           exits.push(exit.type)
         }))
         yield* awaitAbort()
@@ -2470,7 +2470,7 @@ describe('Scope-owned fork lifetime', () => {
       }))
 
       yield* forkIn(TestScope, fx(function* () {
-        yield* andFinally(TestScope, fail(cleanup))
+        yield* andFinallyIn(TestScope, fail(cleanup))
         yield* awaitAbort()
       }))
 
@@ -2596,7 +2596,7 @@ describe('Scope-owned fork lifetime', () => {
     const program = fx(function* () {
       const task = yield* forkIn(TestScope, fx(function* () {
         started()
-        yield* andFinallyExit(TestScope, exit => fx(function* () {
+        yield* andFinallyIn(TestScope, exit => fx(function* () {
           events.push(`finalize ${exit.type}`)
         }))
         yield* awaitAbort()
@@ -2643,7 +2643,7 @@ describe('Scope-owned fork lifetime', () => {
 
     const child = (label: string) => fx(function* () {
       events.push(`start ${label}`)
-      yield* andFinallyExit(TestScope, exit => fx(function* () {
+      yield* andFinallyIn(TestScope, exit => fx(function* () {
         events.push(`finalize ${label} ${exit.type}`)
       }))
       yield* awaitAbort()
@@ -2668,7 +2668,7 @@ describe('Scope-owned fork lifetime', () => {
   })
 
   it('preserves forkIn result and scoped return inference', () => {
-    const TestScope = scope('test/ForkIn/types')
+    const TestScope = scope<Control>()('test/ForkIn/types')
     const failedFork = forkIn(TestScope, fail('boom' as const))
     const program = fx(function* () {
       const task = yield* forkIn(TestScope, fx(function* () {
@@ -2692,7 +2692,7 @@ describe('Task interruption finalization', () => {
 
     const task = taskOrThrow(await fx(function* () {
       return yield* fork(fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           released.push('task')
         }))
         yield* awaitAbort()
@@ -2715,7 +2715,7 @@ describe('Task interruption finalization', () => {
 
     const task = taskOrThrow(await fx(function* () {
       return yield* fork(fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           released.push('task')
         }))
         yield* awaitAbort()
@@ -2739,7 +2739,7 @@ describe('Task interruption finalization', () => {
 
     const task = taskOrThrow(await fx(function* () {
       return yield* fork(fx(function* () {
-        yield* andFinallyExit(TestScope, exit => fx(function* () {
+        yield* andFinallyIn(TestScope, exit => fx(function* () {
           exits.push(exit)
         }))
         yield* awaitAbort()
@@ -2789,7 +2789,7 @@ describe('Task interruption finalization', () => {
 
     const task = taskOrThrow(await fx(function* () {
       return yield* fork(fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           yield* asyncValue(undefined)
           released.push('task')
         }))
@@ -2840,7 +2840,7 @@ describe('Task interruption finalization', () => {
 
     const task = taskOrThrow(await fx(function* () {
       return yield* fork(fx(function* () {
-        yield* andFinally(TestScope, fx(function* () {
+        yield* andFinallyIn(TestScope, fx(function* () {
           yield* asyncValue(undefined)
           released.push('scope')
         }))
@@ -2870,7 +2870,7 @@ describe('Task interruption finalization', () => {
     const releaseFailure = new Error('async release failed')
 
     const slow = fx(function* () {
-      yield* andFinally(TestScope, assertPromise(() => Promise.reject(releaseFailure)))
+      yield* andFinallyIn(TestScope, assertPromise(() => Promise.reject(releaseFailure)))
       yield* awaitAbort()
     })
 
@@ -2894,7 +2894,7 @@ describe('Task interruption finalization', () => {
     const innerFailure = new Error('inner release failed')
 
     const slow = fx(function* () {
-      yield* andFinally(TestScope, fail(scopeFailure))
+      yield* andFinallyIn(TestScope, fail(scopeFailure))
       yield* bracket(
         ok(undefined),
         () => fail(innerFailure),
@@ -2933,7 +2933,7 @@ describe('Task interruption finalization', () => {
     })
 
     const slow = fx(function* () {
-      yield* andFinally(TestScope, fail(scopeFailure))
+      yield* andFinallyIn(TestScope, fail(scopeFailure))
       yield* throwsOnReturn()
     })
 
@@ -2954,7 +2954,7 @@ describe('Task interruption finalization', () => {
     const TestScope = scope('test/Fork/InterruptedCleanupTypeError')
 
     const slow = fx(function* () {
-      yield* andFinally(TestScope, fx(function* () {
+      yield* andFinallyIn(TestScope, fx(function* () {
         const value = undefined as any
         return value.property
       }))
@@ -2983,7 +2983,7 @@ describe('Task interruption finalization', () => {
 
     const task = taskOrThrow(await fx(function* () {
       return yield* fork(fx(function* () {
-        yield* andFinally(TestScope, new Release())
+        yield* andFinallyIn(TestScope, new Release())
         yield* awaitAbort()
       }))
     }).pipe(
@@ -3008,7 +3008,7 @@ describe('Task interruption finalization', () => {
 
     const task = taskOrThrow(await fx(function* () {
       return yield* fork(fx(function* () {
-        yield* andFinally(TestScope, new Release())
+        yield* andFinallyIn(TestScope, new Release())
         yield* awaitAbort()
       }))
     }).pipe(

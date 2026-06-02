@@ -5,7 +5,7 @@ import { at } from './Breadcrumb.js'
 import { RaceAllFailed, all, firstSuccess, fork, forkIn, mapAll, race, withUnboundedConcurrency } from './Concurrent.js'
 import { withCoopConcurrency } from './experimental/concurrent/cooperative.js'
 import { Fail, fail, returnFail } from './Fail.js'
-import { andFinally } from './Finalization.js'
+import { andFinallyIn } from './Finalization.js'
 import { fx, runPromise } from './Fx.js'
 import { control } from './Handler.js'
 import { InterruptFrom } from './InterruptFrom.js'
@@ -614,7 +614,7 @@ describe('Trace', () => {
   it('captures active scopes for cleanup failures', async () => {
     const DbTransaction = scope('db/transaction')
     const f = fx(function* () {
-      yield* andFinally(DbTransaction, fail(new Error('cleanup scoped')))
+      yield* andFinallyIn(DbTransaction, fail(new Error('cleanup scoped')))
     }).pipe(withScope(DbTransaction))
 
     await assert.rejects(

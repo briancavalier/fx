@@ -1,7 +1,7 @@
 import { assert as assertNoFail, consoleLog, defaultConsole, fx, runPromise } from '@briancavalier/fx'
 import { race, withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 
-import { scope, withScope, using } from '@briancavalier/fx/scope'
+import { scope, withScope, usingIn } from '@briancavalier/fx/scope'
 
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 
@@ -12,7 +12,7 @@ import { defaultTime, sleep } from '@briancavalier/fx/time'
  * `race` interrupts the losing database branch and waits for its
  * scoped async finalizer before the program logs the result.
  *
- * The example shows exit-aware cleanup with `using`, named finalization
+ * The example shows exit-aware cleanup with `usingIn`, named finalization
  * with `scope`, and structured race cancellation.
  */
 
@@ -31,7 +31,7 @@ const fetchFromCache = fx(function* () {
 })
 
 const fetchFromDatabase = fx(function* () {
-  const connection = yield* using(
+  const connection = yield* usingIn(
     RequestScope,
     openConnection,
     (_, exit) => fx(function* () {

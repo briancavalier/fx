@@ -111,14 +111,14 @@ import {
   runPromise
 } from "@briancavalier/fx"
 import { withUnboundedConcurrency } from "@briancavalier/fx/concurrent"
-import { andFinallyExit, InterruptFrom, scope, withScope } from "@briancavalier/fx/scope"
+import { andFinallyIn, InterruptFrom, scope, withScope } from "@briancavalier/fx/scope"
 import { defaultTime, sleep } from "@briancavalier/fx/time"
 import { timeout, timeoutIn } from "@briancavalier/fx/timeout"
 
 const RequestScope = scope("request")
 
 const loadUser = fx(function* () {
-  yield* andFinallyExit(RequestScope, exit =>
+  yield* andFinallyIn(RequestScope, exit =>
     consoleLog(`request cleanup after ${exit.type}`)
   )
 

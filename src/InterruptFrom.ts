@@ -2,7 +2,7 @@ import { at } from './Breadcrumb.js'
 import { ScopedEffect, withOrigin } from './Effect.js'
 import { Fx } from './Fx.js'
 import { control } from './Handler.js'
-import type { AnyScope } from './Scope.js'
+import type { AnyLifetimeScope, AnyScope } from './Scope.js'
 import { sameScope } from './internal/scopeIdentity.js'
 
 /**
@@ -11,14 +11,14 @@ import { sameScope } from './internal/scopeIdentity.js'
 export class InterruptFrom<const Scope extends AnyScope, Reason = undefined>
   extends ScopedEffect('fx/InterruptFrom')<Scope, Reason, never> { }
 
-export function interruptFrom<const Scope extends AnyScope>(
+export function interruptFrom<const Scope extends AnyLifetimeScope>(
   scope: Scope
 ): Fx<InterruptFrom<Scope>, never>
-export function interruptFrom<const Scope extends AnyScope, const Reason>(
+export function interruptFrom<const Scope extends AnyLifetimeScope, const Reason>(
   scope: Scope,
   reason: Reason
 ): Fx<InterruptFrom<Scope, Reason>, never>
-export function interruptFrom(scope: AnyScope, reason?: unknown): Fx<InterruptFrom<AnyScope, unknown>, never> {
+export function interruptFrom(scope: AnyLifetimeScope, reason?: unknown): Fx<InterruptFrom<AnyLifetimeScope, unknown>, never> {
   return withOrigin(
     new InterruptFrom(scope, reason),
     at('fx/InterruptFrom/interruptFrom', interruptFrom)
@@ -32,28 +32,28 @@ export function interruptFrom(scope: AnyScope, reason?: unknown): Fx<InterruptFr
  * this boundary. It does not resume the interrupted computation. Interruptions
  * from other scopes are left visible for another handler.
  */
-export const recoverInterrupt = <const Scope extends AnyScope, const HandlerEffects, const R>(
+export const recoverInterrupt = <const Scope extends AnyLifetimeScope, const HandlerEffects, const R>(
   scope: Scope,
   handler: (reason: unknown) => Fx<HandlerEffects, R>
 ) => <const E, const A>(
   f: Fx<E, A>
 ): Fx<RecoverInterrupt<E, Scope, HandlerEffects>, A | R> =>
     f.pipe(
-      control(InterruptFrom, (_, interrupt): Fx<HandlerEffects | InterruptFrom<AnyScope, unknown>, R> =>
+      control(InterruptFrom, (_, interrupt): Fx<HandlerEffects | InterruptFrom<AnyLifetimeScope, unknown>, R> =>
         (sameScope(interrupt.scope, scope)
           ? handler(interrupt.arg)
-          : interrupt as Fx<InterruptFrom<AnyScope, unknown>, never>) as Fx<HandlerEffects | InterruptFrom<AnyScope, unknown>, R>)
+          : interrupt as Fx<InterruptFrom<AnyLifetimeScope, unknown>, never>) as Fx<HandlerEffects | InterruptFrom<AnyLifetimeScope, unknown>, R>)
     ) as Fx<RecoverInterrupt<E, Scope, HandlerEffects>, A | R>
 
-type RecoverInterrupt<E, Scope extends AnyScope, HandlerEffects> =
-  E extends InterruptFrom<infer EffectScope extends AnyScope, infer Reason>
+type RecoverInterrupt<E, Scope extends AnyLifetimeScope, HandlerEffects> =
+  E extends InterruptFrom<infer EffectScope extends AnyLifetimeScope, infer Reason>
   ? Extract<EffectScope, Scope> extends never
     ? E
     : HandlerEffects | ResidualInterrupt<E, Scope, Reason>
   : E
 
-type ResidualInterrupt<E, Scope extends AnyScope, Reason> =
-  E extends InterruptFrom<infer EffectScope extends AnyScope, Reason>
+type ResidualInterrupt<E, Scope extends AnyLifetimeScope, Reason> =
+  E extends InterruptFrom<infer EffectScope extends AnyLifetimeScope, Reason>
   ? Exclude<EffectScope, Scope> extends never
     ? never
     : InterruptFrom<Exclude<EffectScope, Scope>, Reason>

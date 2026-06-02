@@ -7,7 +7,7 @@ import { assertPromise } from '../src/Async.js'
 import { all, firstSuccess, fork, forkIn, race, withBoundedConcurrency, withCoopConcurrency, withUnboundedConcurrency } from '../src/Concurrent.js'
 import { Effect } from '../src/Effect.js'
 import { fail, returnFail } from '../src/Fail.js'
-import { andFinally } from '../src/Finalization.js'
+import { andFinallyIn } from '../src/Finalization.js'
 import { fx, ok, runPromise } from '../src/Fx.js'
 import { handle } from '../src/Handler.js'
 import { scope, withScope } from '../src/Scope.js'
@@ -352,7 +352,7 @@ function cleanupFailureProgram() {
   const primary = new Error('primary')
   const release = new Error('release')
   const slow = fx(function* () {
-    yield* andFinally(CleanupScope, fail(release))
+    yield* andFinallyIn(CleanupScope, fail(release))
     yield* assertPromise<void>(signal => new Promise(resolve => {
       signal.addEventListener('abort', () => resolve(), { once: true })
     }))

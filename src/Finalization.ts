@@ -2,7 +2,7 @@ import { ScopedEffect } from './Effect.js'
 import { Fx, fx } from './Fx.js'
 import { uninterruptible } from './Interrupt.js'
 import type { Interrupt } from './Interrupt.js'
-import type { AnyScope, Exit } from './Scope.js'
+import type { AnyLifetimeScope, Exit } from './Scope.js'
 
 // ----------------------------------------------------------------------
 // Guaranteed finalization effects within a named scope
@@ -26,14 +26,14 @@ export type Finalizer<E = unknown> = (exit: Exit) => Fx<E, void>
  * and runs registered finalizers when that scope succeeds, fails, returns,
  * aborts, or is interrupted.
  */
-export class Finally<const Scope extends AnyScope, E = never> extends ScopedEffect('fx/Finally')<Scope, Finalizer<E>, void> { }
+export class Finally<const Scope extends AnyLifetimeScope, E = never> extends ScopedEffect('fx/Finally')<Scope, Finalizer<E>, void> { }
 
 /**
  * Register a cleanup operation to run when the named scope exits.
  *
  * Use this when the finalizer does not need to inspect the scope exit.
  */
-export const andFinally = <const Scope extends AnyScope, E>(
+export const andFinally = <const Scope extends AnyLifetimeScope, E>(
   scope: Scope,
   f: Fx<E, void>
 ): Fx<Finally<Scope, E>, void> =>
@@ -45,7 +45,7 @@ export const andFinally = <const Scope extends AnyScope, E>(
  * Use this when cleanup behavior depends on whether the scope succeeded,
  * failed, returned, aborted, or was interrupted.
  */
-export const andFinallyExit = <const Scope extends AnyScope, E>(
+export const andFinallyExit = <const Scope extends AnyLifetimeScope, E>(
   scope: Scope,
   f: (exit: Exit) => Fx<E, void>
 ): Fx<Finally<Scope, E>, void> =>
@@ -57,7 +57,7 @@ export const andFinallyExit = <const Scope extends AnyScope, E>(
  * Acquisition and finalizer registration happen in an uninterruptible region so
  * an acquired resource is not left without cleanup.
  */
-export const using = <const Scope extends AnyScope, const IE, const FE, const R>(
+export const using = <const Scope extends AnyLifetimeScope, const IE, const FE, const R>(
   scope: Scope,
   initially: Fx<IE, R>,
   finally_: (r: R, exit: Exit) => Fx<FE, void>
@@ -85,7 +85,7 @@ export const managed = <const A, const E>(
  * Use this when acquisition naturally returns the value and its finalizer
  * together.
  */
-export const usingManaged = <const Scope extends AnyScope, const IE, const FE, const A>(
+export const usingManaged = <const Scope extends AnyLifetimeScope, const IE, const FE, const A>(
   scope: Scope,
   initially: Fx<IE, Managed<A, FE>>
 ): Fx<IE | Finally<Scope, FE> | Interrupt, A> => uninterruptible(fx(function* () {

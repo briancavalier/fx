@@ -11,7 +11,7 @@ import { type HandlerCapture } from './HandlerCapture.js'
 import { interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible } from './Interrupt.js'
 import { ReturnFrom, returnFrom } from './ReturnFrom.js'
-import { scope, withScope, type Exit } from './Scope.js'
+import { scope, withScope, type Control, type Exit } from './Scope.js'
 import { Task, wait } from './Task.js'
 import { getTrace, snapshotError } from './Trace.js'
 
@@ -29,7 +29,7 @@ void noPublicMarkHandled
 describe('Fork', () => {
   describe('fork schedulers', () => {
     it('keeps public concurrency helper inference from degrading to any', () => {
-      const TestScope = scope('test/Fork/NoAnyInference')
+      const TestScope = scope<Control>()('test/Fork/NoAnyInference')
       const forked = fork(ok('value' as const))
       const forkedIn = forkIn(TestScope, ok('scoped' as const))
       const forkedEach = forkEach([ok(1), ok('two')] as const)
@@ -74,9 +74,9 @@ describe('Fork', () => {
     })
 
     it('keeps internal operator scope identities private from caller string scope ids', async () => {
-      const allScope = scope('fx/Concurrent/all/0')
-      const raceScope = scope('fx/Concurrent/race/0')
-      const firstSuccessScope = scope('fx/Concurrent/firstSuccess/0')
+      const allScope = scope<Control>()('fx/Concurrent/all/0')
+      const raceScope = scope<Control>()('fx/Concurrent/race/0')
+      const firstSuccessScope = scope<Control>()('fx/Concurrent/firstSuccess/0')
 
       const allProgram = all([fx(function* () {
         return yield* returnFrom(allScope, 'collided' as const)
@@ -2130,7 +2130,7 @@ describe('Scope-owned fork lifetime', () => {
   })
 
   it('lets a forkIn child return from the owning scope and finalize siblings', async () => {
-    const RaceScope = scope('test/ForkIn/race-return')
+    const RaceScope = scope<Control>()('test/ForkIn/race-return')
     const events = [] as string[]
 
     const result = await fx(function* () {
@@ -2160,7 +2160,7 @@ describe('Scope-owned fork lifetime', () => {
   })
 
   it('propagates child returns to an outer owning scope while an inner scope is parked', async () => {
-    const OuterScope = scope('test/ForkIn/nested-outer-return')
+    const OuterScope = scope<Control>()('test/ForkIn/nested-outer-return')
     const InnerScope = scope('test/ForkIn/nested-inner-parked')
     const events = [] as string[]
 
@@ -2489,7 +2489,7 @@ describe('Scope-owned fork lifetime', () => {
   })
 
   it('preserves forkIn result and scoped return inference', () => {
-    const TestScope = scope('test/ForkIn/types')
+    const TestScope = scope<Control>()('test/ForkIn/types')
     const failedFork = forkIn(TestScope, fail('boom' as const))
     const program = fx(function* () {
       const task = yield* forkIn(TestScope, fx(function* () {

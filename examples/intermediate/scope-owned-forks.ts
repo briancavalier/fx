@@ -1,6 +1,6 @@
 import { assert as assertNoFail, consoleLog, defaultConsole, fx, runPromise } from '@briancavalier/fx'
 import { forkIn, withBoundedConcurrency } from '@briancavalier/fx/concurrent'
-import { andFinallyExit, recoverInterrupt, scope, withScope } from '@briancavalier/fx/scope'
+import { andFinallyExit, currentScope, recoverInterrupt, scope, withScope } from '@briancavalier/fx/scope'
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 import { timeoutIn } from '@briancavalier/fx/timeout'
 
@@ -9,7 +9,7 @@ const RequestScope = scope('examples/intermediate/scope-owned-forks', {
 })
 
 const child = (name: string, ms: number) => fx(function* () {
-  yield* andFinallyExit(RequestScope, exit =>
+  yield* andFinallyExit(currentScope, exit =>
     consoleLog(`${name}: cleanup after ${exit.type}`)
   )
 
@@ -20,9 +20,9 @@ const child = (name: string, ms: number) => fx(function* () {
 })
 
 const request = fx(function* () {
-  yield* timeoutIn(RequestScope, { ms: 35, label: 'request deadline' })
-  yield* forkIn(RequestScope, child('fast-cache-refresh', 20))
-  yield* forkIn(RequestScope, child('slow-profile-load', 80))
+  yield* timeoutIn(currentScope, { ms: 35, label: 'request deadline' })
+  yield* forkIn(currentScope, child('fast-cache-refresh', 20))
+  yield* forkIn(currentScope, child('slow-profile-load', 80))
   yield* consoleLog('request: children forked')
   return 'accepted'
 })

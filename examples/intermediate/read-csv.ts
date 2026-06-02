@@ -1,8 +1,8 @@
 import { assert as assertNoFail, type Console, consoleLog, defaultConsole, fx, type Fx, handleScoped, run } from '@briancavalier/fx'
 
-import { managed, returnFrom, scope, withScope, usingManaged, yieldFrom, YieldFrom, type Yielding } from '@briancavalier/fx/scope'
+import { managed, returnFrom, scope, withScope, usingManaged, yieldFrom, YieldFrom, type Control, type Yielding } from '@briancavalier/fx/scope'
 
-const ImportCsv = scope('examples/intermediate/ImportCsv')
+const ImportCsv = scope<Control>()('examples/intermediate/ImportCsv')
 
 type ImportResult =
   | { readonly type: 'imported'; readonly count: number }

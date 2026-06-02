@@ -476,6 +476,8 @@ function* stepFiber(
     }
 
     if (HandlerCapture.is(ir.value)) {
+      // This scheduler boundary has no outer handlers to add. Active handler
+      // frames prepend themselves as the capture request unwinds back inward.
       fiber.resume = { type: 'next', value: [] }
       continue
     }

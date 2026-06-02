@@ -8,7 +8,7 @@ import { withCoopConcurrency } from './experimental/concurrent/cooperative.js'
 import { andFinallyIn } from './Finalization.js'
 import { bracket, flatMap, fx, ok, runPromise, runTask, type Fx } from './Fx.js'
 import { control, handle } from './Handler.js'
-import { type HandlerCapture } from './HandlerCapture.js'
+import { captureHandlers, withHandlerContext, type HandlerCapture } from './HandlerCapture.js'
 import { interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible } from './Interrupt.js'
 import { ReturnFrom, returnFrom } from './ReturnFrom.js'
@@ -1236,6 +1236,25 @@ describe('Fork', () => {
         return yield* wait(task)
       }).pipe(
         handle(CurrentValue, () => ok('handled')),
+        withCoopConcurrency(),
+        runPromise
+      )
+
+      assert.equal(result, 'handled')
+    })
+
+    it('preserves handler capture inside explicit cooperative forks', async () => {
+      class CurrentValue extends Effect('test/Fork/CooperativeForkCapturedCurrentValue')<void, string> { }
+
+      const result = await fx(function* () {
+        const task = yield* fork(fx(function* () {
+          const handlers = yield* captureHandlers('fx/Concurrent/Fork')
+          return yield* withHandlerContext(handlers, new CurrentValue()) as Fx<never, string>
+        }).pipe(
+          handle(CurrentValue, () => ok('handled'))
+        ))
+        return yield* wait(task)
+      }).pipe(
         withCoopConcurrency(),
         runPromise
       )

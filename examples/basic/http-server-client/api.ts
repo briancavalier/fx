@@ -2,6 +2,8 @@ import { Effect, fx, type Fx, get, handle, map, ok } from '@briancavalier/fx'
 
 import { bytes as readBytes } from '@briancavalier/fx/http-client'
 import { mount, provideRoutesFrom, route, routes, type RouteContext, type ServerRequest, type ServerResponse } from '@briancavalier/fx/http-server'
+import { info } from '@briancavalier/fx/log'
+import { using, type Exit } from '@briancavalier/fx/scope'
 
 export type Note = {
   readonly id: string
@@ -23,6 +25,12 @@ type UserContext = {
   readonly user: User
 }
 
+type RequestAudit = {
+  readonly method: string
+  readonly path: string
+  readonly userId: string
+}
+
 const userContext = fx(function* ({ request }: RouteContext) {
   return {
     user: fakeAuthenticate(request)
@@ -33,6 +41,8 @@ const healthRoutes = route('GET', '/health', ok(text('ok')))
 
 const noteRoutes = provideRoutesFrom(userContext)(routes(
   route('GET', '/notes', fx(function* ({ user }: UserContext) {
+    yield* requestAudit(user)
+
     return json({
       user,
       notes: yield* listNotes
@@ -40,6 +50,8 @@ const noteRoutes = provideRoutesFrom(userContext)(routes(
   })),
 
   route('POST', '/notes', fx(function* ({ user }: UserContext) {
+    yield* requestAudit(user)
+
     const { request: req } = yield* get<RouteContext>()
     const note = yield* createNote(`${user.name}: ${(yield* readText(req)).trim()}`)
     return json({ user, note }, 201)
@@ -88,6 +100,32 @@ function readText(request: ServerRequest) {
     map((bytes: Uint8Array) => new TextDecoder().decode(bytes))
   )
 }
+
+const requestAudit = (user: User) => fx(function* () {
+  const { request } = yield* get<RouteContext>()
+
+  return yield* using(
+    openRequestAudit(request, user),
+    closeRequestAudit
+  )
+})
+
+const openRequestAudit = (request: ServerRequest, user: User) => fx(function* () {
+  const audit = {
+    method: request.method,
+    path: request.path,
+    userId: user.id
+  }
+
+  yield* info('Request scope opened', audit)
+  return audit
+})
+
+const closeRequestAudit = (audit: RequestAudit, exit: Exit) =>
+  info('Request scope finalized', {
+    ...audit,
+    exit: exit.type
+  })
 
 function fakeAuthenticate(request: ServerRequest): User {
   const id = request.headers.find(([name]) => name.toLowerCase() === 'x-user-id')?.[1] ?? 'demo-user'

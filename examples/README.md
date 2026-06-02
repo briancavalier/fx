@@ -13,7 +13,7 @@ Use the smallest example that demonstrates the task:
 | --- | --- | --- |
 | Minimal runnable program | `basic/hello.ts` | Shows one effect, one handler, and `run` without extra structure. |
 | Custom domain effects and pure tests | `basic/guessing-game` | Shows business logic written against effects and interpreted by handlers. |
-| HTTP boundary code | `basic/http-server-client` | Shows routes, request context, client/server boundaries, and in-memory handlers. |
+| HTTP boundary code | `basic/http-server-client` | Shows routes, request context, request-scope cleanup, client/server boundaries, and in-memory handlers. |
 | Concurrency operators and schedulers | `intermediate/concurrency-handlers.ts` | Shows race operators and scheduler handlers. |
 | Scope-owned fork lifetime | `intermediate/scope-owned-forks.ts` | Shows scoped fork lifetime, a scope deadline, and scheduler handler ordering. |
 | Interruption and cleanup | `intermediate/interrupt-safe-finalization.ts` | Shows cancellation, named scopes, and async finalizers. |
@@ -32,7 +32,7 @@ already matches the requested pattern.
 | --- | --- | --- | --- |
 | `basic/hello.ts` | A minimal `Fx` program, console effect, handler, and `run`. | First-time readers who want the smallest runnable example. | `node --import tsx examples/basic/hello.ts` |
 | `basic/guessing-game` | Custom effects, handler composition, environment input, pure handlers, and tests. | Readers learning how business logic stays independent from interpreters. | `node --import tsx examples/basic/guessing-game/index.ts` |
-| `basic/http-server-client` | Small HTTP API routes, server/client boundaries, route context, and in-memory handlers. | Readers who want a compact platform-boundary example. | `node --import tsx examples/basic/http-server-client/server.ts` |
+| `basic/http-server-client` | Small HTTP API routes, server/client boundaries, route context, request-scope cleanup, and in-memory handlers. | Readers who want a compact platform-boundary example. | `node --import tsx examples/basic/http-server-client/server.ts` |
 
 ## Intermediate
 

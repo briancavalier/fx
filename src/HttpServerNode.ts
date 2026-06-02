@@ -229,8 +229,9 @@ const runNodeRequest = async <E>(
     yield* writeNodeResponse(outgoing, response)
   })
 
-  const task = withHandlerContext(context, program as Fx<unknown, void>).pipe(
+  const task = program.pipe(
     withScope(requestScope),
+    f => withHandlerContext(context, f as Fx<unknown, void>),
     catchAll(cause => {
       failure = { error: cause }
       return outgoing.destroyed

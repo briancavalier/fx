@@ -23,7 +23,7 @@ Prefer a pipe-friendly companion to `bracket`:
 
 ```ts
 export const finalizing =
-  <const FE>(finally_: Fx<FE, void> | ((exit: Exit) => Fx<FE, void>)) =>
+  <const FE>(finally_: Fx<FE, void>) =>
     <const E, const A>(fx: Fx<E, A>): Fx<E | FE | Interrupt, A> =>
       ...
 ```
@@ -33,14 +33,6 @@ Usage:
 ```ts
 program.pipe(
   finalizing(cleanup)
-)
-```
-
-or, when cleanup depends on the exit:
-
-```ts
-program.pipe(
-  finalizing(exit => recordExit(exit))
 )
 ```
 
@@ -55,12 +47,13 @@ lexical region exits:
 
 - after success
 - after failure
-- after early return or scope abort if those are represented in the program exit
 - after interruption
 - when iterator return cleanup is required
 
 The finalizer runs after the protected program exits and before the lexical
-finalizing region returns to its caller.
+finalizing region returns to its caller. The first version should be
+exit-agnostic: cleanup runs regardless of why the region exits, but the cleanup
+function does not receive an exit value.
 
 Handlers around the lexical combinator apply naturally to both the protected
 program and the cleanup because both are part of the same explicit dynamic
@@ -131,15 +124,14 @@ For a simple cleanup:
 finalizing(cleanup: Fx<FE, void>)(program: Fx<E, A>): Fx<E | FE | Interrupt, A>
 ```
 
-For exit-aware cleanup:
-
-```ts
-finalizing(cleanup: (exit: Exit) => Fx<FE, void>)(program: Fx<E, A>): Fx<E | FE | Interrupt, A>
-```
-
 Cleanup `Fail<E>` should follow the same policy as `bracket` initially. If
 lexical cleanup failure aggregation becomes necessary, it should be handled as a
 separate consistency pass across `bracket` and `finalizing`.
+
+Exit-aware lexical cleanup is intentionally out of scope for the first version.
+Classifying `Fail`, `Abort`, `ReturnFrom`, interruption, and hard JS throws for
+lexical cleanup needs a separate design with a deliberately defined lexical exit
+model.
 
 ## Tests
 
@@ -148,7 +140,6 @@ Add focused tests alongside `bracket` / interruption tests:
 - runs cleanup after success
 - runs cleanup after failure
 - runs cleanup after interruption
-- provides the exit to exit-aware cleanup
 - runs cleanup exactly once
 - handlers around `finalizing(...)` handle cleanup effects
 - handlers inside `program` do not accidentally become registration-site

@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { Effect, fx, ScopedEffect, type Fx } from '@briancavalier/fx'
+import { Effect, finalizing, fx, ScopedEffect, type Fx } from '@briancavalier/fx'
 import * as concurrentApi from '@briancavalier/fx/concurrent'
 import * as scopeApi from '@briancavalier/fx/scope'
 import * as timeoutApi from '@briancavalier/fx/timeout'
@@ -49,6 +49,7 @@ describe('package import inference', () => {
     assert.equal(typeof usingIn, 'function')
     assert.equal(typeof usingManaged, 'function')
     assert.equal(typeof usingManagedIn, 'function')
+    assert.equal(typeof finalizing, 'function')
 
     assert.equal(typeof timeout, 'function')
     assert.equal(typeof timeoutIn, 'function')
@@ -61,6 +62,7 @@ describe('package import inference', () => {
     const noFirstSettledPolicy: HasExport<typeof concurrentApi, `first${'Settled'}Policy`> = false
     const noFirstSuccessPolicy: HasExport<typeof concurrentApi, `first${'Success'}Policy`> = false
     const noScopeTypeId: HasExport<typeof scopeApi, `Scope${'Type'}Id`> = false
+    const noScopeFinalizing: HasExport<typeof scopeApi, `final${'izing'}`> = false
     const noTimeoutInScope: HasExport<typeof timeoutApi, `timeout${'In'}Scope`> = false
     assert.equal(noConcurrentEffect, false)
     assert.equal(noConcurrentConstructor, false)
@@ -69,6 +71,7 @@ describe('package import inference', () => {
     assert.equal(noFirstSettledPolicy, false)
     assert.equal(noFirstSuccessPolicy, false)
     assert.equal(noScopeTypeId, false)
+    assert.equal(noScopeFinalizing, false)
     assert.equal(noTimeoutInScope, false)
   })
 

@@ -5,7 +5,7 @@ import { Effect } from './Effect.js'
 import { fail, Fail, returnFail } from './Fail.js'
 import { race, withUnboundedConcurrency } from './Concurrent.js'
 import { andFinallyIn, managed, usingIn, usingManagedIn } from './Finalization.js'
-import { bracket, fx, ok, run, runPromise, runTask, type Fx } from './Fx.js'
+import { bracket, finalizing, fx, ok, run, runPromise, runTask, type Fx } from './Fx.js'
 import { control, handle } from './Handler.js'
 import { InterruptFrom, interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible, uninterruptibleMask, type Interrupt, type RestoreInterrupt } from './Interrupt.js'
@@ -316,6 +316,123 @@ describe('Interrupt masking', () => {
     await interrupted
 
     assert.deepEqual(released, ['resource'])
+  })
+
+  it('finalizing runs cleanup after success and preserves the result', () => {
+    const released = [] as string[]
+
+    const program = ok('value').pipe(finalizing(fx(function* () {
+      released.push('cleanup')
+    })))
+
+    const _: Fx<Interrupt, 'value'> = program
+    void _
+
+    assert.equal(run(program), 'value')
+    assert.deepEqual(released, ['cleanup'])
+  })
+
+  it('finalizing runs cleanup after failure', () => {
+    class Cleanup extends Effect('test/Interrupt/finalizing/Cleanup')<string, void> { }
+    const failure = new Error('failed')
+    const released = [] as string[]
+
+    const program = fail(failure).pipe(finalizing(new Cleanup('cleanup')))
+
+    const _: Fx<Fail<Error> | Cleanup | Interrupt, never> = program
+    void _
+
+    const result = program.pipe(
+      handle(Cleanup, effect => ok(void released.push(effect.arg))),
+      returnFail,
+      run
+    )
+
+    assert.equal(result.arg, failure)
+    assert.deepEqual(released, ['cleanup'])
+  })
+
+  it('finalizing runs cleanup exactly once', () => {
+    let released = 0
+
+    ok('value').pipe(
+      finalizing(fx(function* () {
+        released += 1
+      })),
+      run
+    )
+
+    assert.equal(released, 1)
+  })
+
+  it('finalizing runs cleanup when interrupted', async () => {
+    const released = [] as string[]
+    let started = false
+
+    const task = assertPromise<void>(() => new Promise(() => {
+      started = true
+    })).pipe(
+      finalizing(fx(function* () {
+        released.push('cleanup')
+      })),
+      runTask
+    )
+
+    await eventually(() => started)
+    await task.interrupt()
+
+    assert.deepEqual(released, ['cleanup'])
+  })
+
+  it('finalizing drains async cleanup effects during interruption', async () => {
+    const released = [] as string[]
+    let started = false
+
+    const task = assertPromise<void>(() => new Promise(() => {
+      started = true
+    })).pipe(
+      finalizing(fx(function* () {
+        yield* assertPromise(() => Promise.resolve())
+        released.push('cleanup')
+      })),
+      runTask
+    )
+
+    await eventually(() => started)
+    await task.interrupt()
+
+    assert.deepEqual(released, ['cleanup'])
+  })
+
+  it('finalizing cleanup effects are handled by handlers around the lexical region', () => {
+    class Request extends Effect('test/Interrupt/finalizing/Request')<string, void> { }
+    const handled = [] as string[]
+
+    fx(function* () {
+      yield* new Request('program')
+      return 'value'
+    }).pipe(
+      finalizing(new Request('cleanup')),
+      handle(Request, effect => ok(void handled.push(effect.arg))),
+      run
+    )
+
+    assert.deepEqual(handled, ['program', 'cleanup'])
+  })
+
+  it('finalizing cleanup is not handled by handlers inside the protected program', () => {
+    class Request<A> extends Effect('test/Interrupt/finalizing/InnerRequest')<string, A> { }
+    const handled = [] as string[]
+
+    const result = new Request<string>('program').pipe(
+      handle(Request, effect => ok(`inner:${effect.arg}`)),
+      finalizing(new Request<void>('cleanup')),
+      handle(Request, effect => ok(void handled.push(`outer:${effect.arg}`))),
+      run
+    )
+
+    assert.equal(result, 'inner:program')
+    assert.deepEqual(handled, ['outer:cleanup'])
   })
 
   it('restore re-enables interruption inside uninterruptibleMask', async () => {

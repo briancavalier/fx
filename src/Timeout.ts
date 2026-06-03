@@ -4,7 +4,7 @@ import { Fork, forkIn } from './Concurrent.js'
 import { Fail, catchAll, fail } from './Fail.js'
 import { Finally, andFinallyIn } from './Finalization.js'
 import { Fx, flatMap, fx, map, ok } from './Fx.js'
-import { withCapturedHandlers, type HandlerCapture } from './HandlerCapture.js'
+import type { HandlerCapture } from './HandlerCapture.js'
 import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
 import { scope, scopeLabel, withScope, type AnyLifetimeScope, type Exit } from './Scope.js'
 import { wait } from './Task.js'
@@ -73,11 +73,14 @@ function timeoutInWithTrace<const Scope extends AnyLifetimeScope, const Options 
   const trace = traceOrigin.trace
   const reasonOrigin = traceOrigin.origin
   return fx(function* () {
-    const task = yield* withCapturedHandlers('fx/Concurrent/ForkIn', sleep(options.ms).pipe(
+    const task = yield* new ScopedFork(scope, {
+      fx: sleep(options.ms).pipe(
       flatMap(() => interruptFrom(scope, makeTimeoutReason(options, { ms: options.ms, origin: reasonOrigin, trace })))
-    )).pipe(
-      flatMap(fx => new ScopedFork(scope, { fx, ...traceOrigin, daemon: true, scheduling: 'unmetered' }))
-    )
+      ),
+      ...traceOrigin,
+      daemon: true,
+      scheduling: 'unmetered'
+    })
     yield* andFinallyIn(scope, exit => assertPromise(() => task.interrupt(exitReason(exit))))
   })
 }

@@ -4,6 +4,7 @@ import { HandlerCapture, type CapturedHandler } from '../HandlerCapture.js'
 import { drainIteratorReturn } from './iteratorClose.js'
 import { Pipeable, pipeThis } from './pipe.js'
 import { getRuntimeContext, withActiveRuntimeContext, withRuntimeContext } from './runtimeContext.js'
+import { ScopedHandlerCapture } from './scopedHandlerCapture.js'
 
 export type Answer<E extends EffectType> = InstanceType<E>['R']
 export type Arg<E extends EffectType> = InstanceType<E>['arg']
@@ -35,7 +36,17 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, CapturedHandler {
               ? handler(effect)
               : withActiveRuntimeContext(context, () => handler(effect))
             ir = i.next(yield* withRuntimeContext(context, handled) as any)
-          } else if (effect._fxEffectId === HandlerCapture._fxEffectId) {
+          } else if (effect._fxEffectId === 'fx/Scope/ScopedFork') {
+            captured ??= {
+              wrap: fx => new Handler(fx, effectId, handler)
+            }
+            const scoped = effect as any
+            const capturedHandler = captured
+            ir = i.next(yield cloneScopedEffect(scoped, {
+              ...scoped.arg,
+              fx: capturedHandler.wrap(scoped.arg.fx)
+            }) as any)
+          } else if (effect._fxEffectId === HandlerCapture._fxEffectId || effect._fxEffectId === ScopedHandlerCapture._fxEffectId) {
             captured ??= {
               wrap: fx => new Handler(fx, effectId, handler)
             }
@@ -62,6 +73,9 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, CapturedHandler {
     }
   }
 }
+
+const cloneScopedEffect = (effect: any, arg: unknown) =>
+  new effect.constructor(effect.scope, arg)
 
 export class Control<E, A> implements Fx<E, A>, Pipeable {
   public readonly pipe = pipeThis as Pipeable['pipe']

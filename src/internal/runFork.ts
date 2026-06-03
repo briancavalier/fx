@@ -16,6 +16,7 @@ import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './inte
 import { isInterruptedReturn, withInterpretedReturn } from './iteratorClose.js'
 import type { RuntimeContext } from './runtimeContext.js'
 import { currentRuntimeContext, getRuntimeContext, runtimeScopeExit, RuntimeScopeExit, withActiveRuntimeContext, withInterruptionReason } from './runtimeContext.js'
+import { ScopedHandlerCapture } from './scopedHandlerCapture.js'
 
 export type RunForkOptions = TraceOptions & {
   readonly maxConcurrency?: number
@@ -211,6 +212,8 @@ const runIterator = async <const E, const A>(
           })
         })
       ir = resumeWithRuntimeContext(i, effectContext, t)
+    } else if (ScopedHandlerCapture.is(ir.value) && ir.value.arg.type === 'root') {
+      ir = resumeWithRuntimeContext(i, runtimeContext, context)
     } else if (HandlerCapture.is(ir.value)) {
       ir = resumeWithRuntimeContext(i, runtimeContext, context)
     } else if (InterruptMaskBegin.is(ir.value)) {

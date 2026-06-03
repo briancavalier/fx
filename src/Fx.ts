@@ -11,6 +11,7 @@ import * as generator from './internal/generator.js'
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './internal/interrupt.js'
 import { Pipeable } from './internal/pipe.js'
 import { RunForkOptions, runFork } from './internal/runFork.js'
+import { ScopedHandlerCapture } from './internal/scopedHandlerCapture.js'
 import { TrySync } from './internal/sync.js'
 
 /**
@@ -165,7 +166,12 @@ export const run = <const R>(f: Fx<Interrupt, R>): R =>
         } else if (InterruptMaskEnd.is(ir.value)) {
           masks.unmask(ir.value.arg)
           ir = i.next()
-        } else if (isEffect(ir.value)) {
+        } else if (isEffect(ir.value as unknown)) {
+          const effect = ir.value as any
+          if (effect._fxEffectId === ScopedHandlerCapture._fxEffectId && effect.arg.type === 'root') {
+            ir = i.next([])
+            continue
+          }
           throw new Error('Unhandled effect in run')
         } else {
           throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)

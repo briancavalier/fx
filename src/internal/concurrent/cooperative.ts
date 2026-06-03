@@ -13,6 +13,7 @@ import { ForkError, capturePrependTraceWithContext, originOfUnhandledFail, runti
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from '../interrupt.js'
 import { withInterpretedReturn } from '../iteratorClose.js'
 import { attachRuntimeContext, currentRuntimeContext, getRuntimeContext, runtimeScopeExit, RuntimeScopeExit, withActiveRuntimeContext } from '../runtimeContext.js'
+import { ScopedHandlerCapture } from '../scopedHandlerCapture.js'
 import { shouldReleaseSlotForAsync } from './cooperativeAsync.js'
 
 export interface CooperativeConfig {
@@ -372,7 +373,7 @@ function* stepFiber(
       continue
     }
 
-    if (HandlerCapture.is(ir.value)) {
+    if (HandlerCapture.is(ir.value) || ScopedHandlerCapture.is(ir.value)) {
       fiber.resume = { type: 'next', value: yield ir.value as any }
       fiber.releaseSlotBeforeResume = true
       continue
@@ -421,7 +422,7 @@ function* closeFiber(
       } else if (InterruptMaskEnd.is(ir.value)) {
         fiber.masks.unmask(ir.value.arg)
         ir = iterator.next()
-      } else if (HandlerCapture.is(ir.value)) {
+      } else if (HandlerCapture.is(ir.value) || ScopedHandlerCapture.is(ir.value)) {
         const releaseSlotBeforeResume = fiber.slotAcquired
         if (releaseSlotBeforeResume) runtime.releaseSlot(fiber)
         try {

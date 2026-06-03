@@ -93,9 +93,7 @@ export const forkIn = <const Scope extends AnyLifetimeScope, const E, const A>(
   options?: ForkOptions
 ): Fx<Exclude<E, Async | Fail<any>> | ScopedFork<Scope> | HandlerCapture<'fx/Concurrent/ForkIn'>, Task<A, ErrorsOf<E>>> => {
   const trace = traceOrigin(options, 'fx/Concurrent/forkIn', forkIn, 'fork')
-  return withCapturedHandlers('fx/Concurrent/ForkIn', f).pipe(
-    flatMap(fx => new ScopedFork(scope, { fx, ...trace, scheduling: options?.scheduling }) as Fx<ScopedFork<Scope>, Task<A, ErrorsOf<E>>>)
-  )
+  return new ScopedFork(scope, { fx: f, ...trace, scheduling: options?.scheduling }) as Fx<ScopedFork<Scope>, Task<A, ErrorsOf<E>>>
 }
 
 /**
@@ -216,9 +214,7 @@ const forkInScoped = <const Scope extends AnyLifetimeScope, const E, const A>(
   trace: TraceOrigin,
   failure: ScopedForkContext['failure']
 ): Fx<Exclude<E, Async | Fail<any>> | ScopedFork<Scope> | HandlerCapture<'fx/Concurrent/ForkIn'>, Task<A, ErrorsOf<E>>> =>
-    withCapturedHandlers('fx/Concurrent/ForkIn', f).pipe(
-      flatMap(fx => new ScopedFork(scope, { fx, ...trace, failure }) as Fx<ScopedFork<Scope>, Task<A, ErrorsOf<E>>>)
-    )
+    new ScopedFork(scope, { fx: f, ...trace, failure }) as Fx<ScopedFork<Scope>, Task<A, ErrorsOf<E>>>
 
 const childFrameKind = (trace: Trace | undefined) =>
   trace?.frame.kind === 'all' || trace?.frame.kind === 'race' ? trace.frame.kind : 'fork'

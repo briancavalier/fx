@@ -11,7 +11,7 @@ import { type HandlerCapture } from './HandlerCapture.js'
 import { interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible } from './Interrupt.js'
 import { ReturnFrom, returnFrom } from './ReturnFrom.js'
-import { scope, withScope, type Control, type Exit } from './Scope.js'
+import { currentScope, scope, withScope, type Control, type Exit } from './Scope.js'
 import { Task, wait } from './Task.js'
 import { getTrace, snapshotError } from './Trace.js'
 
@@ -2190,6 +2190,60 @@ describe('Scope-owned fork lifetime', () => {
     assert.ok(!Fail.is(result))
     assert.equal(result, 'outer')
     assert.deepEqual(events, ['inner cleanup'])
+  })
+
+  it('runs forkIn current-scope children through handlers captured at the registration site', async () => {
+    const TestScope = scope('test/ForkIn/current-scope-captured-handler')
+    class CurrentValue extends Effect('test/ForkIn/CurrentScopeCapturedHandler')<void, string> { }
+
+    const result = await fx(function* () {
+      const task = yield* fx(function* () {
+        return yield* forkIn(currentScope, new CurrentValue())
+      }).pipe(
+        handle(CurrentValue, () => ok('local'))
+      )
+      return yield* wait(task)
+    }).pipe(
+      withScope(TestScope),
+      withUnboundedConcurrency,
+      returnFail,
+      runPromise
+    )
+
+    assert.ok(!Fail.is(result))
+    assert.equal(result, 'local')
+  })
+
+  it('runs forkIn named-scope children in the named owner rather than a nested current scope', async () => {
+    const OuterScope = scope('test/ForkIn/named-outer-owner')
+    const InnerScope = scope('test/ForkIn/named-inner-not-owner')
+    const events = [] as string[]
+
+    const result = await fx(function* () {
+      const task = yield* fx(function* () {
+        return yield* forkIn(OuterScope, fx(function* () {
+          yield* andFinallyIn(currentScope, fx(function* () {
+            events.push('child cleanup')
+          }))
+          yield* awaitAbort()
+        }))
+      }).pipe(
+        withScope(InnerScope)
+      )
+
+      events.push('after inner')
+      yield* delayFx(0)
+      yield* assertPromise(() => task.interrupt('done'))
+      return events
+    }).pipe(
+      withScope(OuterScope),
+      withUnboundedConcurrency,
+      returnFail,
+      runPromise
+    )
+
+    assert.ok(!Fail.is(result))
+    assert.deepEqual(result, ['after inner', 'child cleanup'])
   })
 
   it('lets a forkIn child interrupt the owning scope and finalize siblings', async () => {

@@ -5,7 +5,7 @@ import { isEffect, type AnyEffect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { Finalizer, Finally } from './Finalization.js'
 import { Fx, fx, ok } from './Fx.js'
-import { CapturedHandler, HandlerCapture } from './HandlerCapture.js'
+import { CapturedHandler, HandlerCapture, withHandlerContext } from './HandlerCapture.js'
 import { InterruptFrom } from './InterruptFrom.js'
 import { ReturnFrom } from './ReturnFrom.js'
 import { Fork } from './internal/concurrent/effects.js'
@@ -14,6 +14,7 @@ import { drainIteratorReturn, isInterpretingReturn, isInterruptedReturn } from '
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { interruptionReason, RuntimeScopeExit, withActiveScope, withScopeExitSource, withoutScopeExitSources, type ActiveScopeDiagnostic } from './internal/runtimeContext.js'
 import { ScopeTypeId, sameScope, scopeId, type ScopeIdentity } from './internal/scopeIdentity.js'
+import { rootHandlerCaptureTarget, ScopedHandlerCapture } from './internal/scopedHandlerCapture.js'
 import { settledTaskQueue } from './internal/settledQueue.js'
 import { ScopedFork } from './internal/scopedFork.js'
 import type { ScopedForkContext } from './internal/scopedFork.js'
@@ -259,10 +260,14 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
           const matchesLifetimeScope = matchesScope || (effectScope !== undefined && sameScope(effectScope, currentScope))
 
           if (matchesLifetimeScope && Finally.is(effect)) {
-            controller.addFinalizer(effect.arg)
+            controller.addFinalizer(exit => capturedShared.wrap(effect.arg(exit)) as Fx<unknown, void>)
             ir = i.next(undefined)
           } else if (matchesLifetimeScope && ScopedFork.is(effect)) {
-            const task = yield* controller.fork(effect.arg)
+            const context = yield* new ScopedHandlerCapture(rootHandlerCaptureTarget)
+            const task = yield* controller.fork({
+              ...effect.arg,
+              fx: withHandlerContext([capturedShared, ...(context as readonly CapturedHandler[])], effect.arg.fx)
+            })
             ir = i.next(task)
           } else if (matchesScope && ReturnFrom.is(effect)) {
             const exit = { type: 'returnFrom', scope, value: effect.arg } satisfies Exit<Scope>
@@ -292,6 +297,15 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
               return (yield effect) as A
             }
             return yield* finishRoot(exit)
+          } else if (ScopedHandlerCapture.is(effect)) {
+            const target = effect.arg
+            if (target.type === 'root') {
+              ir = i.next([capturedShared, ...(yield effect) as any])
+            } else if (target.type === 'nearestScope' || sameScope(target.scope, scope)) {
+              ir = i.next([capturedShared, ...(yield new ScopedHandlerCapture(rootHandlerCaptureTarget)) as any])
+            } else {
+              ir = i.next(yield effect as any)
+            }
           } else if (HandlerCapture.is(effect)) {
             const local = effect.arg === 'fx/Concurrent/ForkIn' ? capturedShared : captured
             ir = i.next([local, ...(yield effect) as any])

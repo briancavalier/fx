@@ -2,11 +2,9 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
 import { abort, Abort, orReturn } from './Abort.js'
-import { Effect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { andFinally, andFinallyIn, managed, using, usingIn, usingManaged, usingManagedIn, type Finally, type Managed } from './Finalization.js'
-import { handle } from './Handler.js'
 import type { Interrupt } from './Interrupt.js'
 import { returnFrom } from './ReturnFrom.js'
 import { currentScope, scope, withScope, type Control, type Exit } from './Scope.js'
@@ -109,94 +107,6 @@ describe('Finalization', () => {
     assert.ok(Fail.is(result))
     assert.ok(result.arg instanceof AggregateError)
     assert.deepEqual(result.arg.errors, [releaseFailure])
-  })
-
-  it('runs finalizers through handlers captured at the registration site', () => {
-    class Release extends Effect('test/Finalization/LocalRelease')<void, string> { }
-    const released = [] as string[]
-
-    const result = run(fx(function* () {
-      yield* fx(function* () {
-        yield* andFinally(fx(function* () {
-          released.push(yield* new Release())
-        }))
-      }).pipe(
-        handle(Release, () => ok('local'))
-      )
-      return 'done'
-    }).pipe(
-      withScope(TestScope),
-      returnFail,
-      handle(Release, () => ok('outer'))
-    ))
-
-    assert.deepEqual(result, 'done')
-    assert.deepEqual(released, ['local'])
-  })
-
-  it('runs finalizers through handlers outside the owning scope', () => {
-    class Release extends Effect('test/Finalization/OuterRelease')<void, string> { }
-    const released = [] as string[]
-
-    const result = run(fx(function* () {
-      yield* andFinally(fx(function* () {
-        released.push(yield* new Release())
-      }))
-      return 'done'
-    }).pipe(
-      withScope(TestScope),
-      returnFail,
-      handle(Release, () => ok('outer'))
-    ))
-
-    assert.deepEqual(result, 'done')
-    assert.deepEqual(released, ['outer'])
-  })
-
-  it('prefers local finalizer handlers over outer handlers for the same effect', () => {
-    class Release extends Effect('test/Finalization/LocalReleaseWins')<void, string> { }
-    const released = [] as string[]
-
-    const result = run(fx(function* () {
-      yield* fx(function* () {
-        yield* andFinally(fx(function* () {
-          released.push(yield* new Release())
-        }))
-      }).pipe(
-        handle(Release, () => ok('local'))
-      )
-      return 'done'
-    }).pipe(
-      withScope(TestScope),
-      returnFail,
-      handle(Release, () => ok('outer'))
-    ))
-
-    assert.deepEqual(result, 'done')
-    assert.deepEqual(released, ['local'])
-  })
-
-  it('runs usingIn finalizers through handlers captured at the registration site', () => {
-    class Release extends Effect('test/Finalization/UsingLocalRelease')<void, string> { }
-    const released = [] as string[]
-
-    const result = run(fx(function* () {
-      const resource = yield* fx(function* () {
-        return yield* usingIn(TestScope, ok('resource' as const), () => fx(function* () {
-          released.push(yield* new Release())
-        }))
-      }).pipe(
-        handle(Release, () => ok('local'))
-      )
-      return resource
-    }).pipe(
-      withScope(TestScope),
-      returnFail,
-      handle(Release, () => ok('outer'))
-    ))
-
-    assert.deepEqual(result, 'resource')
-    assert.deepEqual(released, ['local'])
   })
 
   it('leaves finalizers from a different scope visible after scope', () => {

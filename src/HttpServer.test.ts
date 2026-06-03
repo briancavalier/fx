@@ -473,57 +473,6 @@ describe('HttpServer', () => {
       )
     })
 
-    it('runs request finalizers through handlers around serve', async () => {
-      class Release extends Effect('test/HttpServer/RequestFinalizerRelease')<void, string> { }
-      const released = [] as string[]
-
-      const app = route('GET', '/cleanup', fx(function* () {
-        yield* andFinally(fx(function* () {
-          released.push(yield* new Release())
-        }))
-        return text('ok')
-      }))
-
-      await withServer(
-        createServer => serve(app, { port: 0, host: '127.0.0.1' }).pipe(
-          nodeHttp({ createServer }),
-          handle(Release, () => ok('app'))
-        ),
-        async port => {
-          const response = await httpGet(port, '/cleanup')
-          assert.equal(response.body, 'ok')
-          await eventually(() => released.includes('app'))
-        }
-      )
-    })
-
-    it('runs route-effect handlers inside the request scope for owned cleanup', async () => {
-      class RegisterCleanup extends Effect('test/HttpServer/RegisterCleanup')<void, string> { }
-      const released = [] as string[]
-
-      const app = route('GET', '/handler-cleanup', fx(function* () {
-        const value = yield* new RegisterCleanup()
-        return text(value)
-      }))
-
-      await withServer(
-        createServer => (serve(app, { port: 0, host: '127.0.0.1' }).pipe(
-          nodeHttp({ createServer }),
-          handle(RegisterCleanup, () => fx(function* () {
-            yield* andFinally(fx(function* () {
-              released.push('cleanup')
-            }))
-            return 'handled'
-          }))
-        ) as Fx<Async | Interrupt | HandlerCapture<string> | Fail<NodeHttpError>, void>),
-        async port => {
-          const response = await httpGet(port, '/handler-cleanup')
-          assert.equal(response.body, 'handled')
-          await eventually(() => released.includes('cleanup'))
-        }
-      )
-    })
-
     it('converts route failures to 500 responses', async () => {
       const app = route('GET', '/fail', fail(new Error('failed')))
 

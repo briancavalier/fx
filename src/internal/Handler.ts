@@ -36,13 +36,6 @@ export class Handler<E, A> implements Fx<E, A>, Pipeable, CapturedHandler {
               ? handler(effect)
               : withActiveRuntimeContext(context, () => handler(effect))
             ir = i.next(yield* withRuntimeContext(context, handled) as any)
-          } else if (effect._fxEffectId === 'fx/Finally') {
-            captured ??= {
-              wrap: fx => new Handler(fx, effectId, handler)
-            }
-            const scoped = effect as any
-            const capturedHandler = captured
-            ir = i.next(yield cloneScopedEffect(scoped, (exit: unknown) => capturedHandler.wrap(scoped.arg(exit))) as any)
           } else if (effect._fxEffectId === 'fx/Scope/ScopedFork') {
             captured ??= {
               wrap: fx => new Handler(fx, effectId, handler)

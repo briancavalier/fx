@@ -260,7 +260,7 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
           const matchesLifetimeScope = matchesScope || (effectScope !== undefined && sameScope(effectScope, currentScope))
 
           if (matchesLifetimeScope && Finally.is(effect)) {
-            controller.addFinalizer(exit => capturedShared.wrap(effect.arg(exit)) as Fx<unknown, void>)
+            controller.addFinalizer(effect.arg)
             ir = i.next(undefined)
           } else if (matchesLifetimeScope && ScopedFork.is(effect)) {
             const context = yield* new ScopedHandlerCapture(rootHandlerCaptureTarget)

@@ -2,7 +2,7 @@ import { IncomingMessage, ServerResponse as NodeServerResponse, createServer } f
 import { Readable } from 'node:stream'
 import { finished, pipeline } from 'node:stream/promises'
 import { Async, tryPromise } from './Async.js'
-import { Fail, catchAll, fail, returnFail, returnAll } from './Fail.js'
+import { Fail, catchAll, fail, returnFail, returnAll, type RunCatchEffects } from './Fail.js'
 import { Fx, assertSync, bracket, flatMap, flatten, fx, ok, runTask, trySync, unit } from './Fx.js'
 import { Handle } from './Handler.js'
 import { type Headers, type Method } from './HttpClient.js'
@@ -167,7 +167,7 @@ const closeNodeServer = (
 const drainNodeHttpEvents = <E>(
   events: Queue.Dequeue<ServerInternalEvent>,
   observe: (event: ServerEvent) => Fx<E, void>
-): Fx<Exclude<E, Fail<any>> | Async | Fail<NodeHttpError>, void | Extract<E, Fail<any>>> => fx(function* () {
+): Fx<Exclude<RunCatchEffects<E>, Fail<any>> | Async | Fail<NodeHttpError>, void | Extract<RunCatchEffects<E>, Fail<any>>> => fx(function* () {
     const dequeue = dequeueNodeHttpEvent(events)
 
     while (!events.disposed) {

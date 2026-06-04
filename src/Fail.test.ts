@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 
 import { at } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
-import { fx, ok, run, runPromise, type Fx } from './Fx.js'
+import { fx, ok, run, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
 import { captureHandlers, closeHandlerCapture, withHandlerContext } from './HandlerCapture.js'
 
@@ -137,7 +137,7 @@ describe('Fail', () => {
           (_): _ is never => false,
           ok
         )
-      }) as unknown as Fx<Fail<string>, never>
+      })
 
       const actual = run(f.pipe(
         catchAll(error => ok(`outer:${error}`))

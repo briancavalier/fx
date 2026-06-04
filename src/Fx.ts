@@ -209,3 +209,18 @@ export const bracket = <const IE, const FE, const E, const R, const A>(
     yield* andFinally(r)
   }
 }))
+
+/**
+ * Run cleanup when a lexical computation exits, without registering it with a
+ * scope.
+ */
+export const finalizing =
+  <const FE>(finally_: Fx<FE, void>) =>
+    <const E, const A>(program: Fx<E, A>): Fx<E | FE | Interrupt, A> =>
+      uninterruptibleMask(restore => fx(function* () {
+        try {
+          return yield* restore(program)
+        } finally {
+          yield* finally_
+        }
+      }))

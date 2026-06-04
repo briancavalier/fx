@@ -17,6 +17,7 @@ export {
   andThen,
   assertSync,
   bracket,
+  finalizing,
   flatMap,
   flatten,
   fx,

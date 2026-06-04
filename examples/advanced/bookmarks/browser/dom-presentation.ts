@@ -1,4 +1,4 @@
-import { assertSync, bracket, ok, type Fx } from '../../../../src/Fx.js'
+import { andThen, assertSync, finalizing, ok, type Fx } from '../../../../src/Fx.js'
 import { handle } from '../../../../src/Handler.js'
 import { handleCaptured } from '../../../../src/HandlerCapture.js'
 import type { Interrupt } from '../../../../src/Interrupt.js'
@@ -40,10 +40,9 @@ export const domPresentation = (elements: BookmarkElements) => {
 
   const interpret = <E, A>(program: Fx<E, A>): Fx<Exclude<E, Presentation> | Interrupt, A> => program.pipe(
       handleCaptured(BusyScope, Busy, effect =>
-        bracket(
-          assertSync(() => setBusy(true)),
-          () => assertSync(() => setBusy(false)),
-          () => interpret(effect.arg)
+        assertSync(() => setBusy(true)).pipe(
+          andThen(interpret(effect.arg)),
+          finalizing(assertSync(() => setBusy(false)))
         )
       ),
       handle(ReadAddBookmarkInput, () => ok(addBookmarkInput(elements))),

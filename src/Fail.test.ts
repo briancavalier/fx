@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 
 import { at } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
-import { fx, ok, run, runPromise } from './Fx.js'
+import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { handle } from './Handler.js'
 import { captureHandlers, closeHandlerCapture, withHandlerContext } from './HandlerCapture.js'
 
@@ -128,6 +128,22 @@ describe('Fail', () => {
       ))
 
       assert.equal(actual, 'inner:outer:inner')
+    })
+
+    it('lets an outer catch recover a non-matching failure from a nested raw Catch', () => {
+      const f = fx(function* () {
+        return yield* new Catch(
+          fail('nested'),
+          (_): _ is never => false,
+          ok
+        )
+      }) as unknown as Fx<Fail<string>, never>
+
+      const actual = run(f.pipe(
+        catchAll(error => ok(`outer:${error}`))
+      ))
+
+      assert.equal(actual, 'outer:nested')
     })
 
     it('runs body cleanup when failure stops the body', () => {

@@ -98,12 +98,13 @@ export class CatchRunner<const E, const A> implements Fx<RunCatchEffects<E>, A>,
       i: Iterator<E1, A>,
       ir: IteratorResult<E1, A>,
       match: (e: ExtractFail<E1>) => e is E,
-      recover: (e: E, failure: Fail<E>) => Fx<E2, B>
+      recover: (e: E, failure: Fail<E>) => Fx<E2, B>,
+      closeOnCatch?: () => Generator<unknown, unknown, unknown>
     ): Generator<CatchEffects<E1, E, E2>, A | B, unknown> {
       const closeBody = function* (): Generator<CatchEffects<E1, E, E2>, A | B | undefined, unknown> {
         const returned = i.return?.()
         if (returned === undefined) return undefined
-        return yield* step(i, returned, match, recover)
+        return yield* step(i, returned, match, recover, closeOnCatch)
       }
       while (!ir.done) {
         if (isEffect(ir.value)) {
@@ -115,10 +116,27 @@ export class CatchRunner<const E, const A> implements Fx<RunCatchEffects<E>, A>,
               : withActiveRuntimeContext(context, () => recover(effect.arg as E, effect as Fail<E>))
             const recovered = yield* (withRuntimeContext(context, runCatch(recovery)) as Fx<E2, B>)
             yield* closeBody()
+            if (closeOnCatch !== undefined) {
+              yield* (closeOnCatch() as Generator<CatchEffects<E1, E, E2>, unknown, unknown>)
+            }
             return recovered
           }
           if (Catch.is(effect)) {
-            ir = i.next((yield* interpretAnyCatch(effect) as Generator<CatchEffects<E1, E, E2>, unknown, unknown>) as unknown)
+            const nested = interpretAnyCatch(effect)
+            let nestedCaught = false
+            const closeOuter = function* (): Generator<CatchEffects<E1, E, E2>, unknown, unknown> {
+              nestedCaught = true
+              return yield* closeBody()
+            }
+            const nestedResult = yield* step(
+              nested as Iterator<unknown, unknown>,
+              nested.next(),
+              match as any,
+              recover as any,
+              closeOuter
+            ) as Generator<CatchEffects<E1, E, E2>, unknown, unknown>
+            if (nestedCaught) return nestedResult as A | B
+            ir = i.next(nestedResult as unknown)
           } else {
             ir = i.next(yield effect as unknown as CatchEffects<E1, E, E2>)
           }

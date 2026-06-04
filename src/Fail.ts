@@ -2,7 +2,6 @@ import { Breadcrumb, at } from './Breadcrumb.js'
 import { Effect, isEffect, traceOriginOf } from './Effect.js'
 import type { AnyEffect } from './Effect.js'
 import { Fx, ok } from './Fx.js'
-import { control } from './Handler.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import type { TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
@@ -54,40 +53,70 @@ export const failFrom = <const E>(
 
 type CatchEffects<E1, E, E2> = Exclude<E1, Fail<E>> | E2
 
+export interface CatchContext<E1, E extends ExtractFail<E1>, E2, A, B> {
+  readonly body: Fx<E1, A>
+  readonly match: (e: ExtractFail<E1>) => e is E
+  readonly recover: (e: E, failure: Fail<E>) => Fx<E2, B>
+}
+
 /**
- * Run a computation with a local failure recovery region.
+ * Request a local failure recovery region.
  *
- * `Catch` owns the control boundary for its body: when the body yields a
- * matching {@link Fail}, recovery runs and body close effects are drained
- * before the region completes.
+ * `Catch` is a higher-order effect: its payload contains the protected body and
+ * recovery computation. Use {@link runCatch} to interpret it.
  */
-export class Catch<const E1, const E extends ExtractFail<E1>, const E2, const A, const B> implements Fx<CatchEffects<E1, E, E2>, A | B>, Pipeable {
+export class Catch<const E1, const E extends ExtractFail<E1>, const E2, const A, const B> extends Effect('fx/Fail/Catch')<
+  CatchContext<E1, E, E2, A, B>,
+  A | B
+> {
+  constructor(
+    body: Fx<E1, A>,
+    match: (e: ExtractFail<E1>) => e is E,
+    recover: (e: E, failure: Fail<E>) => Fx<E2, B>
+  ) {
+    super({ body, match, recover })
+  }
+}
+
+type CatchBodyEffects<C> =
+  C extends Catch<infer E1, infer E, infer E2, any, any> ? CatchEffects<E1, E, E2> : never
+
+type RunCatchEffects<E> =
+  E extends Catch<any, any, any, any, any> ? CatchBodyEffects<E> : E
+
+/**
+ * Interpret higher-order {@link Catch} requests in a computation.
+ */
+export class CatchRunner<const E, const A> implements Fx<RunCatchEffects<E>, A>, Pipeable {
   public readonly pipe = pipeThis as Pipeable['pipe']
 
-  constructor(
-    public readonly body: Fx<E1, A>,
-    public readonly match: (e: ExtractFail<E1>) => e is E,
-    public readonly recover: (e: E, failure: Fail<E>) => Fx<E2, B>
-  ) { }
+  constructor(public readonly fx: Fx<E, A>) { }
 
-  *[Symbol.iterator](): Iterator<CatchEffects<E1, E, E2>, A | B> {
-    const { body, match, recover } = this
-    const i = body[Symbol.iterator]()
-    const closeBody = function* (): Generator<CatchEffects<E1, E, E2>, A | B | undefined, unknown> {
-      const returned = i.return?.()
-      if (returned === undefined) return undefined
-      return yield* step(returned)
-    }
-    function* step(ir: IteratorResult<E1, A>): Generator<CatchEffects<E1, E, E2>, A | B, unknown> {
+  *[Symbol.iterator](): Iterator<RunCatchEffects<E>, A> {
+    const step = function* <E1, E extends ExtractFail<E1>, E2, A, B>(
+      i: Iterator<E1, A>,
+      ir: IteratorResult<E1, A>,
+      match: (e: ExtractFail<E1>) => e is E,
+      recover: (e: E, failure: Fail<E>) => Fx<E2, B>
+    ): Generator<CatchEffects<E1, E, E2>, A | B, unknown> {
+      const closeBody = function* (): Generator<CatchEffects<E1, E, E2>, A | B | undefined, unknown> {
+        const returned = i.return?.()
+        if (returned === undefined) return undefined
+        return yield* step(i, returned, match, recover)
+      }
       while (!ir.done) {
         if (isEffect(ir.value)) {
           const effect = ir.value
           if (Fail.is(effect) && match(effect.arg as ExtractFail<E1>)) {
-            const recovered = yield* recover(effect.arg as E, effect as Fail<E>)
+            const recovered = yield* (runCatch(recover(effect.arg as E, effect as Fail<E>)) as Fx<E2, B>)
             yield* closeBody()
             return recovered
           }
-          ir = i.next(yield effect as unknown as CatchEffects<E1, E, E2>)
+          if (Catch.is(effect)) {
+            ir = i.next((yield* interpretAnyCatch(effect) as Generator<CatchEffects<E1, E, E2>, unknown, unknown>) as unknown)
+          } else {
+            ir = i.next(yield effect as unknown as CatchEffects<E1, E, E2>)
+          }
         } else {
           throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
         }
@@ -95,18 +124,72 @@ export class Catch<const E1, const E extends ExtractFail<E1>, const E2, const A,
 
       return ir.value
     }
+    const interpretCatch = function* <E1, E extends ExtractFail<E1>, E2, A, B>(
+      effect: Catch<E1, E, E2, A, B>
+    ): Generator<CatchEffects<E1, E, E2>, A | B, unknown> {
+      const { body, match, recover } = effect.arg
+      const i = body[Symbol.iterator]()
+      let completed = false
+      const closeBody = function* (): Generator<CatchEffects<E1, E, E2>, A | B | undefined, unknown> {
+        const returned = i.return?.()
+        if (returned === undefined) return undefined
+        return yield* step(i, returned, match, recover)
+      }
+      try {
+        const value = yield* step(i, i.next(), match, recover)
+        completed = true
+        return value
+      } finally {
+        if (!completed) {
+          yield* closeBody()
+        }
+      }
+    }
+    const interpretAnyCatch = function* (
+      effect: unknown
+    ): Generator<unknown, unknown, unknown> {
+      return yield* interpretCatch(effect as Catch<any, any, any, any, any>)
+    }
 
+    const i = this.fx[Symbol.iterator]()
     let completed = false
+    const runStep = function* (ir: IteratorResult<E, A>): Generator<RunCatchEffects<E>, A, unknown> {
+      while (!ir.done) {
+        if (isEffect(ir.value)) {
+          const effect = ir.value
+          ir = i.next(Catch.is(effect)
+            ? (yield* interpretAnyCatch(effect) as Generator<RunCatchEffects<E>, unknown, unknown>) as unknown
+            : yield effect as RunCatchEffects<E>)
+        } else {
+          throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
+        }
+      }
+
+      return ir.value
+    }
+    const close = function* (): Generator<RunCatchEffects<E>, A | undefined, unknown> {
+      const returned = i.return?.()
+      if (returned === undefined) return undefined
+      return yield* runStep(returned)
+    }
     try {
-      const value = yield* step(i.next())
+      const value = yield* runStep(i.next())
       completed = true
       return value
     } finally {
       if (!completed) {
-        yield* closeBody()
+        yield* close()
       }
     }
   }
+}
+
+export function runCatch<const E1, const E extends ExtractFail<E1>, const E2, const A, const B>(
+  fx: Catch<E1, E, E2, A, B>
+): Fx<CatchEffects<E1, E, E2>, A | B>
+export function runCatch<const E, const A>(fx: Fx<E, A>): Fx<RunCatchEffects<E>, A>
+export function runCatch(fx: Fx<unknown, unknown>): Fx<unknown, unknown> {
+  return new CatchRunner(fx)
 }
 
 /**
@@ -118,7 +201,7 @@ export const catchIf = <const E1, const E extends ExtractFail<E1>, const E2, con
   match: (e: ExtractFail<E1>) => e is E,
   handle: (e: E) => Fx<E2, B>
 ) => <const A>(f: Fx<E1, A>): Fx<Exclude<E1, Fail<E>> | E2, A | B> =>
-    new Catch(f, match, handle)
+    runCatch(new Catch(f, match, handle))
 
 type AnyConstructor = abstract new (...args: any[]) => any
 
@@ -176,14 +259,15 @@ export const returnAll = <const E, const A>(f: Fx<E, A>) => f.pipe(catchAll(ok))
  *   const resultOrFail = computation.pipe(returnFail)
  */
 export const returnFail = <const E, const A>(f: Fx<E, A>) =>
-  new Catch(f, (_): _ is ExtractFail<E> => true, (_, failure) => ok(failure)) as Fx<Exclude<E, Fail<any>>, A | Extract<E, Fail<any>>>
+  runCatch(new Catch(f, (_): _ is ExtractFail<E> => true, (_, failure) => ok(failure))) as Fx<Exclude<E, Fail<any>>, A | Extract<E, Fail<any>>>
 
 /**
  * Assert that an Fx does not fail, throwing the error if it does.
  * @example
  *   const result = trySync(f).pipe(assert) // Crashes if f fails
  */
-export const assert = control(Fail<any>, (_, failure) => { throw failure.arg })
+export const assert = <const E, const A>(f: Fx<E, A>) =>
+  runCatch(new Catch(f, (_): _ is ExtractFail<E> => true, e => { throw e })) as Fx<Exclude<E, Fail<any>>, A>
 
 type UnwrapFail<F> = F extends Fail<infer E> ? E : never
 type ExtractFail<F> = UnwrapFail<Extract<F, Fail<any>>>

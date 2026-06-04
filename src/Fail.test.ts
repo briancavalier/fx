@@ -7,7 +7,7 @@ import { fx, ok, run } from './Fx.js'
 import { handle } from './Handler.js'
 import { captureHandlers, closeHandlerCapture, withHandlerContext } from './HandlerCapture.js'
 
-import { Catch, Fail, catchAll, fail, failFrom, returnFail, returnIf, returnOnly } from './Fail.js'
+import { Catch, Fail, catchAll, fail, failFrom, returnFail, returnIf, returnOnly, runCatch } from './Fail.js'
 import { getTrace } from './Trace.js'
 import { runFork } from './internal/runFork.js'
 
@@ -58,14 +58,24 @@ describe('Fail', () => {
   })
 
   describe('Catch', () => {
-    it('given no failures, returns body result', () => {
+    it('raw Catch is an effect that needs runCatch', () => {
+      assert.throws(() => {
+        run(new Catch(
+          ok('body'),
+          (_): _ is never => true,
+          ok
+        ) as never)
+      }, /Unhandled effect in run/)
+    })
+
+    it('runCatch given no failures, returns body result', () => {
       const expected = Math.random()
 
-      const actual = run(new Catch(
+      const actual = run(runCatch(new Catch(
         ok(expected),
         (_): _ is never => true,
         ok
-      ))
+      )))
 
       assert.equal(actual, expected)
     })
@@ -126,6 +136,28 @@ describe('Fail', () => {
 
       assert.equal(actual, 'failed')
       assert.deepEqual(events, ['body', 'recover', 'cleanup'])
+    })
+
+    it('runs body cleanup when an active catch region is closed', () => {
+      class Wait extends Effect('test/Fail/Catch/Wait')<void, void> { }
+      const events: string[] = []
+      const f = runCatch(new Catch(
+        fx(function* () {
+          try {
+            yield* new Wait()
+          } finally {
+            events.push('cleanup')
+          }
+        }),
+        (_): _ is never => true,
+        ok
+      ))
+
+      const iterator = f[Symbol.iterator]()
+      iterator.next()
+      iterator.return?.()
+
+      assert.deepEqual(events, ['cleanup'])
     })
 
     it('lets ordinary handlers interpret body and recovery effects', () => {

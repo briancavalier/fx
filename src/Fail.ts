@@ -2,6 +2,7 @@ import { Breadcrumb, at } from './Breadcrumb.js'
 import { Effect, isEffect, traceOriginOf } from './Effect.js'
 import type { AnyEffect } from './Effect.js'
 import { Fx, ok } from './Fx.js'
+import { getRuntimeContext, withActiveRuntimeContext, withRuntimeContext } from './internal/runtimeContext.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import type { TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
@@ -108,7 +109,11 @@ export class CatchRunner<const E, const A> implements Fx<RunCatchEffects<E>, A>,
         if (isEffect(ir.value)) {
           const effect = ir.value
           if (Fail.is(effect) && match(effect.arg as ExtractFail<E1>)) {
-            const recovered = yield* (runCatch(recover(effect.arg as E, effect as Fail<E>)) as Fx<E2, B>)
+            const context = getRuntimeContext(effect)
+            const recovery = context === undefined
+              ? recover(effect.arg as E, effect as Fail<E>)
+              : withActiveRuntimeContext(context, () => recover(effect.arg as E, effect as Fail<E>))
+            const recovered = yield* (withRuntimeContext(context, runCatch(recovery)) as Fx<E2, B>)
             yield* closeBody()
             return recovered
           }
@@ -128,7 +133,8 @@ export class CatchRunner<const E, const A> implements Fx<RunCatchEffects<E>, A>,
       effect: Catch<E1, E, E2, A, B>
     ): Generator<CatchEffects<E1, E, E2>, A | B, unknown> {
       const { body, match, recover } = effect.arg
-      const i = body[Symbol.iterator]()
+      const context = getRuntimeContext(effect)
+      const i = withRuntimeContext(context, body)[Symbol.iterator]()
       let completed = false
       const closeBody = function* (): Generator<CatchEffects<E1, E, E2>, A | B | undefined, unknown> {
         const returned = i.return?.()

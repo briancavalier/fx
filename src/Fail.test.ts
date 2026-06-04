@@ -3,12 +3,12 @@ import { describe, it } from 'node:test'
 
 import { at } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
-import { fx, ok, run } from './Fx.js'
+import { fx, ok, run, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
 import { captureHandlers, closeHandlerCapture, withHandlerContext } from './HandlerCapture.js'
 
 import { Catch, Fail, catchAll, fail, failFrom, returnFail, returnIf, returnOnly, runCatch } from './Fail.js'
-import { getTrace } from './Trace.js'
+import { getTrace, withTraceCapture } from './Trace.js'
 import { runFork } from './internal/runFork.js'
 
 describe('Fail', () => {
@@ -106,6 +106,18 @@ describe('Fail', () => {
 
       assert.ok(actual instanceof Fail)
       assert.equal(actual.arg, 'recovery')
+    })
+
+    it('runs recovery in the caught failure runtime context', async () => {
+      const actual = await fail('body').pipe(
+        withTraceCapture('off'),
+        catchAll(() => fail(new Error('recovery'))),
+        returnFail,
+        runPromise
+      )
+
+      assert.ok(actual instanceof Fail)
+      assert.equal(actual.trace, undefined)
     })
 
     it('uses the nearest matching catch region', () => {

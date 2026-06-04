@@ -1,8 +1,9 @@
 import { Breadcrumb, at } from './Breadcrumb.js'
-import { Effect, traceOriginOf } from './Effect.js'
+import { Effect, isEffect, traceOriginOf } from './Effect.js'
 import type { AnyEffect } from './Effect.js'
 import { Fx, ok } from './Fx.js'
 import { control } from './Handler.js'
+import { Pipeable, pipeThis } from './internal/pipe.js'
 import type { TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
 
@@ -51,6 +52,63 @@ export const failFrom = <const E>(
     : new Fail(e, traceOrigin)
 }
 
+type CatchEffects<E1, E, E2> = Exclude<E1, Fail<E>> | E2
+
+/**
+ * Run a computation with a local failure recovery region.
+ *
+ * `Catch` owns the control boundary for its body: when the body yields a
+ * matching {@link Fail}, recovery runs and body close effects are drained
+ * before the region completes.
+ */
+export class Catch<const E1, const E extends ExtractFail<E1>, const E2, const A, const B> implements Fx<CatchEffects<E1, E, E2>, A | B>, Pipeable {
+  public readonly pipe = pipeThis as Pipeable['pipe']
+
+  constructor(
+    public readonly body: Fx<E1, A>,
+    public readonly match: (e: ExtractFail<E1>) => e is E,
+    public readonly recover: (e: E, failure: Fail<E>) => Fx<E2, B>
+  ) { }
+
+  *[Symbol.iterator](): Iterator<CatchEffects<E1, E, E2>, A | B> {
+    const { body, match, recover } = this
+    const i = body[Symbol.iterator]()
+    const closeBody = function* (): Generator<CatchEffects<E1, E, E2>, A | B | undefined, unknown> {
+      const returned = i.return?.()
+      if (returned === undefined) return undefined
+      return yield* step(returned)
+    }
+    function* step(ir: IteratorResult<E1, A>): Generator<CatchEffects<E1, E, E2>, A | B, unknown> {
+      while (!ir.done) {
+        if (isEffect(ir.value)) {
+          const effect = ir.value
+          if (Fail.is(effect) && match(effect.arg as ExtractFail<E1>)) {
+            const recovered = yield* recover(effect.arg as E, effect as Fail<E>)
+            yield* closeBody()
+            return recovered
+          }
+          ir = i.next(yield effect as unknown as CatchEffects<E1, E, E2>)
+        } else {
+          throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
+        }
+      }
+
+      return ir.value
+    }
+
+    let completed = false
+    try {
+      const value = yield* step(i.next())
+      completed = true
+      return value
+    } finally {
+      if (!completed) {
+        yield* closeBody()
+      }
+    }
+  }
+}
+
 /**
  * Catch failures matching a type guard and handle them with the provided function.
  * @example
@@ -60,10 +118,7 @@ export const catchIf = <const E1, const E extends ExtractFail<E1>, const E2, con
   match: (e: ExtractFail<E1>) => e is E,
   handle: (e: E) => Fx<E2, B>
 ) => <const A>(f: Fx<E1, A>): Fx<Exclude<E1, Fail<E>> | E2, A | B> =>
-    f.pipe(
-      control(Fail<ExtractFail<E>>, (_, failure) =>
-        (match(failure.arg) ? handle(failure.arg) : failure) as Fx<Exclude<E1, Fail<E>> | E2, A | B>)
-    ) as Fx<Exclude<E1, Fail<E>> | E2, A | B>
+    new Catch(f, match, handle)
 
 type AnyConstructor = abstract new (...args: any[]) => any
 
@@ -121,7 +176,7 @@ export const returnAll = <const E, const A>(f: Fx<E, A>) => f.pipe(catchAll(ok))
  *   const resultOrFail = computation.pipe(returnFail)
  */
 export const returnFail = <const E, const A>(f: Fx<E, A>) =>
-  f.pipe(control(Fail<any>, (_, failure) => ok(failure))) as Fx<Exclude<E, Fail<any>>, A | Extract<E, Fail<any>>>
+  new Catch(f, (_): _ is ExtractFail<E> => true, (_, failure) => ok(failure)) as Fx<Exclude<E, Fail<any>>, A | Extract<E, Fail<any>>>
 
 /**
  * Assert that an Fx does not fail, throwing the error if it does.

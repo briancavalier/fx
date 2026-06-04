@@ -4,8 +4,10 @@ import { describe, it } from 'node:test'
 import { at } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
 import { fx, ok, run } from './Fx.js'
+import { handle } from './Handler.js'
+import { captureHandlers, closeHandlerCapture, withHandlerContext } from './HandlerCapture.js'
 
-import { Fail, fail, failFrom, returnFail, returnIf, returnOnly } from './Fail.js'
+import { Catch, Fail, catchAll, fail, failFrom, returnFail, returnIf, returnOnly } from './Fail.js'
 import { getTrace } from './Trace.js'
 import { runFork } from './internal/runFork.js'
 
@@ -52,6 +54,111 @@ describe('Fail', () => {
           && traceMessages(e)[0] === 'test/fail-from-fallback'
           && e.cause === cause
       )
+    })
+  })
+
+  describe('Catch', () => {
+    it('given no failures, returns body result', () => {
+      const expected = Math.random()
+
+      const actual = run(new Catch(
+        ok(expected),
+        (_): _ is never => true,
+        ok
+      ))
+
+      assert.equal(actual, expected)
+    })
+
+    it('given matching failure, runs recovery and skips the rest of the body', () => {
+      const events: string[] = []
+      const f = fx(function* () {
+        events.push('before')
+        yield* fail('failed')
+        events.push('after')
+        return 'body'
+      })
+
+      const actual = run(f.pipe(catchAll(error => {
+        events.push(`recover:${error}`)
+        return ok('recovered')
+      })))
+
+      assert.equal(actual, 'recovered')
+      assert.deepEqual(events, ['before', 'recover:failed'])
+    })
+
+    it('given recovery failure, propagates recovery failure outward', () => {
+      const actual = run(fail('body').pipe(
+        catchAll(() => fail('recovery')),
+        returnFail
+      ))
+
+      assert.ok(actual instanceof Fail)
+      assert.equal(actual.arg, 'recovery')
+    })
+
+    it('uses the nearest matching catch region', () => {
+      const actual = run(fail('inner').pipe(
+        catchAll(error => fail(`outer:${error}`).pipe(
+          catchAll(inner => ok(`inner:${inner}`))
+        ))
+      ))
+
+      assert.equal(actual, 'inner:outer:inner')
+    })
+
+    it('runs body cleanup when failure stops the body', () => {
+      const events: string[] = []
+      const f = fx(function* () {
+        try {
+          events.push('body')
+          yield* fail('failed')
+        } finally {
+          events.push('cleanup')
+        }
+      })
+
+      const actual = run(f.pipe(catchAll(error => {
+        events.push('recover')
+        return ok(error)
+      })))
+
+      assert.equal(actual, 'failed')
+      assert.deepEqual(events, ['body', 'recover', 'cleanup'])
+    })
+
+    it('lets ordinary handlers interpret body and recovery effects', () => {
+      class Ask extends Effect('test/Fail/Catch/Ask')<void, string> { }
+
+      const actual = run(fx(function* () {
+        const fromBody = yield* new Ask()
+        yield* fail(fromBody)
+      }).pipe(
+        catchAll(error => fx(function* () {
+          return `${error}:${yield* new Ask()}`
+        })),
+        handle(Ask, () => ok('handled'))
+      ))
+
+      assert.equal(actual, 'handled:handled')
+    })
+
+    it('does not need a captured Fail control handler for delayed catch regions', () => {
+      class Ask extends Effect('test/Fail/Catch/CapturedAsk')<void, string> { }
+
+      const delayed = run(fx(function* () {
+        const context = yield* captureHandlers('test/Fail/Catch')
+        return withHandlerContext(context, fail('failed').pipe(
+          catchAll(() => new Ask())
+        ))
+      }).pipe(
+        handle(Ask, () => ok('captured')),
+        closeHandlerCapture('test/Fail/Catch')
+      ))
+      const actual = run(delayed as never)
+
+      assert.equal(actual, 'captured')
     })
   })
 

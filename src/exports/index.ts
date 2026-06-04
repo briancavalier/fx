@@ -43,6 +43,7 @@ export {
 export { HandlerCapture, type CapturedHandler } from '../HandlerCapture.js'
 export {
   assert,
+  Catch,
   catchAll,
   catchIf,
   catchOnly,

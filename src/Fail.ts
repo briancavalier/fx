@@ -1,10 +1,8 @@
 import { Breadcrumb, at } from './Breadcrumb.js'
-import { Effect, isEffect, traceOriginOf } from './Effect.js'
+import { Effect, traceOriginOf } from './Effect.js'
 import type { AnyEffect } from './Effect.js'
 import { Fx, flatten, ok } from './Fx.js'
-import { handle } from './Handler.js'
-import { getRuntimeContext, withActiveRuntimeContext, withRuntimeContext } from './internal/runtimeContext.js'
-import { Pipeable, pipeThis } from './internal/pipe.js'
+import { control, handle } from './Handler.js'
 import type { TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
 
@@ -80,68 +78,23 @@ export class Catch<const E1, const E extends ExtractFail<E1>, const E2, const A,
 
 export type CatchEffects<E1, E, E2> = Exclude<E1, Fail<E>> | E2
 
-/**
- * Interpret higher-order {@link Catch} requests in a computation.
- */
-class CatchRegion<const E1, const E extends ExtractFail<E1>, const E2, const A, const B> implements Fx<CatchEffects<E1, E, E2>, A | B>, Pipeable {
-  public readonly pipe = pipeThis as Pipeable['pipe']
-
-  constructor(
-    public readonly body: Fx<E1, A>,
-    public readonly match: (e: ExtractFail<E1>) => e is E,
-    public readonly recover: (e: E, failure: Fail<E>) => Fx<E2, B>
-  ) { }
-
-  *[Symbol.iterator](): Iterator<CatchEffects<E1, E, E2>, A | B> {
-    const { body, match, recover } = this
-    const i = body[Symbol.iterator]()
-    let completed = false
-    const drainClose = function* (): Generator<CatchEffects<E1, E, E2>, unknown, unknown> {
-      const returned = i.return?.()
-      if (returned === undefined) return undefined
-      let ir = returned
-      while (!ir.done) {
-        if (!isEffect(ir.value)) throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
-        ir = i.next(yield ir.value as CatchEffects<E1, E, E2>)
-      }
-      return ir.value
-    }
-    const runBody = function* (ir: IteratorResult<E1, A>): Generator<CatchEffects<E1, E, E2>, A | B, unknown> {
-      while (!ir.done) {
-        if (!isEffect(ir.value)) throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
-        const effect = ir.value
-        if (Fail.is(effect) && match(effect.arg as ExtractFail<E1>)) {
-          const context = getRuntimeContext(effect)
-          const recovery = context === undefined
-            ? recover(effect.arg as E, effect as Fail<E>)
-            : withActiveRuntimeContext(context, () => recover(effect.arg as E, effect as Fail<E>))
-          const recovered = yield* withRuntimeContext(context, recovery) as Fx<E2, B>
-          yield* drainClose()
-          return recovered
-        }
-        ir = i.next(yield effect as unknown as CatchEffects<E1, E, E2>)
-      }
-      return ir.value
-    }
-    try {
-      const value = yield* runBody(i.next())
-      completed = true
-      return value
-    } finally {
-      if (!completed) {
-        yield* drainClose()
-      }
-    }
-  }
-}
+const catchRegion = <const E1, const E extends ExtractFail<E1>, const E2, const A, const B>({
+  body,
+  match,
+  recover
+}: CatchContext<E1, E, E2, A, B>): Fx<CatchEffects<E1, E, E2>, A | B> =>
+  body.pipe(
+    control(Fail, (_, failure): Fx<E2 | Fail<unknown>, B> =>
+      match(failure.arg as ExtractFail<E1>)
+        ? recover(failure.arg as E, failure as Fail<E>)
+        : failure as Fx<Fail<unknown>, B>
+    )
+  ) as Fx<CatchEffects<E1, E, E2>, A | B>
 
 type RunCatch<E> =
   E extends Catch<infer _E1, infer _E, infer _E2, infer _A, infer _B> ? never : E
 
-export const runCatch = handle(Catch, effect => {
-  const { body, match, recover } = effect.arg
-  return ok(new CatchRegion(body, match, recover))
-}) as <const E, const A>(fx: Fx<E, A>) => Fx<RunCatch<E>, A>
+export const runCatch = handle(Catch, effect => ok(catchRegion(effect.arg))) as <const E, const A>(fx: Fx<E, A>) => Fx<RunCatch<E>, A>
 
 /**
  * Catch failures matching a type guard and handle them with the provided function.

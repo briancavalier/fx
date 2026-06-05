@@ -1,4 +1,4 @@
-import { assert as assertNoFail, runCatch, fx, provide, runPromise } from '@briancavalier/fx'
+import { assert as assertNoFail, fx, provide, runPromise } from '@briancavalier/fx'
 import { withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 
 import { serve, type ServerEvent, type ServerListening } from '@briancavalier/fx/http-server'
@@ -28,7 +28,7 @@ await server.pipe(
   memoryNotes(),
   withConsoleLog,
   defaultTime,
-  assertNoFail, runCatch,
+  assertNoFail,
   provide({ port: Number(process.env.PORT ?? 3000) }),
   withUnboundedConcurrency,
   runPromise

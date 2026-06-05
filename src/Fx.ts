@@ -1,7 +1,7 @@
 import { Async } from './Async.js'
 import { at } from './Breadcrumb.js'
 import { Get, get, provideAll } from './Env.js'
-import { Fail, assert, runCatch } from './Fail.js'
+import { Fail, assert } from './Fail.js'
 import { HandlerCapture } from './HandlerCapture.js'
 import { uninterruptibleMask } from './Interrupt.js'
 import type { Interrupt } from './Interrupt.js'
@@ -79,7 +79,7 @@ export const trySync = <const A>(f: () => A): Fx<Fail<unknown>, A> =>
  * does not throw. Use {@link trySync} instead, if the function might throw.
  * Thrown errors will not be caught by the Fx runtime, and will crash the process.
  */
-export const assertSync = <const A>(f: () => A): Fx<never, A> => assert(trySync(f)).pipe(runCatch)
+export const assertSync = <const A>(f: () => A): Fx<never, A> => assert(trySync(f))
 
 /**
  * Transform the result of an Fx

@@ -1,5 +1,5 @@
 import { Async, tryPromise } from './Async.js'
-import { Fail, catchAll, failFrom, runCatch } from './Fail.js'
+import { Fail, catchAll, failFrom } from './Fail.js'
 import { Fx } from './Fx.js'
 import { Handle, handle } from './Handler.js'
 import { Signal, type Process, type ProcessSignalName } from './Process.js'
@@ -30,8 +30,7 @@ export const nodeProcess = ({
     f.pipe(
       handle(Signal, signal =>
         waitForSignal(process, signal.arg).pipe(
-          catchAll(cause => failFrom(signal, new NodeProcessError('Node process signal failed', { cause }))),
-          runCatch
+          catchAll(cause => failFrom(signal, new NodeProcessError('Node process signal failed', { cause })))
         )
       )
     ) as Fx<Handle<E, Process, Async | Fail<NodeProcessError>>, A>

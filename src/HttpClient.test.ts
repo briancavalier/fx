@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { Fail, returnFail, runCatch } from './Fail.js'
+import { Fail, returnFail } from './Fail.js'
 import { runPromise } from './Fx.js'
 import { snapshotTrace } from './Trace.js'
 import {
@@ -32,7 +32,7 @@ describe('HttpClient', () => {
       const expected = response({ status: 204 })
 
       const actual = await expectStatus(200, 204)(expected).pipe(
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -45,7 +45,7 @@ describe('HttpClient', () => {
       const expected = response({ status: 204 })
 
       const actual = await expectSuccess(expected).pipe(
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -54,7 +54,7 @@ describe('HttpClient', () => {
 
     it('given non-2xx status, produces UnexpectedStatus failure', async () => {
       const actual = await expectSuccess(response({ status: 300 })).pipe(
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -68,7 +68,7 @@ describe('HttpClient', () => {
   describe('bytes', () => {
     it('given no body, returns empty bytes', async () => {
       const actual = await bytes(response()).pipe(
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -83,7 +83,7 @@ describe('HttpClient', () => {
           new Uint8Array([4, 5])
         ])
       })).pipe(
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -96,7 +96,7 @@ describe('HttpClient', () => {
       const actual = await text(response({
         body: stream([new TextEncoder().encode('hello \u2603')])
       })).pipe(
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -107,7 +107,7 @@ describe('HttpClient', () => {
       const actual = await text(response({
         body: stream([new Uint8Array([0xff])])
       })).pipe(
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -121,7 +121,7 @@ describe('HttpClient', () => {
       const actual = await json(response({
         body: stream([new TextEncoder().encode('{"name":"Ada","count":2}')])
       })).pipe(
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -132,7 +132,7 @@ describe('HttpClient', () => {
       const actual = await json(response({
         body: stream([new TextEncoder().encode('{')])
       })).pipe(
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -167,7 +167,7 @@ describe('HttpClient', () => {
         body: { type: 'json', value: { name: 'Ada' } }
       }).pipe(
         w3cFetch({ fetch }),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -202,7 +202,7 @@ describe('HttpClient', () => {
         body: { type: 'json', value: { name: 'Ada' } }
       }).pipe(
         w3cFetch({ fetch }),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -240,7 +240,7 @@ describe('HttpClient', () => {
             }
           }
         }),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -265,7 +265,7 @@ describe('HttpClient', () => {
 
       const actual = await request(expectedRequest).pipe(
         w3cFetch({ fetch }),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -293,7 +293,7 @@ describe('HttpClient', () => {
           fetch,
           init: () => { throw cause }
         }),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -313,7 +313,7 @@ describe('HttpClient', () => {
 
       const actual = await request(expectedRequest).pipe(
         w3cFetch({ fetch }),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 

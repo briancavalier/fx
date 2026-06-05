@@ -5,7 +5,7 @@ import { Async, assertPromise } from './Async.js'
 import { forkIn } from './Concurrent.js'
 import { Get, provideFrom } from './Env.js'
 import { Effect } from './Effect.js'
-import { Fail, assert as assertNoFail, fail, runCatch } from './Fail.js'
+import { Fail, assert as assertNoFail, fail } from './Fail.js'
 import { andFinally } from './Finalization.js'
 import { ok, fx, run, runPromise, runTask, type Fx } from './Fx.js'
 import { handle } from './Handler.js'
@@ -147,7 +147,7 @@ describe('HttpServer', () => {
 
       const unhandled = serve(app, { port: 3000 }).pipe(
         nodeHttp(),
-        assertNoFail, runCatch
+        assertNoFail
       )
       // @ts-expect-error route effects remain visible until a handler eliminates them
       const _: Fx<Async | HandlerCapture<string>, void> = unhandled
@@ -165,7 +165,7 @@ describe('HttpServer', () => {
 
       const runnable: Fx<Async | Interrupt | HandlerCapture<string>, void> = serve(app, { port: 3000 }).pipe(
         nodeHttp(),
-        assertNoFail, runCatch
+        assertNoFail
       )
       void runnable
     })
@@ -624,7 +624,7 @@ describe('HttpServer', () => {
         observe: event => yieldFrom(HttpServerEvents, event)
       }).pipe(
         nodeHttp(),
-        assertNoFail, runCatch
+        assertNoFail
       )
 
       const _: Fx<Async | Interrupt | HandlerCapture<string> | YieldFrom<typeof HttpServerEvents>, void> = observed
@@ -656,7 +656,7 @@ describe('HttpServer', () => {
             }
           }
         }),
-        assertNoFail, runCatch,
+        assertNoFail,
         runTask
       )
 
@@ -729,7 +729,7 @@ const withServer = async (
       if (address && typeof address !== 'string') port = address.port
     })
     return server
-  }).pipe(assertNoFail, runCatch)
+  }).pipe(assertNoFail)
   const task = runTask(server)
 
   while (port === 0) await new Promise(resolve => setTimeout(resolve, 1))

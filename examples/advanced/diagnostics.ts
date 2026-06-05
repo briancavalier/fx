@@ -1,6 +1,6 @@
 import { all, withCoopConcurrency, withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 // import { all, withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
-import { catchAll, consoleError, consoleLog, defaultConsole, fail, fx, runCatch, runPromise } from '@briancavalier/fx'
+import { catchAll, consoleError, consoleLog, defaultConsole, fail, fx, runPromise } from '@briancavalier/fx'
 
 import { nodeSourceLookup } from '@briancavalier/fx/platform-node'
 import { formatDiagnostic, formatError, snapshotError, withTraceCapture } from '@briancavalier/fx/trace'
@@ -51,7 +51,7 @@ const checkout = fx(function* () {
 })
 
 await checkout.pipe(
-  catchAll(reportDiagnostic), runCatch,
+  catchAll(reportDiagnostic),
   withUnboundedConcurrency,
   defaultConsole,
   runPromise

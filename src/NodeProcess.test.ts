@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { Fail, assert as assertNoFail, returnFail, runCatch } from './Fail.js'
+import { Fail, assert as assertNoFail, returnFail } from './Fail.js'
 import { fx, runPromise, runTask } from './Fx.js'
 import { nodeProcess, NodeProcessError, type NodeProcessLike } from './NodeProcess.js'
 import { signal, type ProcessSignalName } from './Process.js'
@@ -12,7 +12,7 @@ describe('NodeProcess', () => {
 
     const running = runPromise(signal(['SIGINT', 'SIGTERM']).pipe(
       nodeProcess({ process }),
-      assertNoFail, runCatch
+      assertNoFail
     ))
 
     await tick()
@@ -32,7 +32,7 @@ describe('NodeProcess', () => {
 
     const running = runPromise(signal(['SIGHUP']).pipe(
       nodeProcess({ process }),
-      assertNoFail, runCatch
+      assertNoFail
     ))
 
     await tick()
@@ -51,7 +51,7 @@ describe('NodeProcess', () => {
 
     const running = runPromise(signal(['SIGINT', 'SIGQUIT']).pipe(
       nodeProcess({ process }),
-      assertNoFail, runCatch
+      assertNoFail
     ))
 
     await tick()
@@ -67,7 +67,7 @@ describe('NodeProcess', () => {
     const process = fakeProcess()
     const task = runTask(signal(['SIGINT', 'SIGTERM']).pipe(
       nodeProcess({ process }),
-      assertNoFail, runCatch
+      assertNoFail
     ))
 
     await tick()
@@ -92,7 +92,7 @@ describe('NodeProcess', () => {
 
     const result = await runPromise(signal(['SIGINT', 'SIGTERM']).pipe(
       nodeProcess({ process }),
-      returnFail, runCatch
+      returnFail
     ))
 
     assert.ok(Fail.is(result))
@@ -113,7 +113,7 @@ describe('NodeProcess', () => {
 
       runNodeMain(program.pipe(
         nodeProcess({ process: fakeProcess() }),
-        assertNoFail, runCatch
+        assertNoFail
       ), { signals: false, process: fakeProcess() })
     }
   })

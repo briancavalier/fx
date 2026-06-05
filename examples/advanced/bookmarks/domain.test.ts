@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { type Async, type Fx, returnAll, runCatch, runPromise } from '@briancavalier/fx'
+import { type Async, type Fx, returnAll, runPromise } from '@briancavalier/fx'
 
 import { collect } from '@briancavalier/fx/log'
 import { type Time, VirtualClock, withClock } from '@briancavalier/fx/time'
@@ -175,7 +175,7 @@ describe('bookmarks example domain', () => {
       deterministicBookmarkIds(['bookmark-1']),
       withClock(new VirtualClock(0)),
       collect,
-      returnAll, runCatch
+      returnAll
     )
 
     const runnable: Fx<Async, readonly [Bookmark, readonly unknown[]] | BookmarkError> = handled
@@ -205,7 +205,7 @@ const runDomain = async <A>(
     ids,
     withClock(clock),
     collect,
-    returnAll, runCatch,
+    returnAll,
     runPromise
   ).then(result => Array.isArray(result) ? result[0] : result)
 }

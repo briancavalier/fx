@@ -1,5 +1,5 @@
 import { withBoundedConcurrency } from '@briancavalier/fx/concurrent'
-import { consoleLog, defaultConsole, fx, handleScoped, provide, returnAll, runCatch, runPromise } from '@briancavalier/fx'
+import { consoleLog, defaultConsole, fx, handleScoped, provide, returnAll, runPromise } from '@briancavalier/fx'
 
 import { w3cFetch } from '@briancavalier/fx/http-client'
 import { withConsoleLog } from '@briancavalier/fx/log'
@@ -32,7 +32,7 @@ const main = fx(function* ({ openAIApiKey }: OpenAIModelContext) {
       withBoundedConcurrency(4),
       withScope(AgentSessionScope),
       logAgentEvents,
-      returnAll, runCatch
+      returnAll
     )
     : yield* runAgent(task).pipe(
       withToolSandbox(defaultToolSandboxPolicy),
@@ -44,7 +44,7 @@ const main = fx(function* ({ openAIApiKey }: OpenAIModelContext) {
       withScope(AgentSessionScope),
       logAgentEvents,
       w3cFetch(),
-      returnAll, runCatch
+      returnAll
     )
 
   yield* consoleLog(JSON.stringify(result, null, 2))

@@ -1,4 +1,4 @@
-import { assert as assertNoFail, runCatch, consoleLog, control, defaultConsole, fx, runPromise, uninterruptibleMask } from '@briancavalier/fx'
+import { assert as assertNoFail, consoleLog, control, defaultConsole, fx, runPromise, uninterruptibleMask } from '@briancavalier/fx'
 import { withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 
 import { andFinallyIn, InterruptFrom, scope, withScope } from '@briancavalier/fx/scope'
@@ -60,6 +60,6 @@ await main.pipe(
   defaultTime,
   withUnboundedConcurrency,
   defaultConsole,
-  assertNoFail, runCatch,
+  assertNoFail,
   runPromise
 )

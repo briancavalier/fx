@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { Fail, fail, returnFail, runCatch } from './Fail.js'
+import { Fail, fail, returnFail } from './Fail.js'
 import { forkIn, withBoundedConcurrency, withCoopConcurrency, withUnboundedConcurrency } from './Concurrent.js'
 import { fx, ok, run, runPromise } from './Fx.js'
 import { andFinallyIn } from './Finalization.js'
@@ -31,7 +31,7 @@ describe('Timeout', () => {
       withScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )
@@ -51,7 +51,7 @@ describe('Timeout', () => {
       timeout({ ms: 100 }),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withBoundedConcurrency(1),
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )
@@ -71,7 +71,7 @@ describe('Timeout', () => {
       timeout({ ms: 10, reason: () => reason }),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withBoundedConcurrency(1),
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )
@@ -90,7 +90,7 @@ describe('Timeout', () => {
       timeout({ ms: 10, reason: () => reason }),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withCoopConcurrency({ concurrency: 1 }),
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )
@@ -118,7 +118,7 @@ describe('Timeout', () => {
       withScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )
@@ -145,7 +145,7 @@ describe('Timeout', () => {
       withScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )
@@ -170,7 +170,7 @@ describe('Timeout', () => {
       timeout({ ms: 50, label: 'fetch user' }),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )
@@ -194,7 +194,7 @@ describe('Timeout', () => {
       withScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )
@@ -223,7 +223,7 @@ describe('Timeout', () => {
       withScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     ).then(r => {
@@ -285,7 +285,7 @@ describe('Timeout', () => {
       withScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )
@@ -311,7 +311,7 @@ describe('Timeout', () => {
       withScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )
@@ -338,7 +338,7 @@ describe('Timeout', () => {
       withScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withBoundedConcurrency(1),
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )
@@ -365,7 +365,7 @@ describe('Timeout', () => {
       withScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withCoopConcurrency({ concurrency: 1 }),
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )
@@ -391,7 +391,7 @@ describe('Timeout', () => {
       withScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )
@@ -430,7 +430,7 @@ describe('Timeout', () => {
       withScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withBoundedConcurrency(1),
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )
@@ -455,7 +455,7 @@ describe('Timeout', () => {
       withScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       withClock(c),
       runPromise
     )

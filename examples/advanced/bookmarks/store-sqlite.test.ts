@@ -4,7 +4,7 @@ import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
-import { type Fx, returnAll, runCatch, runPromise } from '@briancavalier/fx'
+import { type Fx, returnAll, runPromise } from '@briancavalier/fx'
 
 import { collect } from '@briancavalier/fx/log'
 import { type Time, VirtualClock, withClock } from '@briancavalier/fx/time'
@@ -221,7 +221,7 @@ const runStore = async <A>(path: string, program: Fx<BookmarkEffects, A>): Promi
     deterministicBookmarkIds(['bookmark-1', 'bookmark-2', 'bookmark-3']),
     withClock(new VirtualClock(Date.parse('2024-01-01T00:00:00.000Z'))),
     collect,
-    returnAll, runCatch,
+    returnAll,
     runPromise
   ).then(result => Array.isArray(result) ? result[0] : result)
 
@@ -240,7 +240,7 @@ const runDomain = async <A>(
     ids,
     withClock(clock),
     collect,
-    returnAll, runCatch,
+    returnAll,
     runPromise
   ).then(result => Array.isArray(result) ? result[0] : result)
 }

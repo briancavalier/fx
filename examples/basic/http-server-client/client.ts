@@ -1,4 +1,4 @@
-import { assert as assertNoFail, runCatch, flatMap, fx, provide, runPromise } from '@briancavalier/fx'
+import { assert as assertNoFail, flatMap, fx, provide, runPromise } from '@briancavalier/fx'
 
 import { expectSuccess, request, text, w3cFetch } from '@briancavalier/fx/http-client'
 
@@ -43,7 +43,7 @@ const client = fx(function* ({ port }: ClientConfig) {
 
 const notes = await client.pipe(
   w3cFetch(),
-  assertNoFail, runCatch,
+  assertNoFail,
   provide({ port: Number(process.env.PORT ?? 3000) }),
   runPromise
 )

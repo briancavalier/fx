@@ -2,7 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
-import { fail, Fail, returnFail, runCatch } from './Fail.js'
+import { fail, Fail, returnFail } from './Fail.js'
 import { race, withUnboundedConcurrency } from './Concurrent.js'
 import { andFinallyIn, managed, usingIn, usingManagedIn } from './Finalization.js'
 import { bracket, finalizing, fx, ok, run, runPromise, runTask, type Fx } from './Fx.js'
@@ -30,7 +30,7 @@ describe('Typed interruption', () => {
         recoveredReason = r
         return ok('interrupted')
       }),
-      returnFail, runCatch,
+      returnFail,
       run
     )
 
@@ -90,7 +90,7 @@ describe('Typed interruption', () => {
     }).pipe(
       withScope(TestScope),
       recoverInterrupt(TestScope, () => ok('interrupted')),
-      returnFail, runCatch,
+      returnFail,
       run
     )
 
@@ -111,7 +111,7 @@ describe('Typed interruption', () => {
     }).pipe(
       withScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
-      returnFail, runCatch,
+      returnFail,
       run
     )
 
@@ -149,7 +149,7 @@ describe('Typed interruption', () => {
     }).pipe(
       withScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
-      returnFail, runCatch,
+      returnFail,
       run
     )
 
@@ -256,7 +256,7 @@ describe('Interrupt masking', () => {
       )
     }).pipe(
       withScope(TestScope),
-      returnFail, runCatch,
+      returnFail,
       runTask
     )
 
@@ -282,7 +282,7 @@ describe('Interrupt masking', () => {
       )
     }).pipe(
       withScope(TestScope),
-      returnFail, runCatch,
+      returnFail,
       runTask
     )
 
@@ -344,7 +344,7 @@ describe('Interrupt masking', () => {
 
     const result = program.pipe(
       handle(Cleanup, effect => ok(void released.push(effect.arg))),
-      returnFail, runCatch,
+      returnFail,
       run
     )
 
@@ -581,7 +581,7 @@ describe('Interrupt masking', () => {
     const result = race([ok('winner'), loser]).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     ).then(value => {
       settled = true
@@ -599,7 +599,7 @@ describe('Interrupt masking', () => {
 
   it('preserves failures inside uninterruptible computations', () => {
     const failure = new Error('failed')
-    const result = run(uninterruptible(fail(failure).pipe(returnFail, runCatch)))
+    const result = run(uninterruptible(fail(failure).pipe(returnFail)))
 
     assert.equal(result.arg, failure)
   })

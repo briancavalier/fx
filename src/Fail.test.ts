@@ -160,7 +160,7 @@ describe('Fail', () => {
           recover: ok
         })
         return yield* handled
-      })
+      }).pipe(runCatch)
 
       const actual = run(f.pipe(
         runCatch,

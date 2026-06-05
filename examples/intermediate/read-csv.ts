@@ -1,4 +1,4 @@
-import { assert as assertNoFail, runCatch, type Console, consoleLog, defaultConsole, fx, type Fx, handleScoped, run } from '@briancavalier/fx'
+import { assert as assertNoFail, type Console, consoleLog, defaultConsole, fx, type Fx, handleScoped, run } from '@briancavalier/fx'
 
 import { managed, returnFrom, scope, withScope, usingManagedIn, yieldFrom, YieldFrom, type Control, type Yielding } from '@briancavalier/fx/scope'
 
@@ -120,4 +120,4 @@ const main = fx(function* () {
   }
 })
 
-run(main.pipe(defaultConsole, assertNoFail, runCatch))
+run(main.pipe(defaultConsole, assertNoFail))

@@ -2,7 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise, type Async } from './Async.js'
 import { Effect } from './Effect.js'
-import { Fail, fail, returnFail, runCatch } from './Fail.js'
+import { Fail, fail, returnFail } from './Fail.js'
 import { RaceAllFailed, all, withBoundedConcurrency, withCoopConcurrency, firstSuccess, fork, forkEach, forkIn, mapAll, race, withUnboundedConcurrency } from './Concurrent.js'
 import { andFinallyIn } from './Finalization.js'
 import { bracket, flatMap, fx, ok, runPromise, runTask, type Fx } from './Fx.js'
@@ -82,19 +82,19 @@ describe('Fork', () => {
         return yield* returnFrom(allScope, 'collided' as const)
       })]).pipe(
         withUnboundedConcurrency,
-        returnFail, runCatch
+        returnFail
       )
       const raceProgram = race([fx(function* () {
         return yield* returnFrom(raceScope, 'collided' as const)
       })]).pipe(
         withUnboundedConcurrency,
-        returnFail, runCatch
+        returnFail
       )
       const firstSuccessProgram = firstSuccess([fx(function* () {
         return yield* returnFrom(firstSuccessScope, 'collided' as const)
       })]).pipe(
         withUnboundedConcurrency,
-        returnFail, runCatch
+        returnFail
       )
       const allResult = await runPromise(allProgram as never)
       const raceResult = await runPromise(raceProgram as never)
@@ -207,7 +207,7 @@ describe('Fork', () => {
 
       const result = await all([bad]).pipe(
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -227,7 +227,7 @@ describe('Fork', () => {
       const result = await forkEach([bad]).pipe(
         flatMap(([task]) => wait(task)),
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -246,7 +246,7 @@ describe('Fork', () => {
 
       const result = await race([bad]).pipe(
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -265,7 +265,7 @@ describe('Fork', () => {
 
       const result = await race([bad]).pipe(
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -362,7 +362,7 @@ describe('Fork', () => {
 
       const result = await all([slow, bad]).pipe(
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -376,7 +376,7 @@ describe('Fork', () => {
 
       const result = await all([assertPromise(() => Promise.reject(cause))]).pipe(
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -427,7 +427,7 @@ describe('Fork', () => {
 
       const promise = all([masked, bad]).pipe(
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -468,7 +468,7 @@ describe('Fork', () => {
       })]).pipe(
         withScope(TestScope),
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -496,7 +496,7 @@ describe('Fork', () => {
       const result = await all([slow, bad]).pipe(
         withScope(TestScope),
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -522,7 +522,7 @@ describe('Fork', () => {
       const result = await all([slow, bad]).pipe(
         withScope(TestScope),
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -552,7 +552,7 @@ describe('Fork', () => {
       const result = await all([slow(firstReleaseFailure), bad, slow(secondReleaseFailure)]).pipe(
         withScope(TestScope),
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -699,7 +699,7 @@ describe('Fork', () => {
 
       const result = await mapAll([1, 2], child).pipe(
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -727,7 +727,7 @@ describe('Fork', () => {
         yield* fail(error)
       })).pipe(
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -749,7 +749,7 @@ describe('Fork', () => {
         return array
       }).pipe(
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -888,7 +888,7 @@ describe('Fork', () => {
 
       const result = await all([slow, bad]).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -908,7 +908,7 @@ describe('Fork', () => {
 
       const result = await all([slow, fail(cause)]).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -922,7 +922,7 @@ describe('Fork', () => {
 
       const result = await all([assertPromise(() => Promise.reject(cause))]).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -962,7 +962,7 @@ describe('Fork', () => {
         yield* fail(cause)
       })]).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -991,7 +991,7 @@ describe('Fork', () => {
       const result = await all([slow, bad]).pipe(
         withCoopConcurrency(),
         withScope(TestScope),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -1021,7 +1021,7 @@ describe('Fork', () => {
       ]).pipe(
         withCoopConcurrency(),
         withScope(TestScope),
-        returnFail, runCatch
+        returnFail
       )
       // The runtime handles cleanup-yielded concurrency through captured handlers;
       // the current effect type cannot express that cleanup-only narrowing.
@@ -1056,7 +1056,7 @@ describe('Fork', () => {
       ]).pipe(
         withCoopConcurrency(),
         withScope(TestScope),
-        returnFail, runCatch
+        returnFail
       )
       // The runtime handles cleanup-yielded concurrency through captured handlers;
       // the current effect type cannot express that cleanup-only narrowing.
@@ -1091,7 +1091,7 @@ describe('Fork', () => {
         withCoopConcurrency(),
         handle(CurrentValue, () => ok('handled')),
         withScope(TestScope),
-        returnFail, runCatch
+        returnFail
       )
       // The runtime handles cleanup-yielded concurrency through captured handlers;
       // the current effect type cannot express that cleanup-only narrowing.
@@ -1119,7 +1119,7 @@ describe('Fork', () => {
 
       const result = await all([slow, bad]).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -1137,7 +1137,7 @@ describe('Fork', () => {
         yield* fail(error)
       })).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -1259,7 +1259,7 @@ describe('Fork', () => {
         return yield* wait(task)
       }).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -1282,7 +1282,7 @@ describe('Fork', () => {
         return 'done'
       })]).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -1304,7 +1304,7 @@ describe('Fork', () => {
       }).pipe(
         withScope(TestScope),
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       ))
 
@@ -1451,7 +1451,7 @@ describe('Fork', () => {
       const promise = all([masked, bad]).pipe(
         withCoopConcurrency(),
         withScope(TestScope),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -1478,7 +1478,7 @@ describe('Fork', () => {
         return tuple
       }).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -1576,7 +1576,7 @@ describe('Fork', () => {
         fx(function* () { yield* fail(second) })
       ]).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -1734,7 +1734,7 @@ describe('Fork', () => {
 
       const result: unknown = await race([assertPromise(() => Promise.reject(cause))]).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -1752,17 +1752,17 @@ describe('Fork', () => {
 
       const allResult = await all([fx(function* () { yield* fail(allCause) })]).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
       const mapAllResult = await mapAll([mapAllCause], error => fx(function* () { yield* fail(error) })).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
       const raceResult = await race([fx(function* () { yield* fail(raceCause) })]).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -1789,7 +1789,7 @@ describe('Fork', () => {
 
       const result = await all([slow, bad]).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -1824,7 +1824,7 @@ describe('Fork', () => {
       const promise = all([masked, bad]).pipe(
         withCoopConcurrency(),
         withScope(TestScope),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -1865,7 +1865,7 @@ describe('Fork', () => {
         fail(new SecondError())
       ]).pipe(
         withCoopConcurrency(),
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -1918,7 +1918,7 @@ describe('Fork', () => {
       const result = await race([ok('winner'), slow]).pipe(
         withScope(TestScope),
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -1938,7 +1938,7 @@ describe('Fork', () => {
       const result = await race([ok('winner'), slow]).pipe(
         withScope(TestScope),
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -2022,7 +2022,7 @@ describe('Fork', () => {
       const result = await firstSuccess([ok('winner'), slow]).pipe(
         withScope(TestScope),
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -2041,7 +2041,7 @@ describe('Fork', () => {
 
       const result = await firstSuccess([bad(first), bad(second)]).pipe(
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -2065,7 +2065,7 @@ describe('Fork', () => {
         fail(new SecondError())
       ]).pipe(
         withUnboundedConcurrency,
-        returnFail, runCatch,
+        returnFail,
         runPromise
       )
 
@@ -2117,7 +2117,7 @@ describe('Scope-owned fork lifetime', () => {
       withScope(TestScope),
       recoverInterrupt(TestScope, r => ok(r)),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     )
 
@@ -2150,7 +2150,7 @@ describe('Scope-owned fork lifetime', () => {
     }).pipe(
       withScope(RaceScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     )
 
@@ -2183,7 +2183,7 @@ describe('Scope-owned fork lifetime', () => {
     }).pipe(
       withScope(OuterScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     ), 100)
 
@@ -2206,7 +2206,7 @@ describe('Scope-owned fork lifetime', () => {
     }).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     )
 
@@ -2238,7 +2238,7 @@ describe('Scope-owned fork lifetime', () => {
     }).pipe(
       withScope(OuterScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     )
 
@@ -2269,7 +2269,7 @@ describe('Scope-owned fork lifetime', () => {
       withScope(TestScope),
       recoverInterrupt(TestScope, r => ok(r)),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     )
 
@@ -2300,7 +2300,7 @@ describe('Scope-owned fork lifetime', () => {
     }).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     )
 
@@ -2324,7 +2324,7 @@ describe('Scope-owned fork lifetime', () => {
     }).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     ), 100)
 
@@ -2353,7 +2353,7 @@ describe('Scope-owned fork lifetime', () => {
     }).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     )
 
@@ -2419,7 +2419,7 @@ describe('Scope-owned fork lifetime', () => {
     }).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     ).then(result => {
       settled = true
@@ -2533,7 +2533,7 @@ describe('Scope-owned fork lifetime', () => {
       withScope(TestScope),
       recoverInterrupt(TestScope, r => ok(r)),
       withBoundedConcurrency(1),
-      returnFail, runCatch,
+      returnFail,
       runPromise
     )
 
@@ -2575,7 +2575,7 @@ describe('Task interruption finalization', () => {
     }).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     ))
 
@@ -2598,7 +2598,7 @@ describe('Task interruption finalization', () => {
     }).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     ))
 
@@ -2622,7 +2622,7 @@ describe('Task interruption finalization', () => {
     }).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     ))
 
@@ -2673,7 +2673,7 @@ describe('Task interruption finalization', () => {
     }).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     ))
 
@@ -2700,7 +2700,7 @@ describe('Task interruption finalization', () => {
     }).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     ))
 
@@ -2731,7 +2731,7 @@ describe('Task interruption finalization', () => {
     }).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     ))
 
@@ -2752,7 +2752,7 @@ describe('Task interruption finalization', () => {
     await assert.rejects(race([ok('winner'), slow]).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     ), e => {
       const snapshot = snapshotError(e)
@@ -2780,7 +2780,7 @@ describe('Task interruption finalization', () => {
     const result = await race([ok('winner'), slow]).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     )
 
@@ -2815,7 +2815,7 @@ describe('Task interruption finalization', () => {
     const result = await race([ok('winner'), slow]).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     )
 
@@ -2839,7 +2839,7 @@ describe('Task interruption finalization', () => {
     const result = await race([ok('winner'), slow]).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     )
 
@@ -2864,7 +2864,7 @@ describe('Task interruption finalization', () => {
     }).pipe(
       withScope(TestScope),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       handle(Release, () => fx(function* () {
         released.push('task')
       })),
@@ -2892,7 +2892,7 @@ describe('Task interruption finalization', () => {
         released.push('task')
       })),
       withUnboundedConcurrency,
-      returnFail, runCatch,
+      returnFail,
       runPromise
     ))
 

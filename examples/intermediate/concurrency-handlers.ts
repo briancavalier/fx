@@ -1,4 +1,4 @@
-import { fail, Fail, fx, returnFail, runCatch, runPromise, wait } from '@briancavalier/fx'
+import { fail, Fail, fx, returnFail, runPromise, wait } from '@briancavalier/fx'
 import {
   RaceAllFailed,
   all,
@@ -37,7 +37,7 @@ console.log('\nconcurrency operators')
 const raceResult = await request.pipe(
   // First-settled semantics: the fast failure wins and cancels the slow success.
   withUnboundedConcurrency,
-  returnFail, runCatch,
+  returnFail,
   defaultTime,
   runPromise
 )
@@ -52,7 +52,7 @@ if (Fail.is(raceResult)) {
 const firstOk = await firstSuccess([fastFailure, slowSuccess]).pipe(
   // First-success semantics: the fast failure is ignored, so the slower success wins.
   withUnboundedConcurrency,
-  returnFail, runCatch,
+  returnFail,
   defaultTime,
   runPromise
 )
@@ -69,7 +69,7 @@ const allFailed = await firstSuccess([
 ]).pipe(
   // If every child fails, firstSuccess fails with input-ordered child errors.
   withUnboundedConcurrency,
-  returnFail, runCatch,
+  returnFail,
   defaultTime,
   runPromise
 )

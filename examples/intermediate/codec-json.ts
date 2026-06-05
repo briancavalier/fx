@@ -1,4 +1,4 @@
-import { Fail, flatMap, ok, returnFail, run } from '@briancavalier/fx'
+import { Fail, flatMap, ok, returnFail, runCatch, run } from '@briancavalier/fx'
 import { codecFail, codecKey, codecOk, CodecEncoded, CodecKey, decodeOrFail, encodeOrFail, withCodec } from '@briancavalier/fx/codec'
 
 type User = {
@@ -92,8 +92,8 @@ const expectEncoded = (result: string | Fail<unknown>) => {
   return result
 }
 
-const encoded = roundTrip(UserJson, incomingJson).pipe(withUserJson, returnFail, run, expectEncoded)
-const invalid = decodeOrFail(UserJson, invalidJson).pipe(withUserJson, returnFail, run)
+const encoded = roundTrip(UserJson, incomingJson).pipe(withUserJson, returnFail, runCatch, run, expectEncoded)
+const invalid = decodeOrFail(UserJson, invalidJson).pipe(withUserJson, returnFail, runCatch, run)
 
 console.log('codec ok', summarizeUserJson(encoded))
 console.log('codec invalid', summarizeFailure(invalid))

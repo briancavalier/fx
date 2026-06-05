@@ -1,6 +1,6 @@
 import { at } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
-import { Fail, returnFail } from './Fail.js'
+import { Fail, returnFail, runCatch } from './Fail.js'
 import { flatMap, flatten, Fx, fx, ok, unit } from './Fx.js'
 import { Handle } from './Handler.js'
 import { HandlerCapture, handleCaptured, withCapturedHandlers } from './HandlerCapture.js'
@@ -92,7 +92,7 @@ const runRetry = <OE>(observe: (e: RetryEvent) => Fx<OE, void>) =>
     let attempt = 1
 
     while (true) {
-      const result = yield* (r.fx.pipe(returnFail) as Fx<never, A | Fail<E>>)
+      const result = yield* (r.fx.pipe(returnFail, runCatch) as Fx<never, A | Fail<E>>)
 
       if (!Fail.is(result)) {
         yield* observe({ type: 'success', attempt })

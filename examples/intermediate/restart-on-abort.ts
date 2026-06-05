@@ -1,5 +1,5 @@
 import { abort, managed, orReturn, restartOnAbort, scope, usingManagedIn, type Control } from '@briancavalier/fx/scope'
-import { assert as assertNoFail, consoleLog, defaultConsole, fx, run } from '@briancavalier/fx'
+import { assert as assertNoFail, runCatch, consoleLog, defaultConsole, fx, run } from '@briancavalier/fx'
 
 const SubmitOrder = scope<Control>()('examples/intermediate/restart-on-abort/SubmitOrder')
 
@@ -64,4 +64,4 @@ const main = fx(function* () {
   yield* consoleLog('order result', result)
 })
 
-run(main.pipe(defaultConsole, assertNoFail))
+run(main.pipe(defaultConsole, assertNoFail, runCatch))

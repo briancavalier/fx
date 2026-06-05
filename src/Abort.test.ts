@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { abort, Abort, orReturn, restartOnAbort } from './Abort.js'
 import { at } from './Breadcrumb.js'
 import { originOf, withOrigin } from './Effect.js'
-import { fail, Fail, returnFail } from './Fail.js'
+import { fail, Fail, returnFail, runCatch } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { returnFrom } from './ReturnFrom.js'
@@ -107,7 +107,7 @@ describe('Abort', () => {
       }).pipe(
         restartOnAbort(TestScope, { restarts: 2 }),
         orReturn(TestScope, 'exhausted'),
-        returnFail,
+        returnFail, runCatch,
         run
       )
 
@@ -185,7 +185,7 @@ describe('Abort', () => {
       }).pipe(
         restartOnAbort(TestScope, { restarts: 2 }),
         orReturn(TestScope, undefined),
-        returnFail,
+        returnFail, runCatch,
         run
       )
 

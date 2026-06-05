@@ -55,8 +55,8 @@ export {
   returnIf,
   returnOnly,
   runCatch,
+  type CatchEffects,
   type CatchContext,
-  type RunCatchEffects
 } from '../Fail.js'
 export { assertPromise, Async, tryPromise, type AsyncContext } from '../Async.js'
 export {

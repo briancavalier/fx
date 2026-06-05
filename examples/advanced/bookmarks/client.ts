@@ -1,4 +1,4 @@
-import { type Async, catchAll, catchOnly, fail, type Fail, flatMap, type Fx } from '@briancavalier/fx'
+import { type Async, catchAll, catchOnly, fail, type Fail, flatMap, type Fx, runCatch } from '@briancavalier/fx'
 
 import { decodeOrFail, encodeOrFail } from '@briancavalier/fx/codec'
 import type { Decode, Encode } from '@briancavalier/fx/codec'
@@ -129,7 +129,7 @@ const requestText = (
   }).pipe(
     flatMap(expectSuccess),
     flatMap(text),
-    catchAll(cause => fail({ tag: 'BookmarkRequestFailed', cause }))
+    catchAll(cause => fail({ tag: 'BookmarkRequestFailed', cause })), runCatch
   )
 
 const apiUrl = (baseUrl: URL, path: string, query?: URLSearchParams): URL => {

@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { assertPromise, tryPromise } from './Async.js'
 import { at } from './Breadcrumb.js'
 import { RaceAllFailed, all, withCoopConcurrency, firstSuccess, fork, forkIn, mapAll, race, withUnboundedConcurrency } from './Concurrent.js'
-import { Fail, fail, returnFail } from './Fail.js'
+import { Fail, fail, returnFail, runCatch } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
 import { fx, runPromise } from './Fx.js'
 import { control } from './Handler.js'
@@ -294,8 +294,8 @@ describe('Trace', () => {
       const f = fx(function* () {
         const off = yield* fork(offChild)
         const labels = yield* fork(labelsChild)
-        const offResult = yield* wait(off).pipe(returnFail)
-        const labelsResult = yield* wait(labels).pipe(returnFail)
+        const offResult = yield* wait(off).pipe(returnFail, runCatch)
+        const labelsResult = yield* wait(labels).pipe(returnFail, runCatch)
         return [offResult, labelsResult] as const
       })
 
@@ -330,10 +330,10 @@ describe('Trace', () => {
         return yield* firstSuccess([fx(function* () { yield* fail(firstSuccessError) })]).pipe(withTraceCapture('labels'))
       })
 
-      const allResult = await allProgram.pipe(withUnboundedConcurrency, returnFail, runPromise)
-      const mapAllResult = await mapAllProgram.pipe(withUnboundedConcurrency, returnFail, runPromise)
-      const raceResult = await raceProgram.pipe(withUnboundedConcurrency, returnFail, runPromise)
-      const firstSuccessResult = await firstSuccessProgram.pipe(withUnboundedConcurrency, returnFail, runPromise)
+      const allResult = await allProgram.pipe(withUnboundedConcurrency, returnFail, runCatch, runPromise)
+      const mapAllResult = await mapAllProgram.pipe(withUnboundedConcurrency, returnFail, runCatch, runPromise)
+      const raceResult = await raceProgram.pipe(withUnboundedConcurrency, returnFail, runCatch, runPromise)
+      const firstSuccessResult = await firstSuccessProgram.pipe(withUnboundedConcurrency, returnFail, runCatch, runPromise)
 
       assert.ok(Fail.is(allResult))
       assert.ok(Fail.is(mapAllResult))
@@ -365,7 +365,7 @@ describe('Trace', () => {
         return yield* firstSuccess([fx(function* () { yield* fail(raceError) })])
       })
 
-      const raceResult = await raceProgram.pipe(withUnboundedConcurrency, returnFail, runPromise)
+      const raceResult = await raceProgram.pipe(withUnboundedConcurrency, returnFail, runCatch, runPromise)
 
       assert.ok(Fail.is(raceResult))
       assert.ok(raceResult.arg instanceof RaceAllFailed)
@@ -389,8 +389,8 @@ describe('Trace', () => {
         return yield* mapAll([mapAllError], error => fx(function* () { yield* fail(error) })).pipe(withTraceCapture('labels'), withCoopConcurrency())
       })
 
-      const allResult = await allProgram.pipe(returnFail, runPromise)
-      const mapAllResult = await mapAllProgram.pipe(returnFail, runPromise)
+      const allResult = await allProgram.pipe(returnFail, runCatch, runPromise)
+      const mapAllResult = await mapAllProgram.pipe(returnFail, runCatch, runPromise)
 
       assert.ok(Fail.is(allResult))
       assert.ok(Fail.is(mapAllResult))
@@ -421,9 +421,9 @@ describe('Trace', () => {
         return yield* race([fx(function* () { yield* fail(raceError) })]).pipe(withTraceCapture('labels'), withCoopConcurrency())
       })
 
-      const allResult = await allProgram.pipe(returnFail, runPromise)
-      const mapAllResult = await mapAllProgram.pipe(returnFail, runPromise)
-      const raceResult = await raceProgram.pipe(returnFail, runPromise)
+      const allResult = await allProgram.pipe(returnFail, runCatch, runPromise)
+      const mapAllResult = await mapAllProgram.pipe(returnFail, runCatch, runPromise)
+      const raceResult = await raceProgram.pipe(returnFail, runCatch, runPromise)
 
       assert.ok(Fail.is(allResult))
       assert.ok(Fail.is(mapAllResult))
@@ -453,7 +453,7 @@ describe('Trace', () => {
         )
       })
 
-      const raceResult = await raceProgram.pipe(returnFail, runPromise)
+      const raceResult = await raceProgram.pipe(returnFail, runCatch, runPromise)
 
       assert.ok(Fail.is(raceResult))
       assert.ok(raceResult.arg instanceof RaceAllFailed)
@@ -642,7 +642,7 @@ describe('Trace', () => {
 
       const result = await wait(failingTask).pipe(
         withTraceCapture('off'),
-        returnFail,
+        returnFail, runCatch,
         runPromise
       )
 
@@ -674,7 +674,7 @@ describe('Trace', () => {
     const previous = setTraceCapturePolicy('off')
     try {
       const result = await tryPromise(() => Promise.reject(new Error('try labels')))
-        .pipe(withTraceCapture('labels'), returnFail, runPromise)
+        .pipe(withTraceCapture('labels'), returnFail, runCatch, runPromise)
 
       assert.ok(Fail.is(result))
       const trace = result.trace === undefined ? undefined : snapshotTrace(result.trace)
@@ -688,7 +688,7 @@ describe('Trace', () => {
     const fullPrevious = setTraceCapturePolicy('full')
     try {
       const result = await tryPromise(() => Promise.reject(new Error('try off')))
-        .pipe(withTraceCapture('off'), returnFail, runPromise)
+        .pipe(withTraceCapture('off'), returnFail, runCatch, runPromise)
 
       assert.ok(Fail.is(result))
       assert.equal(result.trace, undefined)
@@ -726,7 +726,7 @@ describe('Trace', () => {
     const retryProgram = fx(function* () {
       return yield* fail(retryError).pipe(retry({ retries: 0 }), defaultRetry())
     })
-    const retryResult = await retryProgram.pipe(withTraceCapture('labels'), returnFail, runPromise)
+    const retryResult = await retryProgram.pipe(withTraceCapture('labels'), returnFail, runCatch, runPromise)
 
     assert.ok(Fail.is(retryResult))
     assert.equal(retryResult.arg, retryError)

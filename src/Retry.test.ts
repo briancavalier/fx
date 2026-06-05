@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { Effect } from './Effect.js'
-import { Fail, fail, returnFail } from './Fail.js'
+import { Fail, fail, returnFail, runCatch } from './Fail.js'
 import { fx, ok, run, runPromise } from './Fx.js'
 import { handle } from './Handler.js'
 import { RetryEvent, defaultRetry, retry } from './Retry.js'
@@ -24,7 +24,7 @@ describe('Retry', () => {
     const r = f.pipe(
       retry({ retries: 2 }),
       defaultRetry({ observe: e => fx(function* () { events.push(e) }) }),
-      returnFail,
+      returnFail, runCatch,
       run
     )
 
@@ -50,7 +50,7 @@ describe('Retry', () => {
     const r = f.pipe(
       retry({ retries: 1 }),
       defaultRetry({ observe: e => fx(function* () { events.push(e) }) }),
-      returnFail,
+      returnFail, runCatch,
       run
     )
 
@@ -71,7 +71,7 @@ describe('Retry', () => {
       const r = fail(cause).pipe(
         retry({ retries: 5 }),
         defaultRetry(),
-        returnFail,
+        returnFail, runCatch,
         run
       )
 
@@ -101,7 +101,7 @@ describe('Retry', () => {
       return yield* fail(cause).pipe(retry({ retries: 0 }), defaultRetry())
     })
 
-    const r = await program.pipe(withTraceCapture('labels'), returnFail, runPromise)
+    const r = await program.pipe(withTraceCapture('labels'), returnFail, runCatch, runPromise)
 
     assert.ok(Fail.is(r))
     assert.equal(r.arg, cause)
@@ -120,7 +120,7 @@ describe('Retry', () => {
       const r = failed.pipe(
         retry({ retries: 0 }),
         defaultRetry(),
-        returnFail,
+        returnFail, runCatch,
         run
       )
 
@@ -149,7 +149,7 @@ describe('Retry', () => {
       yield* fail(attempts)
     })
 
-    const r = f.pipe(retry({ retries: 3, while: (e: number) => e < 2 }), defaultRetry(), returnFail, run)
+    const r = f.pipe(retry({ retries: 3, while: (e: number) => e < 2 }), defaultRetry(), returnFail, runCatch, run)
 
     assert.ok(Fail.is(r))
     assert.equal(r.arg, 2)
@@ -168,7 +168,7 @@ describe('Retry', () => {
     const r = f.pipe(
       retry({ retries: 0 }),
       defaultRetry({ observe: e => fx(function* () { events.push(e) }) }),
-      returnFail,
+      returnFail, runCatch,
       run
     )
 
@@ -192,7 +192,7 @@ describe('Retry', () => {
     const r = f.pipe(
       retry({ retries: 2 }),
       defaultRetry({ observe: e => fx(function* () { events.push(e) }) }),
-      returnFail,
+      returnFail, runCatch,
       run
     )
 
@@ -216,7 +216,7 @@ describe('Retry', () => {
     const r = f.pipe(
       retry({ retries: 2 }),
       defaultRetry({ observe: () => fail('observe failed') }),
-      returnFail,
+      returnFail, runCatch,
       run
     )
 
@@ -240,7 +240,7 @@ describe('Retry', () => {
     const r = f.pipe(
       retry({ retries: 1 }),
       defaultRetry(),
-      returnFail,
+      returnFail, runCatch,
       handle(CurrentPrefix, () => ok('handled')),
       run
     )
@@ -262,7 +262,7 @@ describe('Retry', () => {
       return yield* inner.pipe(retry({ retries: 1 }))
     }).pipe(retry({ retries: 1 }))
 
-    const r = outer.pipe(defaultRetry(), returnFail, run)
+    const r = outer.pipe(defaultRetry(), returnFail, runCatch, run)
 
     assert.ok(!Fail.is(r))
     assert.equal(r, 'ok')
@@ -285,7 +285,7 @@ describe('Retry', () => {
       handle(NeedsHandler, () =>
         attempts < 3 ? fail('from handler') : ok('ok')),
       defaultRetry({ observe: e => fx(function* () { events.push(e) }) }),
-      returnFail,
+      returnFail, runCatch,
       run
     )
 
@@ -314,7 +314,7 @@ describe('Retry', () => {
       retry({ retries: 2 }),
       defaultRetry({ observe: e => fx(function* () { events.push(e) }) }),
       handle(NeedsHandler, () => fail('outside retry')),
-      returnFail,
+      returnFail, runCatch,
       run
     )
 
@@ -344,7 +344,7 @@ describe('Retry', () => {
           yield* sleep(event.attempt * 100)
         }
       })
-    }), returnFail, withClock(c), runPromise)
+    }), returnFail, runCatch, withClock(c), runPromise)
 
     await c.step(100)
     assert.deepEqual(events, [

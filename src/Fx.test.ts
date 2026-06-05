@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
 import { provideAll } from './Env.js'
-import { Fail, returnFail } from './Fail.js'
+import { Fail, returnFail, runCatch } from './Fail.js'
 import { assertSync, flatMap, fx, ok, run, runPromise, runTask, trySync } from './Fx.js'
 import { control, handle } from './Handler.js'
 import { getTrace } from './Trace.js'
@@ -156,13 +156,13 @@ describe('Fx', () => {
   describe('trySync', () => {
     it('given thunk, returns result', () => {
       const x = Math.random()
-      const r = trySync(() => x).pipe(returnFail, run)
+      const r = trySync(() => x).pipe(returnFail, runCatch, run)
       assert.equal(r, x)
     })
 
     it('given thunk throws, produces Fail', () => {
       const e = new Error()
-      const r = trySync(() => { throw e }).pipe(returnFail, run)
+      const r = trySync(() => { throw e }).pipe(returnFail, runCatch, run)
       assert.ok(Fail.is(r))
       assert.equal(r.arg, e)
     })

@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise, type Async } from './Async.js'
-import { assert as assertNoFail } from './Fail.js'
+import { assert as assertNoFail, runCatch } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
 import { fx, type Fx } from './Fx.js'
 import { runNodeMain, runNodePromise, type NodeSignalName, type NodeSignalProcess } from './NodeRuntime.js'
@@ -50,7 +50,7 @@ describe('NodeRuntime', () => {
       })
     }).pipe(
       withScope(TestScope),
-      assertNoFail
+      assertNoFail, runCatch
     ), { process })
 
     await tick()

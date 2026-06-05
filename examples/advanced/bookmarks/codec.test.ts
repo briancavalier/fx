@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { assert as assertNoFail, returnAll, run } from '@briancavalier/fx'
+import { assert as assertNoFail, runCatch, returnAll, run } from '@briancavalier/fx'
 
 import { decodeOrFail, encodeOrFail } from '@briancavalier/fx/codec'
 import { AddBookmarkInputJson, BookmarkJson, InvalidBookmarkJson, withBookmarkCodecs } from './codec.js'
@@ -9,7 +9,7 @@ import type { Bookmark } from './domain.js'
 describe('bookmarks codecs', () => {
   it('encodes bookmark dates as ISO strings for JSON responses', () => {
     const encoded = withBookmarkCodecs(encodeOrFail(BookmarkJson, bookmark)).pipe(
-      assertNoFail,
+      assertNoFail, runCatch,
       run
     )
 
@@ -24,7 +24,7 @@ describe('bookmarks codecs', () => {
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-02T00:00:00.000Z'
     }))).pipe(
-      assertNoFail,
+      assertNoFail, runCatch,
       run
     )
 
@@ -39,7 +39,7 @@ describe('bookmarks codecs', () => {
       url: 'https://example.com',
       tags: ['typescript', 'effects']
     }))).pipe(
-      assertNoFail,
+      assertNoFail, runCatch,
       run
     )
 
@@ -54,7 +54,7 @@ describe('bookmarks codecs', () => {
       url: 'https://example.com',
       tags: [1]
     }))).pipe(
-      returnAll,
+      returnAll, runCatch,
       run
     )
 
@@ -63,7 +63,7 @@ describe('bookmarks codecs', () => {
 
   it('rejects malformed add bookmark JSON', () => {
     const decoded = withBookmarkCodecs(decodeOrFail(AddBookmarkInputJson, '{"url":')).pipe(
-      returnAll,
+      returnAll, runCatch,
       run
     )
 

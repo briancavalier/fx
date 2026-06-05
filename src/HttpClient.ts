@@ -1,7 +1,7 @@
 import { Async, tryPromise } from './Async.js'
 import { at } from './Breadcrumb.js'
 import { Effect, withOrigin } from './Effect.js'
-import { Fail, catchAll, fail, failFrom } from './Fail.js'
+import { Fail, catchAll, fail, failFrom, runCatch } from './Fail.js'
 import { Fx, flatMap, map, ok } from './Fx.js'
 import { handle } from './Handler.js'
 
@@ -144,7 +144,8 @@ export const bytes = <S, H>(response: Response<S, ResponseBody, H>): Fx<Async | 
 
   const body = response.body
   return tryPromise(() => readStream(body)).pipe(
-    catchAll(cause => fail(new DecodeError('Failed to decode response body', { cause })))
+    catchAll(cause => fail(new DecodeError('Failed to decode response body', { cause }))),
+    runCatch
   )
 }
 
@@ -264,7 +265,7 @@ export type W3CFetchOptions = {
  *     w3cFetch({
  *       init: (_, init) => ({ ...init, credentials: 'include' })
  *     }),
- *     returnFail,
+ *     returnFail, runCatch,
  *     runPromise
  *   )
  */
@@ -279,7 +280,8 @@ export const w3cFetch = ({
         return tryPromise(signal =>
           fetch(r.url, init(r, toFetchRequest(r, signal))).then(toResponse)
         ).pipe(
-          catchAll(cause => failFrom(httpRequest, new TransportError(r, { cause })))
+          catchAll(cause => failFrom(httpRequest, new TransportError(r, { cause }))),
+          runCatch
         )
       })
     )

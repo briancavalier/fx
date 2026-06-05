@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { Fail, fail, returnFail } from './Fail.js'
+import { Fail, fail, returnFail, runCatch } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { scope, withScope } from './Scope.js'
@@ -94,7 +94,7 @@ describe('State', () => {
     const initFailure = new Error('init failed')
     const program = getState(CounterState).pipe(
       withStateInit(CounterState, fail(initFailure)),
-      returnFail,
+      returnFail, runCatch,
       run
     )
 
@@ -122,7 +122,7 @@ describe('State', () => {
       }))
 
       return yield* getState(CounterState)
-    }).pipe(withScope(CounterState), withState(CounterState, 1), returnFail, run)
+    }).pipe(withScope(CounterState), withState(CounterState, 1), returnFail, runCatch, run)
 
     assert.equal(program, 2)
     assert.equal(finalizerState, 2)

@@ -1,4 +1,4 @@
-import { catchAll } from '../../../../src/Fail.js'
+import { catchAll, runCatch } from '../../../../src/Fail.js'
 import { fx, runPromise, type Fx } from '../../../../src/Fx.js'
 import { w3cFetch } from '../../../../src/HttpClient.js'
 import type { HandlerCapture } from '../../../../src/HandlerCapture.js'
@@ -116,7 +116,7 @@ const loadBookmarksFlow: Fx<UiEffects, void> =
 const runUi = async (program: Fx<UiEffects, void>): Promise<void> => {
   await program.pipe(
     w3cFetch(),
-    catchAll(cause => showError(`Request failed: ${formatCause(cause)}`)),
+    catchAll(cause => showError(`Request failed: ${formatCause(cause)}`)), runCatch,
     domPresentation(elements),
     runPromise
   )
@@ -126,7 +126,7 @@ function recoverClientErrors<E, A>(
   program: Fx<E | BookmarkClientEffects, A>
 ): Fx<E | BookmarkClientEffects | Presentation, A | void> {
   return program.pipe(
-    catchAll((error: BookmarkClientError) => showError(formatClientError(error)))
+    catchAll((error: BookmarkClientError) => showError(formatClientError(error))), runCatch
   )
 }
 

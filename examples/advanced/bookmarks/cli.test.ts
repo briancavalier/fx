@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { assert as assertNoFail, handle, ok, returnAll, runPromise } from '@briancavalier/fx'
+import { assert as assertNoFail, runCatch, handle, ok, returnAll, runPromise } from '@briancavalier/fx'
 
 import { HttpRequest, type Request, type ResponseBody } from '@briancavalier/fx/http-client'
 
@@ -79,7 +79,7 @@ describe('bookmarks API client', () => {
       tags: ['typescript']
     }).pipe(
       captureRequests(requests, jsonResponse(bookmarkWire)),
-      assertNoFail,
+      assertNoFail, runCatch,
       runPromise
     )
 
@@ -106,7 +106,7 @@ describe('bookmarks API client', () => {
       text: 'effects'
     }).pipe(
       captureRequests(requests, jsonResponse([bookmarkWire])),
-      assertNoFail,
+      assertNoFail, runCatch,
       runPromise
     )
 
@@ -118,9 +118,9 @@ describe('bookmarks API client', () => {
   it('updates bookmarks with expected routes', async () => {
     const requests: Request[] = []
 
-    await markBookmarkRead(apiBase, 'bookmark/1').pipe(captureRequests(requests, jsonResponse(bookmarkWire)), assertNoFail, runPromise)
-    await archiveBookmark(apiBase, 'bookmark/1').pipe(captureRequests(requests, jsonResponse(bookmarkWire)), assertNoFail, runPromise)
-    await refreshBookmarkMetadata(apiBase, 'bookmark/1').pipe(captureRequests(requests, jsonResponse(bookmarkWire)), assertNoFail, runPromise)
+    await markBookmarkRead(apiBase, 'bookmark/1').pipe(captureRequests(requests, jsonResponse(bookmarkWire)), assertNoFail, runCatch, runPromise)
+    await archiveBookmark(apiBase, 'bookmark/1').pipe(captureRequests(requests, jsonResponse(bookmarkWire)), assertNoFail, runCatch, runPromise)
+    await refreshBookmarkMetadata(apiBase, 'bookmark/1').pipe(captureRequests(requests, jsonResponse(bookmarkWire)), assertNoFail, runCatch, runPromise)
 
     assert.deepEqual(requests.map(request => [request.method, request.url.pathname]), [
       ['PATCH', '/api/bookmarks/bookmark%2F1/read'],
@@ -134,7 +134,7 @@ describe('bookmarks API client', () => {
       url: 'https://example.com'
     }).pipe(
       captureRequests([], jsonResponse({ tag: 'InvalidUrl' }, 400)),
-      returnAll,
+      returnAll, runCatch,
       runPromise
     )
 
@@ -148,7 +148,7 @@ describe('bookmarks API client', () => {
       url: 'https://example.com'
     }).pipe(
       captureRequests([], jsonResponse({ ...bookmarkWire, createdAt: 'not-a-date' })),
-      returnAll,
+      returnAll, runCatch,
       runPromise
     )
 

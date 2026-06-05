@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { Fail, fail, returnAll, returnFail } from './Fail.js'
+import { Fail, fail, returnAll, returnFail, runCatch } from './Fail.js'
 import { Fx, fx, ok, run } from './Fx.js'
 
 import {
@@ -92,7 +92,7 @@ describe('Codec', () => {
 
   it('decode carries its declared failure type before a decoder is handled', () => {
     const program = decodeOrFail(CheckedUserJson, '{"id":"u1","name":"Ada"}').pipe(
-      returnAll
+      returnAll, runCatch
     )
 
     const typed: Fx<Decode<typeof CheckedUserJson>, User | DecodeUnavailable> = program
@@ -101,7 +101,7 @@ describe('Codec', () => {
 
   it('encode carries its declared failure type before an encoder is handled', () => {
     const program = encodeOrFail(CheckedUserJson, { id: 'u1', name: 'Ada' }).pipe(
-      returnAll
+      returnAll, runCatch
     )
 
     const typed: Fx<Encode<typeof CheckedUserJson>, string | EncodeUnavailable> = program
@@ -178,7 +178,7 @@ describe('Codec', () => {
         encode: user => ok(codecOk(JSON.stringify(user))),
         decode: () => ok(codecFail(expected))
       }),
-      returnFail,
+      returnFail, runCatch,
       run
     )
 
@@ -195,7 +195,7 @@ describe('Codec', () => {
     )
 
     const typed: Fx<Fail<DecodeUnavailable>, User> = program
-    const actual = typed.pipe(returnFail, run)
+    const actual = typed.pipe(returnFail, runCatch, run)
 
     assert.ok(actual instanceof Fail)
     assert.ok(actual.arg instanceof DecodeUnavailable)
@@ -210,7 +210,7 @@ describe('Codec', () => {
     )
 
     const typed: Fx<Fail<EncodeUnavailable>, string> = program
-    const actual = typed.pipe(returnFail, run)
+    const actual = typed.pipe(returnFail, runCatch, run)
 
     assert.ok(actual instanceof Fail)
     assert.ok(actual.arg instanceof EncodeUnavailable)

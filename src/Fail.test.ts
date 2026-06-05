@@ -68,16 +68,38 @@ describe('Fail', () => {
       }, /Unhandled effect in run/)
     })
 
-    it('runCatch given no failures, returns body result', () => {
+    it('runCatch answers raw Catch with an Fx', () => {
       const expected = Math.random()
 
-      const actual = run(runCatch(new Catch(
+      const handled = run(runCatch(new Catch(
         ok(expected),
         (_): _ is never => true,
         ok
       )))
 
+      const actual = run(handled)
       assert.equal(actual, expected)
+    })
+
+    it('explicit direct use works with two yield* calls', () => {
+      const expected = Math.random()
+
+      const actual = run(fx(function* () {
+        const handled = yield* new Catch(
+          ok(expected),
+          (_): _ is never => true,
+          ok
+        )
+        return yield* handled
+      }).pipe(runCatch))
+
+      assert.equal(actual, expected)
+    })
+
+    it('helper usage requires runCatch', () => {
+      assert.throws(() => {
+        run(fail('failed').pipe(catchAll(ok)) as never)
+      }, /Unhandled effect in run/)
     })
 
     it('given matching failure, runs recovery and skips the rest of the body', () => {
@@ -92,7 +114,7 @@ describe('Fail', () => {
       const actual = run(f.pipe(catchAll(error => {
         events.push(`recover:${error}`)
         return ok('recovered')
-      })))
+      }), runCatch))
 
       assert.equal(actual, 'recovered')
       assert.deepEqual(events, ['before', 'recover:failed'])
@@ -101,7 +123,8 @@ describe('Fail', () => {
     it('given recovery failure, propagates recovery failure outward', () => {
       const actual = run(fail('body').pipe(
         catchAll(() => fail('recovery')),
-        returnFail
+        returnFail,
+        runCatch
       ))
 
       assert.ok(actual instanceof Fail)
@@ -113,6 +136,7 @@ describe('Fail', () => {
         withTraceCapture('off'),
         catchAll(() => fail(new Error('recovery'))),
         returnFail,
+        runCatch,
         runPromise
       )
 
@@ -124,7 +148,8 @@ describe('Fail', () => {
       const actual = run(fail('inner').pipe(
         catchAll(error => fail(`outer:${error}`).pipe(
           catchAll(inner => ok(`inner:${inner}`))
-        ))
+        )),
+        runCatch
       ))
 
       assert.equal(actual, 'inner:outer:inner')
@@ -132,15 +157,17 @@ describe('Fail', () => {
 
     it('lets an outer catch recover a non-matching failure from a nested raw Catch', () => {
       const f = fx(function* () {
-        return yield* new Catch(
+        const handled = yield* new Catch(
           fail('nested'),
           (_): _ is never => false,
           ok
         )
+        return yield* handled
       })
 
       const actual = run(f.pipe(
-        catchAll(error => ok(`outer:${error}`))
+        catchAll(error => ok(`outer:${error}`)),
+        runCatch
       ))
 
       assert.equal(actual, 'outer:nested')
@@ -160,7 +187,7 @@ describe('Fail', () => {
       const actual = run(f.pipe(catchAll(error => {
         events.push('recover')
         return ok(error)
-      })))
+      }), runCatch))
 
       assert.equal(actual, 'failed')
       assert.deepEqual(events, ['body', 'recover', 'cleanup'])
@@ -169,17 +196,20 @@ describe('Fail', () => {
     it('runs body cleanup when an active catch region is closed', () => {
       class Wait extends Effect('test/Fail/Catch/Wait')<void, void> { }
       const events: string[] = []
-      const f = runCatch(new Catch(
-        fx(function* () {
-          try {
-            yield* new Wait()
-          } finally {
-            events.push('cleanup')
-          }
-        }),
-        (_): _ is never => true,
-        ok
-      ))
+      const f = fx(function* () {
+        const handled = yield* new Catch(
+          fx(function* () {
+            try {
+              yield* new Wait()
+            } finally {
+              events.push('cleanup')
+            }
+          }),
+          (_): _ is never => true,
+          ok
+        )
+        return yield* handled
+      }).pipe(runCatch)
 
       const iterator = f[Symbol.iterator]()
       iterator.next()
@@ -198,6 +228,7 @@ describe('Fail', () => {
         catchAll(error => fx(function* () {
           return `${error}:${yield* new Ask()}`
         })),
+        runCatch,
         handle(Ask, () => ok('handled'))
       ))
 
@@ -210,7 +241,8 @@ describe('Fail', () => {
       const delayed = run(fx(function* () {
         const context = yield* captureHandlers('test/Fail/Catch')
         return withHandlerContext(context, fail('failed').pipe(
-          catchAll(() => new Ask())
+          catchAll(() => new Ask()),
+          runCatch
         ))
       }).pipe(
         handle(Ask, () => ok('captured')),
@@ -227,7 +259,7 @@ describe('Fail', () => {
       const expected = Math.random()
       const f = ok(expected)
 
-      const actual = run(f.pipe(returnIf((_): _ is never => true)))
+      const actual = run(f.pipe(returnIf((_): _ is never => true), runCatch))
       assert.equal(actual, expected)
     })
 
@@ -240,7 +272,7 @@ describe('Fail', () => {
 
       assert.throws(() => {
         // @ts-expect-error failure is not handled
-        run(f.pipe(returnIf((x): x is string => typeof x === 'string')))
+        run(f.pipe(returnIf((x): x is string => typeof x === 'string'), runCatch))
       }, /Unhandled effect in run/)
     })
 
@@ -251,7 +283,7 @@ describe('Fail', () => {
         return -1
       })
 
-      const actual = run(f.pipe(returnIf((x): x is number => typeof x === 'number')))
+      const actual = run(f.pipe(returnIf((x): x is number => typeof x === 'number'), runCatch))
       assert.equal(actual, expected)
     })
   })
@@ -264,7 +296,7 @@ describe('Fail', () => {
     it('given no failures, returns result', () => {
       const expected = Math.random()
       const f = ok(expected)
-      const actual = run(f.pipe(returnOnly(Error)))
+      const actual = run(f.pipe(returnOnly(Error), runCatch))
       assert.equal(actual, expected)
     })
 
@@ -277,7 +309,7 @@ describe('Fail', () => {
 
       assert.throws(() => {
         // @ts-expect-error failure is not handled
-        run(f.pipe(returnOnly(CustomError)))
+        run(f.pipe(returnOnly(CustomError), runCatch))
       }, /Unhandled effect in run/)
     })
 
@@ -288,7 +320,7 @@ describe('Fail', () => {
         return -1
       })
 
-      const actual = run(f.pipe(returnOnly(CustomError)))
+      const actual = run(f.pipe(returnOnly(CustomError), runCatch))
       assert.equal(actual, expected)
     })
   })
@@ -298,7 +330,7 @@ describe('Fail', () => {
       const expected = Math.random()
       const f = ok(expected)
 
-      const actual = f.pipe(returnFail, run)
+      const actual = f.pipe(returnFail, runCatch, run)
       assert.equal(actual, expected)
     })
 
@@ -309,7 +341,7 @@ describe('Fail', () => {
         return -1
       })
 
-      const actual = f.pipe(returnFail, run)
+      const actual = f.pipe(returnFail, runCatch, run)
       assert.ok(actual instanceof Fail)
       assert.equal(actual.arg, expected)
     })

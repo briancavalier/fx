@@ -1,4 +1,4 @@
-import { catchAll, fx, type Fx, map, ok, runPromise } from '@briancavalier/fx'
+import { catchAll, fx, type Fx, map, ok, runCatch, runPromise } from '@briancavalier/fx'
 
 import { w3cFetch } from '@briancavalier/fx/http-client'
 import {
@@ -63,7 +63,7 @@ export const runCli = (
 ): Fx<BookmarkClientEffects, CliResult> =>
   runCommand(baseUrl, command).pipe(
     map(output => ({ tag: 'success', output }) as const),
-    catchAll((error: BookmarkClientError) => ok({ tag: 'failure', message: formatClientError(error) } as const))
+    catchAll((error: BookmarkClientError) => ok({ tag: 'failure', message: formatClientError(error) } as const)), runCatch
   )
 
 export const formatBookmark = (bookmark: Bookmark): string => {
@@ -211,7 +211,7 @@ export const main = (args: readonly string[], env: CliEnv): Fx<BookmarkClientEff
 const runMain = (program: Fx<BookmarkClientEffects, CliResult>): Promise<CliResult> =>
   program.pipe(
     w3cFetch(),
-    catchAll(cause => ok({ tag: 'failure', message: `Request failed: ${formatCause(cause)}` } as const)),
+    catchAll(cause => ok({ tag: 'failure', message: `Request failed: ${formatCause(cause)}` } as const)), runCatch,
     runPromise
   )
 

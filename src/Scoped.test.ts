@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { abort, Abort } from './Abort.js'
 import { forkIn, withUnboundedConcurrency } from './Concurrent.js'
-import { assert as assertNoFail, fail, Fail, returnFail } from './Fail.js'
+import { assert as assertNoFail, fail, Fail, returnFail, runCatch } from './Fail.js'
 import { andFinally, andFinallyIn } from './Finalization.js'
 import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { interruptFrom, InterruptFrom, recoverInterrupt } from './InterruptFrom.js'
@@ -20,7 +20,7 @@ describe('currentScope', () => {
 
     const _: typeof program extends Fx<Fail<AggregateError>, void> ? true : false = true
 
-    assert.equal(run(program.pipe(returnFail)) instanceof Fail, false)
+    assert.equal(run(program.pipe(returnFail, runCatch)) instanceof Fail, false)
   })
 
   it('supports lifetime APIs without exposing control protocols', async () => {
@@ -37,7 +37,7 @@ describe('currentScope', () => {
       return 'done' as const
     })).pipe(
       withUnboundedConcurrency,
-      assertNoFail,
+      assertNoFail, runCatch,
       runPromise
     )
 
@@ -76,7 +76,7 @@ describe('currentScope', () => {
       }))
       events.push('body done')
       return 'done' as const
-    })).pipe(assertNoFail))
+    })).pipe(assertNoFail, runCatch))
 
     assert.equal(result, 'done')
     assert.deepEqual(events, ['inner cleanup', 'body done', 'outer cleanup'])
@@ -91,7 +91,7 @@ describe('currentScope', () => {
     }).pipe(
       withScope(TestScope),
       recoverInterrupt(TestScope, r => ok(r)),
-      assertNoFail
+      assertNoFail, runCatch
     ))
 
     assert.equal(result, reason)
@@ -105,7 +105,7 @@ describe('scoped', () => {
     const result = run(scoped(fx(function* () {
       yield* andFinally(exit => ok(void exits.push(exit.type)))
       return 'done' as const
-    })).pipe(assertNoFail))
+    })).pipe(assertNoFail, runCatch))
 
     assert.equal(result, 'done')
     assert.deepEqual(exits, ['success'])
@@ -118,7 +118,7 @@ describe('scoped', () => {
     const result = run(scoped(fx(function* () {
       yield* andFinally(exit => ok(void exits.push(exit.type)))
       return yield* fail(failure)
-    })).pipe(returnFail))
+    })).pipe(returnFail, runCatch))
 
     assert.equal(result instanceof Fail, true)
     assert.equal((result as Fail<Error>).arg, failure)
@@ -153,7 +153,7 @@ describe('scoped', () => {
       return 'parent' as const
     })).pipe(
       withUnboundedConcurrency,
-      assertNoFail,
+      assertNoFail, runCatch,
       runPromise
     )
 
@@ -167,7 +167,7 @@ describe('scoped', () => {
     const result = run(scoped(fx(function* () {
       yield* andFinally(exit => ok(void exits.push(exit.type)))
       return 'done' as const
-    })).pipe(assertNoFail))
+    })).pipe(assertNoFail, runCatch))
 
     assert.equal(result, 'done')
     assert.deepEqual(exits, ['success'])

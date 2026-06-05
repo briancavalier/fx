@@ -2,7 +2,7 @@ import { Async } from './Async.js'
 import { at } from './Breadcrumb.js'
 import { Abort } from './Abort.js'
 import { isEffect, type AnyEffect } from './Effect.js'
-import { Fail, fail, returnFail } from './Fail.js'
+import { Fail, fail, returnFail, runCatch } from './Fail.js'
 import { Finalizer, Finally } from './Finalization.js'
 import { Fx, fx, ok } from './Fx.js'
 import { CapturedHandler, HandlerCapture, withHandlerContext } from './HandlerCapture.js'
@@ -316,7 +316,7 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
                 const exit = result.exit as Exit<Scope>
                 const cleanup = exit.type === 'failure' ? undefined : yield* returnFail(fx(function* () {
                   return yield* drainIteratorReturn(i, step)
-                }))
+                })).pipe(runCatch)
                 const failures = cleanup !== undefined && Fail.is(cleanup) ? cleanupFailuresOf(cleanup.arg) : []
                 return yield* finishRoot(exit, undefined, failures)
               }
@@ -521,7 +521,7 @@ const collectInterruptedCleanupFailures = function* <A, Scope extends AnyScope>(
     yield* collectCleanupFailures(failures, function* () {
       const result = yield* returnFail(fx(function* () {
         return yield* drainIteratorReturn(iterator, step)
-      }))
+      })).pipe(runCatch)
       if (Fail.is(result)) failures.push(result.arg)
     })
   }
@@ -541,7 +541,7 @@ const collectInterruptedChildCleanupFailures = function* <A>(
     yield* collectCleanupFailures(failures, function* () {
       const result = yield* returnFail(fx(function* () {
         return yield* drainIteratorReturn(iterator, step)
-      }))
+      })).pipe(runCatch)
       if (Fail.is(result)) failures.push(result.arg)
     })
   }
@@ -579,7 +579,7 @@ const releaseSafely = (resources: readonly Finalizer[], exit: Exit) => fx(functi
   const failures = [] as unknown[]
   for (let i = resources.length - 1; i >= 0; --i) {
     try {
-      const r = yield* returnFail(resources[i](exit))
+      const r = yield* returnFail(resources[i](exit)).pipe(runCatch)
       if (Fail.is(r)) failures.push(r.arg)
     } catch (e) {
       failures.push(e)

@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { withBoundedConcurrency } from '@briancavalier/fx/concurrent'
-import { type Async, type Fx, type HandlerCapture, type Interrupt, returnAll, runPromise } from '@briancavalier/fx'
+import { type Async, type Fx, type HandlerCapture, type Interrupt, returnAll, runCatch, runPromise } from '@briancavalier/fx'
 
 import { collect } from '@briancavalier/fx/log'
 import { collectFrom, withScope } from '@briancavalier/fx/scope'
@@ -142,7 +142,7 @@ describe('tool agent example', () => {
       collect,
       withBoundedConcurrency(4),
       withScope(AgentSessionScope),
-      returnAll,
+      returnAll, runCatch,
       collectFrom(AgentEvents)
     )
 
@@ -165,7 +165,7 @@ const runToolAgent = async (
     collect,
     withBoundedConcurrency(4),
     withScope(AgentSessionScope),
-    returnAll,
+    returnAll, runCatch,
     collectFrom(AgentEvents),
     runPromise
   )

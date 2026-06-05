@@ -1,4 +1,4 @@
-import { consoleError, consoleLog, defaultConsole, fx, returnAll, runPromise } from '@briancavalier/fx'
+import { consoleError, consoleLog, defaultConsole, fx, returnAll, runCatch, runPromise } from '@briancavalier/fx'
 import { withCoopConcurrency } from '@briancavalier/fx/concurrent'
 
 import { withConsoleLog } from '@briancavalier/fx/log'
@@ -31,7 +31,7 @@ const runSnapshot = (label: string, failDeploy: boolean) => fx(function* () {
     // cooperative scheduling:
     withCoopConcurrency({ concurrency: 6, yieldBudget: 64 }),
     withScope(BundleScope),
-    returnAll,
+    returnAll, runCatch,
   )
 
   yield* consoleLog(`\n${label}`)

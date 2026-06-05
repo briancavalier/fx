@@ -1,4 +1,4 @@
-import { assert as assertNoFail, consoleLog, defaultConsole, fx, runPromise } from '@briancavalier/fx'
+import { assert as assertNoFail, runCatch, consoleLog, defaultConsole, fx, runPromise } from '@briancavalier/fx'
 import { forkIn, withBoundedConcurrency } from '@briancavalier/fx/concurrent'
 import { andFinally, currentScope, recoverInterrupt, scope, withScope } from '@briancavalier/fx/scope'
 import { defaultTime, sleep } from '@briancavalier/fx/time'
@@ -36,7 +36,7 @@ const result = await request.pipe(
   defaultTime,
   withBoundedConcurrency(2),
   defaultConsole,
-  assertNoFail,
+  assertNoFail, runCatch,
   runPromise
 )
 

@@ -60,22 +60,22 @@ describe('Fail', () => {
   describe('Catch', () => {
     it('raw Catch is an effect that needs runCatch', () => {
       assert.throws(() => {
-        run(new Catch(
-          ok('body'),
-          (_): _ is never => true,
-          ok
-        ) as never)
+        run(new Catch({
+          body: ok('body'),
+          match: (_): _ is never => true,
+          recover: ok
+        }) as never)
       }, /Unhandled effect in run/)
     })
 
     it('runCatch answers raw Catch with an Fx', () => {
       const expected = Math.random()
 
-      const handled = run(runCatch(new Catch(
-        ok(expected),
-        (_): _ is never => true,
-        ok
-      )))
+      const handled = run(runCatch(new Catch({
+        body: ok(expected),
+        match: (_): _ is never => true,
+        recover: ok
+      })))
 
       const actual = run(handled)
       assert.equal(actual, expected)
@@ -85,11 +85,11 @@ describe('Fail', () => {
       const expected = Math.random()
 
       const actual = run(fx(function* () {
-        const handled = yield* new Catch(
-          ok(expected),
-          (_): _ is never => true,
-          ok
-        )
+        const handled = yield* new Catch({
+          body: ok(expected),
+          match: (_): _ is never => true,
+          recover: ok
+        })
         return yield* handled
       }).pipe(runCatch))
 
@@ -157,11 +157,11 @@ describe('Fail', () => {
 
     it('lets an outer catch recover a non-matching failure from a nested raw Catch', () => {
       const f = fx(function* () {
-        const handled = yield* new Catch(
-          fail('nested'),
-          (_): _ is never => false,
-          ok
-        )
+        const handled = yield* new Catch({
+          body: fail('nested'),
+          match: (_): _ is never => false,
+          recover: ok
+        })
         return yield* handled
       })
 
@@ -209,17 +209,17 @@ describe('Fail', () => {
       class Wait extends Effect('test/Fail/Catch/Wait')<void, void> { }
       const events: string[] = []
       const f = fx(function* () {
-        const handled = yield* new Catch(
-          fx(function* () {
+        const handled = yield* new Catch({
+          body: fx(function* () {
             try {
               yield* new Wait()
             } finally {
               events.push('cleanup')
             }
           }),
-          (_): _ is never => true,
-          ok
-        )
+          match: (_): _ is never => true,
+          recover: ok
+        })
         return yield* handled
       }).pipe(runCatch)
 

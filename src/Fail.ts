@@ -66,15 +66,7 @@ export interface CatchContext<E1, E extends ExtractFail<E1>, E2, A, B> {
 export class Catch<const E1, const E extends ExtractFail<E1>, const E2, const A, const B> extends Effect('fx/Fail/Catch')<
   CatchContext<E1, E, E2, A, B>,
   Fx<CatchEffects<E1, E, E2>, A | B>
-> {
-  constructor(
-    body: Fx<E1, A>,
-    match: (e: ExtractFail<E1>) => e is E,
-    recover: (e: E, failure: Fail<E>) => Fx<E2, B>
-  ) {
-    super({ body, match, recover })
-  }
-}
+> { }
 
 export type CatchEffects<E1, E, E2> = Exclude<E1, Fail<E>> | E2
 
@@ -105,7 +97,7 @@ export const catchIf = <const E1, const E extends ExtractFail<E1>, const E2, con
   match: (e: ExtractFail<E1>) => e is E,
   handle: (e: E) => Fx<E2, B>
 ) => <const A>(f: Fx<E1, A>): Fx<Catch<E1, E, E2, A, B> | CatchEffects<E1, E, E2>, A | B> =>
-    new Catch(f, match, (e, _failure) => handle(e)).pipe(flatten)
+    new Catch({ body: f, match, recover: (e, _failure) => handle(e) }).pipe(flatten)
 
 type AnyConstructor = abstract new (...args: any[]) => any
 
@@ -163,7 +155,7 @@ export const returnAll = <const E, const A>(f: Fx<E, A>) => f.pipe(catchAll(ok))
  *   const resultOrFail = computation.pipe(returnFail, runCatch)
  */
 export const returnFail = <const E, const A>(f: Fx<E, A>) =>
-  new Catch(f, (_): _ is ExtractFail<E> => true, (_, failure) => ok(failure))
+  new Catch({ body: f, match: (_): _ is ExtractFail<E> => true, recover: (_, failure) => ok(failure) })
     .pipe(flatten) as Fx<Catch<E, ExtractFail<E>, never, A, Extract<E, Fail<any>>> | Exclude<E, Fail<any>>, A | Extract<E, Fail<any>>>
 
 /**
@@ -172,7 +164,7 @@ export const returnFail = <const E, const A>(f: Fx<E, A>) =>
  *   const result = trySync(f).pipe(assert) // Crashes if f fails
  */
 export const assert = <const E, const A>(f: Fx<E, A>) =>
-  new Catch(f, (_): _ is ExtractFail<E> => true, e => { throw e })
+  new Catch({ body: f, match: (_): _ is ExtractFail<E> => true, recover: e => { throw e } })
     .pipe(flatten) as Fx<Catch<E, ExtractFail<E>, never, A, never> | Exclude<E, Fail<any>>, A>
 
 type UnwrapFail<F> = F extends Fail<infer E> ? E : never

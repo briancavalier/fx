@@ -159,5 +159,6 @@ const jsonHeaders: Headers = [['content-type', 'application/json']]
 const withClientCodecs = <E, A>(program: Fx<E, A>): Fx<Exclude<E, BookmarkClientCodecEffects> | Fail<BookmarkClientError>, A> =>
   program.pipe(
     withBookmarkCodecs,
-    catchOnly(InvalidBookmarkJson, error => fail({ tag: 'InvalidBookmarkResponse', value: error } as const))
+    catchOnly(InvalidBookmarkJson, error => fail({ tag: 'InvalidBookmarkResponse', value: error } as const)),
+    runCatch
   ) as Fx<Exclude<E, BookmarkClientCodecEffects> | Fail<BookmarkClientError>, A>

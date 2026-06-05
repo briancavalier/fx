@@ -193,6 +193,18 @@ describe('Fail', () => {
       assert.deepEqual(events, ['body', 'recover', 'cleanup'])
     })
 
+    it('handles matching failures yielded during stopped body cleanup', () => {
+      const actual = run(fx(function* () {
+        try {
+          yield* fail('body')
+        } finally {
+          yield* fail('cleanup')
+        }
+      }).pipe(catchAll(ok), runCatch))
+
+      assert.equal(actual, 'body')
+    })
+
     it('runs body cleanup when an active catch region is closed', () => {
       class Wait extends Effect('test/Fail/Catch/Wait')<void, void> { }
       const events: string[] = []

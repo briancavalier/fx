@@ -91,20 +91,21 @@ export const runCatch = handle(Catch, effect => ok(catchRegion(effect.arg))) as 
 /**
  * Catch failures matching a type guard and handle them with the provided function.
  * @example
- *   computation.pipe(catchIf(isAuthError, e => recoverFx), runCatch)
+ *   computation.pipe(catchIf(isAuthError, e => recoverFx))
  */
 export const catchIf = <const E1, const E extends ExtractFail<E1>, const E2, const B>(
   match: (e: ExtractFail<E1>) => e is E,
   handle: (e: E) => Fx<E2, B>
-) => <const A>(f: Fx<E1, A>): Fx<Catch<E1, E, E2, A, B> | CatchEffects<E1, E, E2>, A | B> =>
-    new Catch({ body: f, match, recover: (e, _failure) => handle(e) }).pipe(flatten)
+) => <const A>(f: Fx<E1, A>): Fx<CatchEffects<E1, E, E2>, A | B> =>
+    new Catch({ body: f, match, recover: (e, _failure) => handle(e) })
+      .pipe(flatten, runCatch) as Fx<CatchEffects<E1, E, E2>, A | B>
 
 type AnyConstructor = abstract new (...args: any[]) => any
 
 /**
  * Catch failures that are instances of the given constructor and handles them with the provided function.
  * @example
- *   computation.pipe(catchOnly(AuthError, e => recoverFx), runCatch)
+ *   computation.pipe(catchOnly(AuthError, e => recoverFx))
  */
 export const catchOnly = <const E1, const E extends AnyConstructor, const E2, const B>(
   cls: E,
@@ -120,7 +121,7 @@ export const catchOnly = <const E1, const E extends AnyConstructor, const E2, co
  *
  * @example
  * ```ts
- * computation.pipe(catchAll(error => recover(error)), runCatch)
+ * computation.pipe(catchAll(error => recover(error)))
  * ```
  */
 export const catchAll = <const E1, const E2, const B>(handle: (e: ExtractFail<E1>) => Fx<E2, B>) =>
@@ -145,18 +146,18 @@ export const returnOnly = <const C extends AnyConstructor>(c: C) =>
 /**
  * Catch all failures and return the caught error.
  * @example
- *   const resultOrError = computation.pipe(returnAll, runCatch)
+ *   const resultOrError = computation.pipe(returnAll)
  */
 export const returnAll = <const E, const A>(f: Fx<E, A>) => f.pipe(catchAll(ok))
 
 /**
  * Catch all failures and return them wrapped in a `Fail` instance.
  * @example
- *   const resultOrFail = computation.pipe(returnFail, runCatch)
+ *   const resultOrFail = computation.pipe(returnFail)
  */
 export const returnFail = <const E, const A>(f: Fx<E, A>) =>
   new Catch({ body: f, match: (_): _ is ExtractFail<E> => true, recover: (_, failure) => ok(failure) })
-    .pipe(flatten) as Fx<Catch<E, ExtractFail<E>, never, A, Extract<E, Fail<any>>> | Exclude<E, Fail<any>>, A | Extract<E, Fail<any>>>
+    .pipe(flatten, runCatch) as Fx<Exclude<E, Fail<any>>, A | Extract<E, Fail<any>>>
 
 /**
  * Assert that an Fx does not fail, throwing the error if it does.
@@ -165,7 +166,7 @@ export const returnFail = <const E, const A>(f: Fx<E, A>) =>
  */
 export const assert = <const E, const A>(f: Fx<E, A>) =>
   new Catch({ body: f, match: (_): _ is ExtractFail<E> => true, recover: e => { throw e } })
-    .pipe(flatten) as Fx<Catch<E, ExtractFail<E>, never, A, never> | Exclude<E, Fail<any>>, A>
+    .pipe(flatten, runCatch) as Fx<Exclude<E, Fail<any>>, A>
 
 type UnwrapFail<F> = F extends Fail<infer E> ? E : never
 type ExtractFail<F> = UnwrapFail<Extract<F, Fail<any>>>

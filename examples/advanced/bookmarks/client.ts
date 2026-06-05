@@ -1,4 +1,4 @@
-import { type Async, catchAll, catchOnly, fail, type Fail, flatMap, type Fx, runCatch } from '@briancavalier/fx'
+import { type Async, catchAll, catchOnly, fail, type Fail, flatMap, type Fx } from '@briancavalier/fx'
 
 import { decodeOrFail, encodeOrFail } from '@briancavalier/fx/codec'
 import type { Decode, Encode } from '@briancavalier/fx/codec'
@@ -129,7 +129,7 @@ const requestText = (
   }).pipe(
     flatMap(expectSuccess),
     flatMap(text),
-    catchAll(cause => fail({ tag: 'BookmarkRequestFailed', cause })), runCatch
+    catchAll(cause => fail({ tag: 'BookmarkRequestFailed', cause }))
   )
 
 const apiUrl = (baseUrl: URL, path: string, query?: URLSearchParams): URL => {
@@ -159,6 +159,5 @@ const jsonHeaders: Headers = [['content-type', 'application/json']]
 const withClientCodecs = <E, A>(program: Fx<E, A>): Fx<Exclude<E, BookmarkClientCodecEffects> | Fail<BookmarkClientError>, A> =>
   program.pipe(
     withBookmarkCodecs,
-    catchOnly(InvalidBookmarkJson, error => fail({ tag: 'InvalidBookmarkResponse', value: error } as const)),
-    runCatch
+    catchOnly(InvalidBookmarkJson, error => fail({ tag: 'InvalidBookmarkResponse', value: error } as const))
   ) as Fx<Exclude<E, BookmarkClientCodecEffects> | Fail<BookmarkClientError>, A>

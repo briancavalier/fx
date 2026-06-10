@@ -91,7 +91,7 @@ export const runCatch = handle(Catch, effect => ok(catchRegion(effect.arg))) as 
 /**
  * Catch failures matching a type guard and handle them with the provided function.
  * @example
- *   computation.pipe(catchIf(isAuthError, e => recoverFx))
+ *   computation.pipe(catchIf(isAuthError, e => recoverFx), runCatch)
  */
 export const catchIf = <const E1, const E extends ExtractFail<E1>, const E2, const B>(
   match: (e: ExtractFail<E1>) => e is E,
@@ -105,7 +105,7 @@ type AnyConstructor = abstract new (...args: any[]) => any
 /**
  * Catch failures that are instances of the given constructor and handles them with the provided function.
  * @example
- *   computation.pipe(catchOnly(AuthError, e => recoverFx))
+ *   computation.pipe(catchOnly(AuthError, e => recoverFx), runCatch)
  */
 export const catchOnly = <const E1, const E extends AnyConstructor, const E2, const B>(
   cls: E,
@@ -121,7 +121,7 @@ export const catchOnly = <const E1, const E extends AnyConstructor, const E2, co
  *
  * @example
  * ```ts
- * computation.pipe(catchAll(error => recover(error)))
+ * computation.pipe(catchAll(error => recover(error)), runCatch)
  * ```
  */
 export const catchAll = <const E1, const E2, const B>(handle: (e: ExtractFail<E1>) => Fx<E2, B>) =>

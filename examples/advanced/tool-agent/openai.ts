@@ -1,4 +1,4 @@
-import { catchAll, type Fail, failFrom, flatMap, fx, type Fx, handle, ok } from '@briancavalier/fx'
+import { catchAll, type Fail, failFrom, flatMap, fx, type Fx, handle, ok, runCatch } from '@briancavalier/fx'
 
 import {
   expectSuccess,
@@ -51,7 +51,8 @@ const askOpenAI = (effect: AskModel) => fx(function* ({
     flatMap(body => parseOpenAIResponse(effect, body)),
     catchAll(cause => failFrom(effect, isAgentError(cause)
       ? cause
-      : { tag: 'ModelError', reason: 'OpenAI model request failed', cause }))
+      : { tag: 'ModelError', reason: 'OpenAI model request failed', cause })),
+    runCatch
   )
 })
 

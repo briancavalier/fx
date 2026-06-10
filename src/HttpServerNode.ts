@@ -2,7 +2,7 @@ import { IncomingMessage, ServerResponse as NodeServerResponse, createServer } f
 import { Readable } from 'node:stream'
 import { finished, pipeline } from 'node:stream/promises'
 import { Async, tryPromise } from './Async.js'
-import { Fail, catchAll, fail, returnFail, returnAll } from './Fail.js'
+import { Fail, catchAll, fail, returnFail, returnAll, runCatch } from './Fail.js'
 import { Fx, assertSync, bracket, flatMap, flatten, fx, ok, runTask, trySync, unit } from './Fx.js'
 import { Handle } from './Handler.js'
 import { type Headers, type Method } from './HttpClient.js'
@@ -151,7 +151,8 @@ const startNodeServer = (
 
     if (!listening && signal.aborted) onAbort()
   })).pipe(
-    catchAll(failNodeHttp('Node HTTP server failed'))
+    catchAll(failNodeHttp('Node HTTP server failed')),
+    runCatch
   )
 
 const closeNodeServer = (
@@ -161,7 +162,8 @@ const closeNodeServer = (
     started.cleanup()
     started.server.close(error => error ? reject(error) : resolve())
   })).pipe(
-    catchAll(failNodeHttp('Node HTTP server failed'))
+    catchAll(failNodeHttp('Node HTTP server failed')),
+    runCatch
   )
 
 const drainNodeHttpEvents = <E>(
@@ -206,7 +208,8 @@ const dequeueNodeHttpEvent = (
     void events.dequeue().then(done, reject)
     if (signal.aborted) onAbort()
   })).pipe(
-    catchAll(failNodeHttp('Node HTTP server failed'))
+    catchAll(failNodeHttp('Node HTTP server failed')),
+    runCatch
   )
 
 const runNodeRequest = async <E>(
@@ -237,6 +240,7 @@ const runNodeRequest = async <E>(
         ? unit
         : writeInternalServerError(outgoing)
     }),
+    runCatch,
     returnAll,
     f => runTask(f as Fx<Async | HandlerCapture<string>, void>)
   )
@@ -411,6 +415,7 @@ const writeNodeResponse = <E>(
       case 'json': {
         return yield* trySync(() => JSON.stringify(body.value)).pipe(
           catchAll(failNodeHttp('Failed to encode JSON response body')),
+          runCatch,
           flatMap(value => end(response, value))
         )
       }
@@ -444,7 +449,8 @@ const writeReadable = (
       response
     )
   ).pipe(
-    catchAll(failNodeHttp('Failed to write response stream'))
+    catchAll(failNodeHttp('Failed to write response stream')),
+    runCatch
   )
 
 const end = (
@@ -455,7 +461,8 @@ const end = (
     response.end(body)
     return finished(response, { cleanup: true })
   }).pipe(
-    catchAll(failNodeHttp('Failed to finish response'))
+    catchAll(failNodeHttp('Failed to finish response')),
+    runCatch
   )
 
 const failNodeHttp = (message: string) =>

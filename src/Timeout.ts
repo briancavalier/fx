@@ -1,7 +1,7 @@
 import { Async, assertPromise } from './Async.js'
 import { at } from './Breadcrumb.js'
 import { Fork, forkIn } from './Concurrent.js'
-import { Fail, catchAll, fail } from './Fail.js'
+import { Fail, catchAll, fail, runCatch } from './Fail.js'
 import { Finally, andFinallyIn } from './Finalization.js'
 import { Fx, flatMap, fx, map, ok } from './Fx.js'
 import type { HandlerCapture } from './HandlerCapture.js'
@@ -126,7 +126,8 @@ export type ErrorsOf<E> = UnwrapFail<Extract<E, Fail<any>>>
 const attempt = <const E, const A>(f: Fx<E, A>): Fx<Exclude<E, Fail<any>>, AttemptResult<ErrorsOf<E>, A>> =>
   f.pipe(
     map(value => ({ type: 'success', value } satisfies Success<A>)),
-    catchAll(failure => ok({ type: 'failure', failure } satisfies Failure<ErrorsOf<E>>))
+    catchAll(failure => ok({ type: 'failure', failure } satisfies Failure<ErrorsOf<E>>)),
+    runCatch
   )
 
 type UnwrapFail<F> = F extends Fail<infer E> ? E : never

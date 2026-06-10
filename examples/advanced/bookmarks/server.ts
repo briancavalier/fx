@@ -3,7 +3,7 @@ import { networkInterfaces } from 'node:os'
 import { dirname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
-import { assert as assertNoFail, catchAll, Fail, flatMap, fx, type Fx, map, ok, provide, returnAll } from '@briancavalier/fx'
+import { assert as assertNoFail, catchAll, Fail, flatMap, fx, type Fx, map, ok, provide, returnAll, runCatch } from '@briancavalier/fx'
 
 import { decodeOrFail, encodeOrFail, type Decode, type Encode } from '@briancavalier/fx/codec'
 import { bytes as readBytes } from '@briancavalier/fx/http-client'
@@ -233,7 +233,8 @@ const bookmarksResponse = (bookmarks: readonly Bookmark[]): Fx<Encode<typeof Boo
 const readText = (request: ServerRequest): Fx<never, string> =>
   readBytes({ status: 200, headers: [], body: request.body }).pipe(
     map((bytes: Uint8Array) => new TextDecoder().decode(bytes)),
-    catchAll(() => ok(''))
+    catchAll(() => ok('')),
+    runCatch
   ) as Fx<never, string>
 
 const logHttpServerEvent = (event: ServerEvent) => {

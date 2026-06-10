@@ -3,11 +3,11 @@ import { describe, it } from 'node:test'
 
 import { at } from './Breadcrumb.js'
 import { Effect } from './Effect.js'
-import { fx, ok, run, runPromise } from './Fx.js'
+import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { handle } from './Handler.js'
 import { captureHandlers, closeHandlerCapture, withHandlerContext } from './HandlerCapture.js'
 
-import { Catch, Fail, catchAll, fail, failFrom, returnFail, returnIf, returnOnly, runCatch } from './Fail.js'
+import { Catch, Fail, assert as assertNoFail, catchAll, fail, failFrom, returnAll, returnFail, returnIf, returnOnly, runCatch } from './Fail.js'
 import { getTrace, withTraceCapture } from './Trace.js'
 import { runFork } from './internal/runFork.js'
 
@@ -96,10 +96,36 @@ describe('Fail', () => {
       assert.equal(actual, expected)
     })
 
-    it('helper usage interprets Catch internally', () => {
-      const actual = run(fail('failed').pipe(catchAll(ok)))
+    it('catchAll constructs raw Catch until runCatch interprets it', () => {
+      const f = fail('failed').pipe(catchAll(ok))
+      type Effects = EffectOf<typeof f>
+      const catchesAreVisible: Extract<Effects, Catch<any, any, any, any, any>> extends never ? false : true = true
 
+      assert.equal(catchesAreVisible, true)
+      assert.throws(() => {
+        run(f as never)
+      }, /Unhandled effect in run/)
+    })
+
+    it('runCatch interprets catchAll helper usage', () => {
+      const f = fail('failed').pipe(catchAll(ok), runCatch)
+      type Effects = EffectOf<typeof f>
+      const catchesAreRemoved: Extract<Effects, Catch<any, any, any, any, any>> extends never ? true : false = true
+
+      const actual = run(f)
+
+      assert.equal(catchesAreRemoved, true)
       assert.equal(actual, 'failed')
+    })
+
+    it('lets custom Catch handlers interpret catchAll regions', () => {
+      const runCustomCatch = handle(Catch, () => ok(ok('custom'))) as <const E, const A>(f: Fx<E, A>) => Fx<Exclude<E, Catch<any, any, any, any, any>>, A>
+      const actual = run(fail('failed').pipe(
+        catchAll(() => ok('custom')),
+        runCustomCatch
+      ))
+
+      assert.equal(actual, 'custom')
     })
 
     it('given matching failure, runs recovery and skips the rest of the body', () => {
@@ -111,10 +137,13 @@ describe('Fail', () => {
         return 'body'
       })
 
-      const actual = run(f.pipe(catchAll(error => {
-        events.push(`recover:${error}`)
-        return ok('recovered')
-      })))
+      const actual = run(f.pipe(
+        catchAll(error => {
+          events.push(`recover:${error}`)
+          return ok('recovered')
+        }),
+        runCatch
+      ))
 
       assert.equal(actual, 'recovered')
       assert.deepEqual(events, ['before', 'recover:failed'])
@@ -123,6 +152,7 @@ describe('Fail', () => {
     it('given recovery failure, propagates recovery failure outward', () => {
       const actual = run(fail('body').pipe(
         catchAll(() => fail('recovery')),
+        runCatch,
         returnFail
       ))
 
@@ -134,6 +164,7 @@ describe('Fail', () => {
       const actual = await fail('body').pipe(
         withTraceCapture('off'),
         catchAll(() => fail(new Error('recovery'))),
+        runCatch,
         returnFail,
         runPromise
       )
@@ -146,7 +177,8 @@ describe('Fail', () => {
       const actual = run(fail('inner').pipe(
         catchAll(error => fail(`outer:${error}`).pipe(
           catchAll(inner => ok(`inner:${inner}`))
-        ))
+        )),
+        runCatch
       ))
 
       assert.equal(actual, 'inner:outer:inner')
@@ -164,7 +196,8 @@ describe('Fail', () => {
 
       const actual = run(f.pipe(
         runCatch,
-        catchAll(error => ok(`outer:${error}`))
+        catchAll(error => ok(`outer:${error}`)),
+        runCatch
       ))
 
       assert.equal(actual, 'outer:nested')
@@ -181,10 +214,13 @@ describe('Fail', () => {
         }
       })
 
-      const actual = run(f.pipe(catchAll(error => {
-        events.push('recover')
-        return ok(error)
-      })))
+      const actual = run(f.pipe(
+        catchAll(error => {
+          events.push('recover')
+          return ok(error)
+        }),
+        runCatch
+      ))
 
       assert.equal(actual, 'failed')
       assert.deepEqual(events, ['body', 'recover', 'cleanup'])
@@ -197,7 +233,7 @@ describe('Fail', () => {
         } finally {
           yield* fail('cleanup')
         }
-      }).pipe(catchAll(ok)))
+      }).pipe(catchAll(ok), runCatch))
 
       assert.equal(actual, 'body')
     })
@@ -237,6 +273,7 @@ describe('Fail', () => {
         catchAll(error => fx(function* () {
           return `${error}:${yield* new Ask()}`
         })),
+        runCatch,
         handle(Ask, () => ok('handled'))
       ))
 
@@ -249,7 +286,8 @@ describe('Fail', () => {
       const delayed = run(fx(function* () {
         const context = yield* captureHandlers('test/Fail/Catch')
         return withHandlerContext(context, fail('failed').pipe(
-          catchAll(() => new Ask())
+          catchAll(() => new Ask()),
+          runCatch
         ))
       }).pipe(
         handle(Ask, () => ok('captured')),
@@ -262,6 +300,16 @@ describe('Fail', () => {
   })
 
   describe('returnIf', () => {
+    it('eliminates matching Fail without exposing Catch', () => {
+      const f = fail('failed' as string).pipe(returnIf((x): x is string => typeof x === 'string'))
+      type Effects = EffectOf<typeof f>
+      const catchesAreHidden: Extract<Effects, Catch<any, any, any, any, any>> extends never ? true : false = true
+      const matchingFailIsRemoved: Extract<Effects, Fail<string>> extends never ? true : false = true
+
+      assert.equal(catchesAreHidden, true)
+      assert.equal(matchingFailIsRemoved, true)
+    })
+
     it('given no failures, returns result', () => {
       const expected = Math.random()
       const f = ok(expected)
@@ -300,6 +348,16 @@ describe('Fail', () => {
       name = 'CustomError' as const
     }
 
+    it('eliminates matching Fail without exposing Catch', () => {
+      const f = fail(new CustomError('failed')).pipe(returnOnly(CustomError))
+      type Effects = EffectOf<typeof f>
+      const catchesAreHidden: Extract<Effects, Catch<any, any, any, any, any>> extends never ? true : false = true
+      const matchingFailIsRemoved: Extract<Effects, Fail<CustomError>> extends never ? true : false = true
+
+      assert.equal(catchesAreHidden, true)
+      assert.equal(matchingFailIsRemoved, true)
+    })
+
     it('given no failures, returns result', () => {
       const expected = Math.random()
       const f = ok(expected)
@@ -333,6 +391,16 @@ describe('Fail', () => {
   })
 
   describe('returnFail', () => {
+    it('eliminates Fail without exposing Catch', () => {
+      const f = fail('failed').pipe(returnFail)
+      type Effects = EffectOf<typeof f>
+      const catchesAreHidden: Extract<Effects, Catch<any, any, any, any, any>> extends never ? true : false = true
+      const failIsRemoved: Extract<Effects, Fail<any>> extends never ? true : false = true
+
+      assert.equal(catchesAreHidden, true)
+      assert.equal(failIsRemoved, true)
+    })
+
     it('given no failures, returns result', () => {
       const expected = Math.random()
       const f = ok(expected)
@@ -353,7 +421,35 @@ describe('Fail', () => {
       assert.equal(actual.arg, expected)
     })
   })
+
+  describe('returnAll', () => {
+    it('returns any failure without exposing Catch', () => {
+      const actual = run(fail('failed').pipe(returnAll))
+      const f = fail('failed').pipe(returnAll)
+      type Effects = EffectOf<typeof f>
+      const catchesAreHidden: Extract<Effects, Catch<any, any, any, any, any>> extends never ? true : false = true
+      const failIsRemoved: Extract<Effects, Fail<any>> extends never ? true : false = true
+
+      assert.equal(catchesAreHidden, true)
+      assert.equal(failIsRemoved, true)
+      assert.equal(actual, 'failed')
+    })
+  })
+
+  describe('assert', () => {
+    it('eliminates Fail without exposing Catch', () => {
+      const f = ok('passed').pipe(assertNoFail)
+      type Effects = EffectOf<typeof f>
+      const catchesAreHidden: Extract<Effects, Catch<any, any, any, any, any>> extends never ? true : false = true
+      const failIsRemoved: Extract<Effects, Fail<any>> extends never ? true : false = true
+
+      assert.equal(catchesAreHidden, true)
+      assert.equal(failIsRemoved, true)
+    })
+  })
 })
+
+type EffectOf<F> = F extends Fx<infer E, any> ? E : never
 
 const firstLine = (e: Error): string =>
   e.stack?.split('\n')[0] ?? ''

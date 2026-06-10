@@ -1,10 +1,10 @@
 import { Breadcrumb, at } from './Breadcrumb.js'
+import { checkpoint, type Checkpoint } from './Checkpoint.js'
 import { Effect, traceOriginOf } from './Effect.js'
 import type { AnyEffect } from './Effect.js'
 import { Fx, flatten, ok } from './Fx.js'
 import { control, handle } from './Handler.js'
 import type { AnyScope } from './Scope.js'
-import { checkpointState, type CheckpointState, type Stateful } from './State.js'
 import type { TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
 
@@ -86,7 +86,7 @@ const catchRegion = <const E1, const E extends ExtractFail<E1>, const E2, const 
   ) as Fx<CatchEffects<E1, E, E2>, A | B>
 
 const catchRegionScoped = <
-  const Scope extends AnyScope & Stateful<unknown>,
+  const Scope extends AnyScope,
   const E1,
   const E extends ExtractFail<E1>,
   const E2,
@@ -97,7 +97,7 @@ const catchRegionScoped = <
   match,
   recover
 }: CatchContext<E1, E, E2, A, B>): Fx<RunCatchScopedEffects<Scope, E1, E, E2, A>, A | B> =>
-    checkpointState(scope, body).pipe(
+    checkpoint(scope, body).pipe(
       flatten,
       control(Fail, (_, failure): Fx<E2 | Fail<unknown>, B> =>
         match(failure.arg as ExtractFail<E1>)
@@ -111,19 +111,19 @@ type RunCatch<E> =
 
 export const runCatch = handle(Catch, effect => ok(catchRegion(effect.arg))) as <const E, const A>(fx: Fx<E, A>) => Fx<RunCatch<E>, A>
 
-type RunCatchScopedEffects<Scope extends AnyScope & Stateful<unknown>, E1, E, E2, A> =
-  CheckpointState<Scope, E1, A> | CatchEffects<E1, E, E2>
+type RunCatchScopedEffects<Scope extends AnyScope, E1, E, E2, A> =
+  Checkpoint<Scope, E1, A> | CatchEffects<E1, E, E2>
 
-export type RunCatchScoped<E, Scope extends AnyScope & Stateful<unknown>> =
+export type RunCatchScoped<E, Scope extends AnyScope> =
   E extends Catch<infer E1, infer E, infer E2, infer A, infer _B>
     ? RunCatchScopedEffects<Scope, E1, E, E2, A>
     : E
 
 /**
  * Interpret local failure recovery regions through checkpoint requests for a
- * named state scope. Pair with `withCheckpointedState(scope, initial)`.
+ * named scope.
  */
-export const runCatchScoped = <const Scope extends AnyScope & Stateful<unknown>>(
+export const runCatchScoped = <const Scope extends AnyScope>(
   scope: Scope
 ) =>
   handle(Catch, effect => ok(catchRegionScoped(scope, effect.arg))) as <const E, const A>(fx: Fx<E, A>) => Fx<RunCatchScoped<E, Scope>, A>

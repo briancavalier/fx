@@ -71,8 +71,8 @@ describe('package import inference', () => {
     const noFirstSuccessPolicy: HasExport<typeof concurrentApi, `first${'Success'}Policy`> = false
     const noScopeTypeId: HasExport<typeof scopeApi, `Scope${'Type'}Id`> = false
     const noScopeFinalizing: HasExport<typeof scopeApi, `final${'izing'}`> = false
-    const noCheckpointRequest: HasExport<typeof stateApi, `Checkpoint${'State'}`> = false
-    const noCheckpointConstructor: HasExport<typeof stateApi, `checkpoint${'State'}`> = false
+    const noCheckpointRequest: HasExport<typeof stateApi, `Check${'point'}`> = false
+    const noCheckpointConstructor: HasExport<typeof stateApi, `check${'point'}`> = false
     const noTimeoutInScope: HasExport<typeof timeoutApi, `timeout${'In'}Scope`> = false
     assert.equal(noConcurrentEffect, false)
     assert.equal(noConcurrentConstructor, false)

@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
 import { at } from './Breadcrumb.js'
+import { Checkpoint } from './Checkpoint.js'
 import { Effect } from './Effect.js'
 import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { handle } from './Handler.js'
@@ -9,7 +10,7 @@ import { captureHandlers, closeHandlerCapture, withHandlerContext } from './Hand
 
 import { Catch, Fail, assert as assertNoFail, catchAll, fail, failFrom, returnAll, returnFail, returnIf, returnOnly, runCatch, runCatchScoped } from './Fail.js'
 import { scope } from './Scope.js'
-import { CheckpointState, type Stateful } from './State.js'
+import type { Stateful } from './State.js'
 import { getTrace, withTraceCapture } from './Trace.js'
 import { runFork } from './internal/runFork.js'
 
@@ -125,13 +126,22 @@ describe('Fail', () => {
       const f = fail('failed').pipe(catchAll(ok), runCatchScoped(CounterState))
       type Effects = EffectOf<typeof f>
       const catchesAreRemoved: Extract<Effects, Catch<any, any, any, any, any>> extends never ? true : false = true
-      const checkpointIsVisible: Extract<Effects, CheckpointState<typeof CounterState, any, any>> extends never ? false : true = true
+      const checkpointIsVisible: Extract<Effects, Checkpoint<typeof CounterState, any, any>> extends never ? false : true = true
       const next = f[Symbol.iterator]().next()
 
       assert.equal(catchesAreRemoved, true)
       assert.equal(checkpointIsVisible, true)
       assert.equal(next.done, false)
-      assert.equal(CheckpointState.is(next.value), true)
+      assert.equal(Checkpoint.is(next.value), true)
+    })
+
+    it('runCatchScoped does not require a stateful scope', () => {
+      const PlainScope = scope('test/Fail/Catch/PlainCheckpoint')
+      const f = fail('failed').pipe(catchAll(ok), runCatchScoped(PlainScope))
+      type Effects = EffectOf<typeof f>
+      const checkpointIsVisible: Extract<Effects, Checkpoint<typeof PlainScope, any, any>> extends never ? false : true = true
+
+      assert.equal(checkpointIsVisible, true)
     })
 
     it('lets custom Catch handlers interpret catchAll regions', () => {

@@ -1,3 +1,4 @@
+import { Checkpoint } from './Checkpoint.js'
 import { ScopedEffect } from './Effect.js'
 import { Fail } from './Fail.js'
 import { Fx, fx, ok } from './Fx.js'
@@ -33,7 +34,7 @@ export type ExcludeState<E, Scope extends AnyScope & Stateful<unknown>> =
   HandleScoped<HandleScoped<E, GetState<Scope>, Scope>, ModifyState<Scope>, Scope>
 
 export type ExcludeCheckpointedState<E, Scope extends AnyScope & Stateful<unknown>> =
-  HandleScoped<ExcludeState<E, Scope>, CheckpointState<Scope, any, any>, Scope>
+  HandleScoped<ExcludeState<E, Scope>, Checkpoint<Scope, any, any>, Scope>
 
 export const getState = <const Scope extends AnyScope & Stateful<unknown>>(scope: Scope): Fx<GetState<Scope>, StateOf<Scope>> =>
   new GetState(scope, undefined)
@@ -43,15 +44,6 @@ export const modifyState = <const Scope extends AnyScope & Stateful<unknown>, co
   f: (state: StateOf<Scope>) => readonly [StateOf<Scope>, B]
 ): Fx<ModifyState<Scope, B>, B> =>
   new ModifyState(scope, f)
-
-export class CheckpointState<const Scope extends AnyScope & Stateful<unknown>, const E, const A>
-  extends ScopedEffect('fx/State/Checkpoint')<Scope, Fx<E, A>, Fx<E, A>> { }
-
-export const checkpointState = <const Scope extends AnyScope & Stateful<unknown>, const E, const A>(
-  scope: Scope,
-  body: Fx<E, A>
-): Fx<CheckpointState<Scope, E, A>, Fx<E, A>> =>
-  new CheckpointState(scope, body)
 
 /**
  * Handle state operations for the named scope with state local to one execution.
@@ -110,7 +102,7 @@ export const withCheckpointedState = <const Scope extends AnyScope & Stateful<un
           state = next
           return ok(result)
         }),
-        handleScoped(CheckpointState<Scope, any, any>, scope, effect => {
+        handleScoped(Checkpoint<Scope, any, any>, scope, effect => {
           const saved = state
 
           return ok(effect.arg.pipe(

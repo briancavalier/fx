@@ -1,12 +1,12 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
+import { Checkpoint } from './Checkpoint.js'
 import { catchAll, catchIf, Fail, fail, returnFail, runCatch, runCatchScoped } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { scope, withScope } from './Scope.js'
 import {
-  CheckpointState,
   GetState,
   getState,
   modifyState,
@@ -308,7 +308,7 @@ describe('State', () => {
       const next = program[Symbol.iterator]().next()
 
       assert.equal(next.done, false)
-      assert.equal(CheckpointState.is(next.value), true)
+      assert.equal(Checkpoint.is(next.value), true)
     })
 
     it('removes Catch and introduces checkpoint state until checkpointed state is handled', () => {
@@ -323,8 +323,8 @@ describe('State', () => {
       type HandledEffects = EffectOf<typeof handled>
       type OtherStateEffects = EffectOf<typeof otherState>
       const catchRemoved: Extract<ScopedEffects, import('./Fail.js').Catch<any, any, any, any, any>> extends never ? true : false = true
-      const checkpointVisible: Extract<ScopedEffects, CheckpointState<typeof CounterState, any, any>> extends never ? false : true = true
-      const checkpointHandled: Extract<HandledEffects, CheckpointState<typeof CounterState, any, any>> extends never ? true : false = true
+      const checkpointVisible: Extract<ScopedEffects, Checkpoint<typeof CounterState, any, any>> extends never ? false : true = true
+      const checkpointHandled: Extract<HandledEffects, Checkpoint<typeof CounterState, any, any>> extends never ? true : false = true
       const failHandled: Extract<HandledEffects, Fail<any>> extends never ? true : false = true
       const otherStateVisible: Extract<OtherStateEffects, GetState<typeof OtherState>> extends never ? false : true = true
 

@@ -1,36 +1,72 @@
-import { catchAll, fail, fx, runCatchScoped, runPromise } from '@briancavalier/fx'
+import { catchAll, fail, fx, runCatch, runCatchScoped, runPromise } from '@briancavalier/fx'
 import { scope } from '@briancavalier/fx/scope'
-import { getState, modifyState, type Stateful, withCheckpointedState } from '@briancavalier/fx/state'
+import { getState, modifyState, type Stateful, withCheckpointedState, withState } from '@briancavalier/fx/state'
 
 type Session = {
-  readonly attempts: number
+  readonly requests: number
+  readonly lastRoute: string
   readonly status: string
 }
 
 const SessionState = scope<Stateful<Session>>()('example/CheckpointedSession')
 
-const program = fx(function* () {
-  yield* fx(function* () {
-    yield* modifyState(SessionState, session => [
-      { attempts: session.attempts + 1, status: 'processing' },
-      undefined
-    ])
+const initialSession: Session = {
+  requests: 0,
+  lastRoute: 'none',
+  status: 'idle'
+}
 
-    yield* fail('invalid session')
-  }).pipe(
-    catchAll(error =>
-      modifyState(SessionState, session => [
-        { attempts: session.attempts, status: `recovered from ${error}` },
-        undefined
-      ])
-    ),
+const recordRequest = (route: string) =>
+  modifyState(SessionState, session => [
+    {
+      requests: session.requests + 1,
+      lastRoute: route,
+      status: `processing ${route}`
+    },
+    undefined
+  ] as const)
+
+const recoverSession = (error: string) =>
+  modifyState(SessionState, session => [
+    {
+      ...session,
+      status: `recovered from ${error}`
+    },
+    undefined
+  ] as const)
+
+const failedSecondRequest = fx(function* () {
+  yield* recordRequest('/users/1')
+  yield* fail('invalid session')
+})
+
+const plainState = fx(function* () {
+  yield* recordRequest('/users')
+  yield* failedSecondRequest.pipe(
+    catchAll(recoverSession),
+    runCatch
+  )
+
+  return yield* getState(SessionState)
+}).pipe(
+  withState(SessionState, initialSession),
+  runPromise
+)
+
+const checkpointedState = fx(function* () {
+  yield* recordRequest('/users')
+  yield* failedSecondRequest.pipe(
+    catchAll(recoverSession),
     runCatchScoped(SessionState)
   )
 
   return yield* getState(SessionState)
-})
-
-await program.pipe(
-  withCheckpointedState(SessionState, { attempts: 0, status: 'idle' }),
+}).pipe(
+  withCheckpointedState(SessionState, initialSession),
   runPromise
-).then(console.log)
+)
+
+console.log({
+  plain: await plainState,
+  checkpointed: await checkpointedState
+})

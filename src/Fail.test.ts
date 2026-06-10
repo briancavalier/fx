@@ -7,7 +7,9 @@ import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { handle } from './Handler.js'
 import { captureHandlers, closeHandlerCapture, withHandlerContext } from './HandlerCapture.js'
 
-import { Catch, Fail, assert as assertNoFail, catchAll, fail, failFrom, returnAll, returnFail, returnIf, returnOnly, runCatch } from './Fail.js'
+import { Catch, Fail, assert as assertNoFail, catchAll, fail, failFrom, returnAll, returnFail, returnIf, returnOnly, runCatch, runCatchScoped } from './Fail.js'
+import { scope } from './Scope.js'
+import { CheckpointState, type Stateful } from './State.js'
 import { getTrace, withTraceCapture } from './Trace.js'
 import { runFork } from './internal/runFork.js'
 
@@ -116,6 +118,20 @@ describe('Fail', () => {
 
       assert.equal(catchesAreRemoved, true)
       assert.equal(actual, 'failed')
+    })
+
+    it('runCatchScoped interprets Catch through a checkpoint request', () => {
+      const CounterState = scope<Stateful<number>>()('test/Fail/Catch/Checkpoint')
+      const f = fail('failed').pipe(catchAll(ok), runCatchScoped(CounterState))
+      type Effects = EffectOf<typeof f>
+      const catchesAreRemoved: Extract<Effects, Catch<any, any, any, any, any>> extends never ? true : false = true
+      const checkpointIsVisible: Extract<Effects, CheckpointState<typeof CounterState, any, any>> extends never ? false : true = true
+      const next = f[Symbol.iterator]().next()
+
+      assert.equal(catchesAreRemoved, true)
+      assert.equal(checkpointIsVisible, true)
+      assert.equal(next.done, false)
+      assert.equal(CheckpointState.is(next.value), true)
     })
 
     it('lets custom Catch handlers interpret catchAll regions', () => {

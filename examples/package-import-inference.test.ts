@@ -1,8 +1,9 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { Effect, finalizing, fx, ScopedEffect, type Fx } from '@briancavalier/fx'
+import { Effect, finalizing, fx, runCatchScoped, ScopedEffect, type Fx } from '@briancavalier/fx'
 import * as concurrentApi from '@briancavalier/fx/concurrent'
 import * as scopeApi from '@briancavalier/fx/scope'
+import * as stateApi from '@briancavalier/fx/state'
 import * as timeoutApi from '@briancavalier/fx/timeout'
 import {
   RaceAllFailed,
@@ -18,6 +19,7 @@ import {
   withUnboundedConcurrency
 } from '@briancavalier/fx/concurrent'
 import { andFinally, andFinallyIn, sameScope, scope, scopeId, scopeLabel, using, usingIn, usingManaged, usingManagedIn, withScope, type AnyScope } from '@briancavalier/fx/scope'
+import { getState, modifyState, withCheckpointedState, withCheckpointedStateInit } from '@briancavalier/fx/state'
 import { TimeoutInterrupt, timeout, timeoutIn } from '@briancavalier/fx/timeout'
 
 type EffectOf<T> = T extends Fx<infer E, unknown> ? E : never
@@ -50,6 +52,12 @@ describe('package import inference', () => {
     assert.equal(typeof usingManaged, 'function')
     assert.equal(typeof usingManagedIn, 'function')
     assert.equal(typeof finalizing, 'function')
+    assert.equal(typeof runCatchScoped, 'function')
+
+    assert.equal(typeof getState, 'function')
+    assert.equal(typeof modifyState, 'function')
+    assert.equal(typeof withCheckpointedState, 'function')
+    assert.equal(typeof withCheckpointedStateInit, 'function')
 
     assert.equal(typeof timeout, 'function')
     assert.equal(typeof timeoutIn, 'function')
@@ -63,6 +71,8 @@ describe('package import inference', () => {
     const noFirstSuccessPolicy: HasExport<typeof concurrentApi, `first${'Success'}Policy`> = false
     const noScopeTypeId: HasExport<typeof scopeApi, `Scope${'Type'}Id`> = false
     const noScopeFinalizing: HasExport<typeof scopeApi, `final${'izing'}`> = false
+    const noCheckpointRequest: HasExport<typeof stateApi, `Checkpoint${'State'}`> = false
+    const noCheckpointConstructor: HasExport<typeof stateApi, `checkpoint${'State'}`> = false
     const noTimeoutInScope: HasExport<typeof timeoutApi, `timeout${'In'}Scope`> = false
     assert.equal(noConcurrentEffect, false)
     assert.equal(noConcurrentConstructor, false)
@@ -72,6 +82,8 @@ describe('package import inference', () => {
     assert.equal(noFirstSuccessPolicy, false)
     assert.equal(noScopeTypeId, false)
     assert.equal(noScopeFinalizing, false)
+    assert.equal(noCheckpointRequest, false)
+    assert.equal(noCheckpointConstructor, false)
     assert.equal(noTimeoutInScope, false)
   })
 

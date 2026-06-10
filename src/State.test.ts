@@ -1,11 +1,22 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { Fail, fail, returnFail } from './Fail.js'
+import { catchAll, catchIf, Fail, fail, returnFail, runCatch, runCatchScoped } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { scope, withScope } from './Scope.js'
-import { GetState, getState, modifyState, type ModifyState, type Stateful, withState, withStateInit } from './State.js'
+import {
+  CheckpointState,
+  GetState,
+  getState,
+  modifyState,
+  type ModifyState,
+  type Stateful,
+  withCheckpointedState,
+  withCheckpointedStateInit,
+  withState,
+  withStateInit
+} from './State.js'
 
 describe('State', () => {
   const CounterState = scope<Stateful<number>>()('test/State/Counter')
@@ -146,4 +157,184 @@ describe('State', () => {
     assert.equal(typeof cleanupStateIsHandled, 'boolean')
     assert.equal(typeof cleanupFailureRemains, 'boolean')
   })
+
+  describe('withCheckpointedState', () => {
+    it('handles ordinary state operations like withState', () => {
+      const program = fx(function* () {
+        yield* modifyState(CounterState, count => [count + 1, undefined])
+        return yield* getState(CounterState)
+      }).pipe(withCheckpointedState(CounterState, 1), run)
+
+      assert.equal(program, 2)
+    })
+
+    it('commits state when a scoped catch body succeeds', () => {
+      const program = fx(function* () {
+        yield* fx(function* () {
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+          return 'body'
+        }).pipe(
+          catchAll(() => ok('recovered')),
+          runCatchScoped(CounterState)
+        )
+
+        return yield* getState(CounterState)
+      }).pipe(withCheckpointedState(CounterState, 0), run)
+
+      assert.equal(program, 1)
+    })
+
+    it('rolls back matching failed catch body state before recovery runs', () => {
+      const program = fx(function* () {
+        const recovered = yield* fx(function* () {
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+          yield* fail('body')
+          return 'body'
+        }).pipe(
+          catchAll(error => fx(function* () {
+            const recoveredFrom = yield* getState(CounterState)
+            yield* modifyState(CounterState, count => [count + 10, undefined])
+            return `${error}:${recoveredFrom}`
+          })),
+          runCatchScoped(CounterState)
+        )
+
+        return [recovered, yield* getState(CounterState)] as const
+      }).pipe(withCheckpointedState(CounterState, 0), run)
+
+      assert.deepEqual(program, ['body:0', 10])
+    })
+
+    it('rolls back unmatched failed catch body state before an outer recovery runs', () => {
+      const isString = (x: string | number): x is string => typeof x === 'string'
+      const program = fx(function* () {
+        const handled = fx(function* () {
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+          yield* fail<string | number>(123)
+          return 'body'
+        }).pipe(
+          catchIf(isString, ok),
+          runCatchScoped(CounterState),
+          catchAll(() => getState(CounterState)),
+          runCatch
+        )
+
+        return yield* handled
+      }).pipe(withCheckpointedState(CounterState, 0), run)
+
+      assert.equal(program, 0)
+    })
+
+    it('commits recovery state changes unless an outer checkpoint rolls them back', () => {
+      const program = fx(function* () {
+        yield* fail('body').pipe(
+          catchAll(() => modifyState(CounterState, count => [count + 1, undefined])),
+          runCatchScoped(CounterState)
+        )
+
+        return yield* getState(CounterState)
+      }).pipe(withCheckpointedState(CounterState, 0), run)
+
+      assert.equal(program, 1)
+    })
+
+    it('does not roll back state for plain runCatch', () => {
+      const program = fx(function* () {
+        return yield* fx(function* () {
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+          yield* fail('body')
+          return 'body'
+        }).pipe(
+          catchAll(() => getState(CounterState)),
+          runCatch
+        )
+      }).pipe(withCheckpointedState(CounterState, 0), run)
+
+      assert.equal(program, 1)
+    })
+
+    it('does not roll back other state scopes', () => {
+      const program = fx(function* () {
+        return yield* fx(function* () {
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+          yield* modifyState(OtherState, value => [`${value}!`, undefined])
+          yield* fail('body')
+          return 'body'
+        }).pipe(
+          catchAll(() => fx(function* () {
+            return [yield* getState(CounterState), yield* getState(OtherState)] as const
+          })),
+          runCatchScoped(CounterState)
+        )
+      }).pipe(
+        withCheckpointedState(CounterState, 0),
+        withState(OtherState, 'other'),
+        run
+      )
+
+      assert.deepEqual(program, [0, 'other!'])
+    })
+
+    it('handles same-id state scope tokens', () => {
+      const FirstScope = scope<Stateful<number>>()('test/State/Checkpoint/SameName')
+      const SecondScope = scope<Stateful<number>>()('test/State/Checkpoint/SameName')
+      const result = fail('body').pipe(
+        catchAll(() => getState(SecondScope)),
+        runCatchScoped(SecondScope),
+        withCheckpointedState(FirstScope, 1),
+        run
+      )
+
+      assert.equal(result, 1)
+    })
+
+    it('runs checkpointed state initialization once per execution', () => {
+      let initialized = 0
+      const initial = fx(function* () {
+        initialized += 1
+        return initialized
+      })
+      const program = getState(CounterState).pipe(withCheckpointedStateInit(CounterState, initial))
+
+      assert.equal(run(program), 1)
+      assert.equal(run(program), 2)
+    })
+
+    it('leaves checkpoint requests visible until handled', () => {
+      const program = fail('body').pipe(
+        catchAll(ok),
+        runCatchScoped(CounterState)
+      )
+      const next = program[Symbol.iterator]().next()
+
+      assert.equal(next.done, false)
+      assert.equal(CheckpointState.is(next.value), true)
+    })
+
+    it('removes Catch and introduces checkpoint state until checkpointed state is handled', () => {
+      const scoped = fail('body').pipe(
+        catchAll(ok),
+        runCatchScoped(CounterState)
+      )
+      const handled = scoped.pipe(withCheckpointedState(CounterState, 0))
+      const otherState = getState(OtherState).pipe(withCheckpointedState(CounterState, 0))
+
+      type ScopedEffects = EffectOf<typeof scoped>
+      type HandledEffects = EffectOf<typeof handled>
+      type OtherStateEffects = EffectOf<typeof otherState>
+      const catchRemoved: Extract<ScopedEffects, import('./Fail.js').Catch<any, any, any, any, any>> extends never ? true : false = true
+      const checkpointVisible: Extract<ScopedEffects, CheckpointState<typeof CounterState, any, any>> extends never ? false : true = true
+      const checkpointHandled: Extract<HandledEffects, CheckpointState<typeof CounterState, any, any>> extends never ? true : false = true
+      const failHandled: Extract<HandledEffects, Fail<any>> extends never ? true : false = true
+      const otherStateVisible: Extract<OtherStateEffects, GetState<typeof OtherState>> extends never ? false : true = true
+
+      assert.equal(catchRemoved, true)
+      assert.equal(checkpointVisible, true)
+      assert.equal(checkpointHandled, true)
+      assert.equal(failHandled, true)
+      assert.equal(otherStateVisible, true)
+    })
+  })
 })
+
+type EffectOf<F> = F extends Fx<infer E, any> ? E : never

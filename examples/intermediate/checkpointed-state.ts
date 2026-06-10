@@ -42,26 +42,22 @@ const failedSecondRequest = fx(function* () {
 
 const plainState = fx(function* () {
   yield* recordRequest('/users')
-  yield* failedSecondRequest.pipe(
-    catchAll(recoverSession),
-    runCatch
-  )
+  yield* failedSecondRequest.pipe(catchAll(recoverSession))
 
   return yield* getState(SessionState)
 }).pipe(
+  runCatch,
   withState(SessionState, initialSession),
   runPromise
 )
 
 const checkpointedState = fx(function* () {
   yield* recordRequest('/users')
-  yield* failedSecondRequest.pipe(
-    catchAll(recoverSession),
-    runCatchScoped(SessionState)
-  )
+  yield* failedSecondRequest.pipe(catchAll(recoverSession))
 
   return yield* getState(SessionState)
 }).pipe(
+  runCatchScoped(SessionState),
   withCheckpointedState(SessionState, initialSession),
   runPromise
 )

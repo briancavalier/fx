@@ -100,7 +100,7 @@ JavaScript exceptions. Use `fail`, `trySync`, and `tryPromise` to convert
 recoverable exceptional states into effects.
 
 ```ts
-import { catchOnly, fail, ok } from "@briancavalier/fx"
+import { catchOnly, fail, ok, runCatch } from "@briancavalier/fx"
 
 class InvalidEmail extends Error {}
 
@@ -110,7 +110,8 @@ const parseEmail = (value: string) =>
     : fail(new InvalidEmail(value))
 
 const recovered = parseEmail(input).pipe(
-  catchOnly(InvalidEmail, () => ok("unknown@example.com"))
+  catchOnly(InvalidEmail, () => ok("unknown@example.com")),
+  runCatch
 )
 ```
 

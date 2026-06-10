@@ -43,6 +43,7 @@ export {
 export { HandlerCapture, type CapturedHandler } from '../HandlerCapture.js'
 export {
   assert,
+  Catch,
   catchAll,
   catchIf,
   catchOnly,
@@ -52,7 +53,10 @@ export {
   returnAll,
   returnFail,
   returnIf,
-  returnOnly
+  returnOnly,
+  runCatch,
+  type CatchEffects,
+  type CatchContext,
 } from '../Fail.js'
 export { assertPromise, Async, tryPromise, type AsyncContext } from '../Async.js'
 export {

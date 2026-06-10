@@ -48,7 +48,7 @@ describe('HttpServer', () => {
       const actual: Actual = null as never as E1 | E2
       const expected: E1 | E2 = null as never as Actual
       const _: Routes<E1 | E2> = rs
-      void ([_ , actual, expected] satisfies [Routes<Actual>, Actual, E1 | E2])
+      void ([_, actual, expected] satisfies [Routes<Actual>, Actual, E1 | E2])
     })
 
     it('mount composes prefixes without mutating child routes', async () => {

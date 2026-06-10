@@ -4,7 +4,7 @@ Use this when an operation can fail recoverably and callers should decide how to
 recover.
 
 ```ts
-import { catchOnly, fail, ok, run } from "@briancavalier/fx"
+import { catchOnly, fail, ok, run, runCatch } from "@briancavalier/fx"
 
 class NotFound extends Error {}
 
@@ -14,18 +14,20 @@ const requireUser = (user: User | undefined) =>
     : ok(user)
 
 const userOrGuest = requireUser(user).pipe(
-  catchOnly(NotFound, () => ok({ id: "guest", name: "Guest" }))
+  catchOnly(NotFound, () => ok({ id: "guest", name: "Guest" })),
+  runCatch
 )
 ```
 
-`Fail<E>` stays in the effect union until `catchOnly`, `catchIf`, `catchAll`, or
-another handler eliminates it.
+`catchOnly`, `catchIf`, and `catchAll` construct a recovery region. Add
+`runCatch` where that region should use the default catch interpretation.
 
 Handler pipeline:
 
 ```ts
 program.pipe(
   catchOnly(NotFound, () => ok(guestUser)),
+  runCatch,
   run
 )
 ```

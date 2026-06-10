@@ -3,7 +3,7 @@
 Use this at async platform boundaries such as HTTP, files, databases, and timers.
 
 ```ts
-import { catchAll, ok, runPromise, tryPromise } from "@briancavalier/fx"
+import { catchAll, ok, runCatch, runPromise, tryPromise } from "@briancavalier/fx"
 
 const fetchJson = (url: string) =>
   tryPromise(signal =>
@@ -20,6 +20,7 @@ Handler pipeline:
 ```ts
 fetchJson("https://example.com/data.json").pipe(
   catchAll(error => ok({ error })),
+  runCatch,
   runPromise
 )
 ```

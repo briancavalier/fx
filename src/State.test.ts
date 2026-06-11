@@ -4,7 +4,7 @@ import { describe, it } from 'node:test'
 import { Checkpoint, checkpoint } from './Checkpoint.js'
 import { catchAll, catchIf, Fail, fail, returnFail, runCatch } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
-import { fx, ok, run, type Fx } from './Fx.js'
+import { finalizing, fx, ok, run, type Fx } from './Fx.js'
 import { scope, withScope } from './Scope.js'
 import {
   GetState,
@@ -240,6 +240,28 @@ describe('State', () => {
       }).pipe(withCheckpointedState(CounterState, 0), run)
 
       assert.equal(program, 1)
+    })
+
+    it('rolls back cleanup state changes before recovery runs', () => {
+      const program = fx(function* () {
+        const recovered = yield* fx(function* () {
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+          yield* fail('body')
+        }).pipe(
+          finalizing(modifyState(CounterState, count => [count + 100, undefined])),
+          checkpoint(CounterState),
+          catchAll(error => fx(function* () {
+            const recoveredFrom = yield* getState(CounterState)
+            yield* modifyState(CounterState, count => [count + 10, undefined])
+            return `${error}:${recoveredFrom}`
+          })),
+          runCatch
+        )
+
+        return [recovered, yield* getState(CounterState)] as const
+      }).pipe(withCheckpointedState(CounterState, 0), run)
+
+      assert.deepEqual(program, ['body:0', 10])
     })
 
     it('does not roll back state for plain runCatch', () => {

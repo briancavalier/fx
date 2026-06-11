@@ -2,7 +2,7 @@ import { Checkpoint } from './Checkpoint.js'
 import { ScopedEffect } from './Effect.js'
 import { Fail } from './Fail.js'
 import { Fx, fx, ok } from './Fx.js'
-import { control, handleScoped, type HandleScoped } from './Handler.js'
+import { handleScoped, type HandleScoped } from './Handler.js'
 import type { AnyScope } from './Scope.js'
 
 declare const StatefulTypeId: unique symbol
@@ -104,12 +104,9 @@ export const withCheckpointedState = <const Scope extends AnyScope & Stateful<un
         handleScoped(Checkpoint<Scope, any, any>, scope, effect => {
           const saved = state
 
-          return ok(effect.arg.pipe(
-            control(Fail, (_, failure) => {
-              state = saved
-              return failure
-            })
-          ) as typeof effect.arg)
+          return ok(checkpointed(effect.arg, () => {
+            state = saved
+          }))
         })
       )
     }) as Fx<ExcludeCheckpointedState<E, Scope>, A>
@@ -128,3 +125,48 @@ export const withCheckpointedStateInit = <const Scope extends AnyScope & Statefu
       const initial = yield* initially
       return yield* f.pipe(withCheckpointedState(scope, initial))
     }) as Fx<IE | ExcludeCheckpointedState<E, Scope>, A>
+
+const checkpointed = <const E, const A>(
+  body: Fx<E, A>,
+  restore: () => void
+): Fx<E, A> =>
+    fx(function* () {
+      const iterator = body[Symbol.iterator]()
+      const step = function* (ir: IteratorResult<E, A>, closing: boolean): Generator<E, A | undefined, unknown> {
+        while (!ir.done) {
+          if (Fail.is(ir.value)) {
+            if (!closing) {
+              // Close the protected body before exposing the failure so cleanup
+              // state changes are included in the rollback.
+              yield* close(iterator, step)
+            }
+            restore()
+            return yield* ir.value
+          }
+
+          ir = iterator.next(yield ir.value)
+        }
+
+        return ir.value
+      }
+
+      let completed = false
+      try {
+        const value = (yield* step(iterator.next(), false)) as A
+        completed = true
+        return value
+      } finally {
+        if (!completed) {
+          yield* close(iterator, step)
+        }
+      }
+    })
+
+const close = function* <E, A>(
+  iterator: Iterator<E, A, unknown>,
+  step: (ir: IteratorResult<E, A>, closing: boolean) => Generator<E, A | undefined, unknown>
+): Generator<E, A | undefined, unknown> {
+  const ir = iterator.return?.()
+  if (ir === undefined) return undefined
+  return yield* step(ir, true)
+}

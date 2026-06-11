@@ -1,10 +1,8 @@
 import { Breadcrumb, at } from './Breadcrumb.js'
-import { checkpoint, type Checkpoint } from './Checkpoint.js'
 import { Effect, traceOriginOf } from './Effect.js'
 import type { AnyEffect } from './Effect.js'
 import { Fx, flatten, ok } from './Fx.js'
 import { control, handle } from './Handler.js'
-import type { AnyScope } from './Scope.js'
 import type { TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
 
@@ -85,48 +83,10 @@ const catchRegion = <const E1, const E extends ExtractFail<E1>, const E2, const 
     )
   ) as Fx<CatchEffects<E1, E, E2>, A | B>
 
-const catchRegionScoped = <
-  const Scope extends AnyScope,
-  const E1,
-  const E extends ExtractFail<E1>,
-  const E2,
-  const A,
-  const B
->(scope: Scope, {
-  body,
-  match,
-  recover
-}: CatchContext<E1, E, E2, A, B>): Fx<RunCatchScopedEffects<Scope, E1, E, E2, A>, A | B> =>
-    checkpoint(scope, body).pipe(
-      flatten,
-      control(Fail, (_, failure): Fx<E2 | Fail<unknown>, B> =>
-        match(failure.arg as ExtractFail<E1>)
-          ? recover(failure.arg as E, failure as Fail<E>)
-          : failure as Fx<Fail<unknown>, B>
-      )
-    ) as Fx<RunCatchScopedEffects<Scope, E1, E, E2, A>, A | B>
-
 type RunCatch<E> =
   E extends Catch<infer _E1, infer _E, infer _E2, infer _A, infer _B> ? never : E
 
 export const runCatch = handle(Catch, effect => ok(catchRegion(effect.arg))) as <const E, const A>(fx: Fx<E, A>) => Fx<RunCatch<E>, A>
-
-type RunCatchScopedEffects<Scope extends AnyScope, E1, E, E2, A> =
-  Checkpoint<Scope, E1, A> | CatchEffects<E1, E, E2>
-
-export type RunCatchScoped<E, Scope extends AnyScope> =
-  E extends Catch<infer E1, infer E, infer E2, infer A, infer _B>
-    ? RunCatchScopedEffects<Scope, E1, E, E2, A>
-    : E
-
-/**
- * Interpret local failure recovery regions through checkpoint requests for a
- * named scope.
- */
-export const runCatchScoped = <const Scope extends AnyScope>(
-  scope: Scope
-) =>
-  handle(Catch, effect => ok(catchRegionScoped(scope, effect.arg))) as <const E, const A>(fx: Fx<E, A>) => Fx<RunCatchScoped<E, Scope>, A>
 
 /**
  * Catch failures matching a type guard and handle them with the provided function.

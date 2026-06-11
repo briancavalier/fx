@@ -83,8 +83,7 @@ export const withStateInit = <const Scope extends AnyScope & Stateful<unknown>, 
     }) as Fx<IE | ExcludeState<E, Scope>, A>
 
 /**
- * Handle state operations for the named scope, checkpointing state when a
- * scoped catch interpreter asks to protect a recovery region.
+ * Handle state operations and checkpoint requests for the named scope.
  */
 export const withCheckpointedState = <const Scope extends AnyScope & Stateful<unknown>>(
   scope: Scope,

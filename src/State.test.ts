@@ -1,8 +1,8 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { Checkpoint } from './Checkpoint.js'
-import { catchAll, catchIf, Fail, fail, returnFail, runCatch, runCatchScoped } from './Fail.js'
+import { Checkpoint, checkpoint } from './Checkpoint.js'
+import { catchAll, catchIf, Fail, fail, returnFail, runCatch } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { scope, withScope } from './Scope.js'
@@ -168,14 +168,15 @@ describe('State', () => {
       assert.equal(program, 2)
     })
 
-    it('commits state when a scoped catch body succeeds', () => {
+    it('commits state when a checkpointed body succeeds', () => {
       const program = fx(function* () {
         yield* fx(function* () {
           yield* modifyState(CounterState, count => [count + 1, undefined])
           return 'body'
         }).pipe(
+          checkpoint(CounterState),
           catchAll(() => ok('recovered')),
-          runCatchScoped(CounterState)
+          runCatch
         )
 
         return yield* getState(CounterState)
@@ -191,12 +192,13 @@ describe('State', () => {
           yield* fail('body')
           return 'body'
         }).pipe(
+          checkpoint(CounterState),
           catchAll(error => fx(function* () {
             const recoveredFrom = yield* getState(CounterState)
             yield* modifyState(CounterState, count => [count + 10, undefined])
             return `${error}:${recoveredFrom}`
           })),
-          runCatchScoped(CounterState)
+          runCatch
         )
 
         return [recovered, yield* getState(CounterState)] as const
@@ -213,8 +215,9 @@ describe('State', () => {
           yield* fail<string | number>(123)
           return 'body'
         }).pipe(
+          checkpoint(CounterState),
           catchIf(isString, ok),
-          runCatchScoped(CounterState),
+          runCatch,
           catchAll(() => getState(CounterState)),
           runCatch
         )
@@ -228,8 +231,9 @@ describe('State', () => {
     it('commits recovery state changes unless an outer checkpoint rolls them back', () => {
       const program = fx(function* () {
         yield* fail('body').pipe(
+          checkpoint(CounterState),
           catchAll(() => modifyState(CounterState, count => [count + 1, undefined])),
-          runCatchScoped(CounterState)
+          runCatch
         )
 
         return yield* getState(CounterState)
@@ -261,10 +265,11 @@ describe('State', () => {
           yield* fail('body')
           return 'body'
         }).pipe(
+          checkpoint(CounterState),
           catchAll(() => fx(function* () {
             return [yield* getState(CounterState), yield* getState(OtherState)] as const
           })),
-          runCatchScoped(CounterState)
+          runCatch
         )
       }).pipe(
         withCheckpointedState(CounterState, 0),
@@ -279,8 +284,9 @@ describe('State', () => {
       const FirstScope = scope<Stateful<number>>()('test/State/Checkpoint/SameName')
       const SecondScope = scope<Stateful<number>>()('test/State/Checkpoint/SameName')
       const result = fail('body').pipe(
+        checkpoint(SecondScope),
         catchAll(() => getState(SecondScope)),
-        runCatchScoped(SecondScope),
+        runCatch,
         withCheckpointedState(FirstScope, 1),
         run
       )
@@ -302,8 +308,9 @@ describe('State', () => {
 
     it('leaves checkpoint requests visible until handled', () => {
       const program = fail('body').pipe(
+        checkpoint(CounterState),
         catchAll(ok),
-        runCatchScoped(CounterState)
+        runCatch
       )
       const next = program[Symbol.iterator]().next()
 
@@ -313,8 +320,9 @@ describe('State', () => {
 
     it('removes Catch and introduces checkpoint state until checkpointed state is handled', () => {
       const scoped = fail('body').pipe(
+        checkpoint(CounterState),
         catchAll(ok),
-        runCatchScoped(CounterState)
+        runCatch
       )
       const handled = scoped.pipe(withCheckpointedState(CounterState, 0))
       const otherState = getState(OtherState).pipe(withCheckpointedState(CounterState, 0))

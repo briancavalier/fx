@@ -1,4 +1,4 @@
-import { catchAll, fail, fx, runCatch, runCatchScoped, runPromise } from '@briancavalier/fx'
+import { catchAll, checkpoint, fail, fx, runCatch, runPromise } from '@briancavalier/fx'
 import { scope } from '@briancavalier/fx/scope'
 import { getState, modifyState, type Stateful, withCheckpointedState, withState } from '@briancavalier/fx/state'
 
@@ -53,11 +53,14 @@ const plainState = fx(function* () {
 
 const checkpointedState = fx(function* () {
   yield* recordRequest('/users')
-  yield* failedSecondRequest.pipe(catchAll(recoverSession))
+  yield* failedSecondRequest.pipe(
+    checkpoint(SessionState),
+    catchAll(recoverSession)
+  )
 
   return yield* getState(SessionState)
 }).pipe(
-  runCatchScoped(SessionState),
+  runCatch,
   withCheckpointedState(SessionState, initialSession),
   runPromise
 )

@@ -26,11 +26,11 @@ const recordRequest = (route: string) =>
     undefined
   ] as const)
 
-const recoverSession = (error: string) =>
+const recoverSession = (error: unknown) =>
   modifyState(SessionState, session => [
     {
       ...session,
-      status: `recovered from ${error}`
+      status: `recovered from ${String(error)}`
     },
     undefined
   ] as const)

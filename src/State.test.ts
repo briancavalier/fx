@@ -201,7 +201,7 @@ describe('State', () => {
     })
 
     it('rolls back unmatched failed catch body state before an outer recovery runs', () => {
-      const isString = (x: string | number): x is string => typeof x === 'string'
+      const isString = (x: unknown): x is string => typeof x === 'string'
       const program = fx(function* () {
         const handled = fx(function* () {
           yield* modifyState(CounterState, count => [count + 1, undefined])
@@ -255,6 +255,38 @@ describe('State', () => {
       }).pipe(withState(CounterState, 0), run)
 
       assert.deepEqual(program, ['body:0', 10])
+    })
+
+    it('preserves the original failure before transactional cleanup failures', () => {
+      const bodyFailure = new Error('body failed')
+      const cleanupFailure = new Error('cleanup failed')
+      const program = fx(function* () {
+        const recovered = yield* fx(function* () {
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+          yield* fail(bodyFailure)
+        }).pipe(
+          finalizing(fx(function* () {
+            yield* modifyState(CounterState, count => [count + 100, undefined])
+            yield* fail(cleanupFailure)
+          })),
+          transactionalState(CounterState),
+          catchAll(error => fx(function* () {
+            const recoveredFrom = yield* getState(CounterState)
+            return [error, recoveredFrom] as const
+          })),
+          runCatch
+        )
+
+        return [recovered, yield* getState(CounterState)] as const
+      }).pipe(withState(CounterState, 0), run)
+
+      const [recovered, finalState] = program
+      if (recovered === undefined) assert.fail('expected recovery')
+      const [failure, recoveredFrom] = recovered
+      assert.ok(failure instanceof AggregateError)
+      assert.deepEqual(failure.errors, [bodyFailure, cleanupFailure])
+      assert.equal(recoveredFrom, 0)
+      assert.equal(finalState, 0)
     })
 
     it('rolls back state changes from joined forked children', async () => {

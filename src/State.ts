@@ -37,7 +37,9 @@ export type ExcludeState<E, Scope extends AnyScope & Stateful<unknown>> =
   HandleScoped<HandleScoped<E, GetState<Scope>, Scope>, ModifyState<Scope>, Scope>
 
 type TransactionalStateEffects<E, Scope extends AnyScope & Stateful<unknown>> =
-  E | (Extract<E, StateEffects<Scope>> extends never ? never : StateEffects<Scope>)
+  | E
+  | (Extract<E, StateEffects<Scope>> extends never ? never : StateEffects<Scope>)
+  | (Extract<E, Fail<any>> extends never ? never : Fail<AggregateError>)
 
 export const getState = <const Scope extends AnyScope & Stateful<unknown>>(scope: Scope): Fx<GetState<Scope>, StateOf<Scope>> =>
   new GetState(scope, undefined)
@@ -98,7 +100,7 @@ export const transactionalState = <const Scope extends AnyScope & Stateful<unkno
 const transact = <const Scope extends AnyScope & Stateful<unknown>, const E, const A>(
   scope: Scope,
   body: Fx<E, A>
-): Fx<E | StateEffects<Scope>, A> =>
+): Fx<E | StateEffects<Scope> | Fail<AggregateError>, A> =>
   transactWith(scope, body, createTransactionContext<Scope>(), true)
 
 const transactWith = <const Scope extends AnyScope & Stateful<unknown>, const E, const A>(
@@ -106,7 +108,7 @@ const transactWith = <const Scope extends AnyScope & Stateful<unknown>, const E,
   body: Fx<E, A>,
   context: TransactionContext<Scope>,
   commitOnSuccess: boolean
-): Fx<E | StateEffects<Scope>, A> =>
+): Fx<E | StateEffects<Scope> | Fail<AggregateError>, A> =>
     fx(function* () {
       const iterator = body[Symbol.iterator]()
 
@@ -119,16 +121,32 @@ const transactWith = <const Scope extends AnyScope & Stateful<unknown>, const E,
         return context.state
       }
 
-      const step = function* (ir: IteratorResult<E, A>, closing: boolean): Generator<E | StateEffects<Scope>, A | undefined, unknown> {
+      const step = function* (
+        ir: IteratorResult<E, A>,
+        closing: boolean,
+        cleanupFailures?: unknown[]
+      ): Generator<E | StateEffects<Scope> | Fail<AggregateError>, A | undefined, unknown> {
         let captured: CapturedHandler | undefined
         while (!ir.done) {
           if (Fail.is(ir.value)) {
+            const failure = ir.value
             if (!closing) {
               // Close the protected body before exposing the failure so cleanup
               // state changes are included in the discarded local state.
-              yield* close(iterator, step)
+              const cleanupFailures: unknown[] = []
+              yield* close(iterator, step, cleanupFailures)
+              if (cleanupFailures.length > 0) {
+                yield new Fail(new AggregateError(
+                  [failure.arg, ...cleanupFailures].flatMap(cleanupFailuresOf),
+                  'Resource release failed'
+                ))
+                return undefined
+              }
+            } else if (cleanupFailures !== undefined) {
+              cleanupFailures.push(ir.value.arg)
+              return undefined
             }
-            yield ir.value
+            yield failure
             return undefined
           }
 
@@ -187,11 +205,12 @@ const transactWith = <const Scope extends AnyScope & Stateful<unknown>, const E,
 
 const close = function* <Y, E, A, R>(
   iterator: Iterator<E, A, unknown>,
-  step: (ir: IteratorResult<E, A>, closing: boolean) => Generator<Y, R | undefined, unknown>
+  step: (ir: IteratorResult<E, A>, closing: boolean, cleanupFailures?: unknown[]) => Generator<Y, R | undefined, unknown>,
+  cleanupFailures?: unknown[]
 ): Generator<Y, R | undefined, unknown> {
   const ir = iterator.return?.()
   if (ir === undefined) return undefined
-  return yield* step(ir, true)
+  return yield* step(ir, true, cleanupFailures)
 }
 
 interface TransactionContext<Scope extends AnyScope & Stateful<unknown>> {
@@ -212,3 +231,21 @@ const capturedTransaction = <Scope extends AnyScope & Stateful<unknown>>(
 ): CapturedHandler => ({
   wrap: fx => transactWith(scope, fx, context, false)
 })
+
+const cleanupFailuresOf = (failure: unknown): readonly unknown[] => {
+  const cleanupFailure = isResourceReleaseFailure(failure)
+    ? failure
+    : typeof failure === 'object' && failure !== null && 'cause' in failure && isResourceReleaseFailure(failure.cause)
+    ? failure.cause
+    : undefined
+
+  return cleanupFailure === undefined
+    ? [failure]
+    : cleanupFailure.errors.flatMap(cleanupFailuresOf)
+}
+
+const isResourceReleaseFailure = (failure: unknown): failure is AggregateError =>
+  failure instanceof AggregateError && failure.message === 'Resource release failed'
+  || typeof failure === 'object' && failure !== null
+    && 'message' in failure && failure.message === 'Resource release failed'
+    && 'errors' in failure && Array.isArray(failure.errors)

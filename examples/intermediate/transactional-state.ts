@@ -1,6 +1,6 @@
-import { catchAll, checkpoint, fail, fx, runCatch, runPromise } from '@briancavalier/fx'
+import { catchAll, fail, fx, runCatch, runPromise } from '@briancavalier/fx'
 import { scope } from '@briancavalier/fx/scope'
-import { getState, modifyState, type Stateful, withCheckpointedState, withState } from '@briancavalier/fx/state'
+import { getState, modifyState, transactionalState, type Stateful, withState } from '@briancavalier/fx/state'
 
 type Session = {
   readonly requests: number
@@ -8,7 +8,7 @@ type Session = {
   readonly status: string
 }
 
-const SessionState = scope<Stateful<Session>>()('example/CheckpointedSession')
+const SessionState = scope<Stateful<Session>>()('example/TransactionalSession')
 
 const initialSession: Session = {
   requests: 0,
@@ -51,21 +51,21 @@ const plainState = fx(function* () {
   runPromise
 )
 
-const checkpointedState = fx(function* () {
+const transactional = fx(function* () {
   yield* recordRequest('/users')
   yield* failedSecondRequest.pipe(
-    checkpoint(SessionState),
+    transactionalState(SessionState),
     catchAll(recoverSession)
   )
 
   return yield* getState(SessionState)
 }).pipe(
   runCatch,
-  withCheckpointedState(SessionState, initialSession),
+  withState(SessionState, initialSession),
   runPromise
 )
 
 console.log({
   plain: await plainState,
-  checkpointed: await checkpointedState
+  transactional: await transactional
 })

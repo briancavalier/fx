@@ -1,7 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { Checkpoint, checkpoint } from './Checkpoint.js'
 import { catchAll, catchIf, Fail, fail, returnFail, runCatch } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
 import { finalizing, fx, ok, run, type Fx } from './Fx.js'
@@ -12,8 +11,7 @@ import {
   modifyState,
   type ModifyState,
   type Stateful,
-  withCheckpointedState,
-  withCheckpointedStateInit,
+  transactionalState,
   withState,
   withStateInit
 } from './State.js'
@@ -158,29 +156,20 @@ describe('State', () => {
     assert.equal(typeof cleanupFailureRemains, 'boolean')
   })
 
-  describe('withCheckpointedState', () => {
-    it('handles ordinary state operations like withState', () => {
-      const program = fx(function* () {
-        yield* modifyState(CounterState, count => [count + 1, undefined])
-        return yield* getState(CounterState)
-      }).pipe(withCheckpointedState(CounterState, 1), run)
-
-      assert.equal(program, 2)
-    })
-
-    it('commits state when a checkpointed body succeeds', () => {
+  describe('transactionalState', () => {
+    it('commits state when a transactional body succeeds', () => {
       const program = fx(function* () {
         yield* fx(function* () {
           yield* modifyState(CounterState, count => [count + 1, undefined])
           return 'body'
         }).pipe(
-          checkpoint(CounterState),
+          transactionalState(CounterState),
           catchAll(() => ok('recovered')),
           runCatch
         )
 
         return yield* getState(CounterState)
-      }).pipe(withCheckpointedState(CounterState, 0), run)
+      }).pipe(withState(CounterState, 0), run)
 
       assert.equal(program, 1)
     })
@@ -192,7 +181,7 @@ describe('State', () => {
           yield* fail('body')
           return 'body'
         }).pipe(
-          checkpoint(CounterState),
+          transactionalState(CounterState),
           catchAll(error => fx(function* () {
             const recoveredFrom = yield* getState(CounterState)
             yield* modifyState(CounterState, count => [count + 10, undefined])
@@ -202,7 +191,7 @@ describe('State', () => {
         )
 
         return [recovered, yield* getState(CounterState)] as const
-      }).pipe(withCheckpointedState(CounterState, 0), run)
+      }).pipe(withState(CounterState, 0), run)
 
       assert.deepEqual(program, ['body:0', 10])
     })
@@ -215,7 +204,7 @@ describe('State', () => {
           yield* fail<string | number>(123)
           return 'body'
         }).pipe(
-          checkpoint(CounterState),
+          transactionalState(CounterState),
           catchIf(isString, ok),
           runCatch,
           catchAll(() => getState(CounterState)),
@@ -223,21 +212,21 @@ describe('State', () => {
         )
 
         return yield* handled
-      }).pipe(withCheckpointedState(CounterState, 0), run)
+      }).pipe(withState(CounterState, 0), run)
 
       assert.equal(program, 0)
     })
 
-    it('commits recovery state changes unless an outer checkpoint rolls them back', () => {
+    it('commits recovery state changes unless an outer transaction rolls them back', () => {
       const program = fx(function* () {
         yield* fail('body').pipe(
-          checkpoint(CounterState),
+          transactionalState(CounterState),
           catchAll(() => modifyState(CounterState, count => [count + 1, undefined])),
           runCatch
         )
 
         return yield* getState(CounterState)
-      }).pipe(withCheckpointedState(CounterState, 0), run)
+      }).pipe(withState(CounterState, 0), run)
 
       assert.equal(program, 1)
     })
@@ -249,7 +238,7 @@ describe('State', () => {
           yield* fail('body')
         }).pipe(
           finalizing(modifyState(CounterState, count => [count + 100, undefined])),
-          checkpoint(CounterState),
+          transactionalState(CounterState),
           catchAll(error => fx(function* () {
             const recoveredFrom = yield* getState(CounterState)
             yield* modifyState(CounterState, count => [count + 10, undefined])
@@ -259,7 +248,7 @@ describe('State', () => {
         )
 
         return [recovered, yield* getState(CounterState)] as const
-      }).pipe(withCheckpointedState(CounterState, 0), run)
+      }).pipe(withState(CounterState, 0), run)
 
       assert.deepEqual(program, ['body:0', 10])
     })
@@ -274,7 +263,7 @@ describe('State', () => {
           catchAll(() => getState(CounterState)),
           runCatch
         )
-      }).pipe(withCheckpointedState(CounterState, 0), run)
+      }).pipe(withState(CounterState, 0), run)
 
       assert.equal(program, 1)
     })
@@ -287,14 +276,14 @@ describe('State', () => {
           yield* fail('body')
           return 'body'
         }).pipe(
-          checkpoint(CounterState),
+          transactionalState(CounterState),
           catchAll(() => fx(function* () {
             return [yield* getState(CounterState), yield* getState(OtherState)] as const
           })),
           runCatch
         )
       }).pipe(
-        withCheckpointedState(CounterState, 0),
+        withState(CounterState, 0),
         withState(OtherState, 'other'),
         run
       )
@@ -303,65 +292,72 @@ describe('State', () => {
     })
 
     it('handles same-id state scope tokens', () => {
-      const FirstScope = scope<Stateful<number>>()('test/State/Checkpoint/SameName')
-      const SecondScope = scope<Stateful<number>>()('test/State/Checkpoint/SameName')
+      const FirstScope = scope<Stateful<number>>()('test/State/Transactional/SameName')
+      const SecondScope = scope<Stateful<number>>()('test/State/Transactional/SameName')
       const result = fail('body').pipe(
-        checkpoint(SecondScope),
+        transactionalState(SecondScope),
         catchAll(() => getState(SecondScope)),
         runCatch,
-        withCheckpointedState(FirstScope, 1),
+        withState(FirstScope, 1),
         run
       )
 
       assert.equal(result, 1)
     })
 
-    it('runs checkpointed state initialization once per execution', () => {
-      let initialized = 0
-      const initial = fx(function* () {
-        initialized += 1
-        return initialized
-      })
-      const program = getState(CounterState).pipe(withCheckpointedStateInit(CounterState, initial))
+    it('commits nested transactions into the outer transaction', () => {
+      const program = fx(function* () {
+        yield* fx(function* () {
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+          yield* modifyState(CounterState, count => [count + 10, undefined]).pipe(
+            transactionalState(CounterState)
+          )
+          return yield* getState(CounterState)
+        }).pipe(transactionalState(CounterState))
 
-      assert.equal(run(program), 1)
-      assert.equal(run(program), 2)
+        return yield* getState(CounterState)
+      }).pipe(withState(CounterState, 0), run)
+
+      assert.equal(program, 11)
     })
 
-    it('leaves checkpoint requests visible until handled', () => {
-      const program = fail('body').pipe(
-        checkpoint(CounterState),
-        catchAll(ok),
-        runCatch
+    it('leaves state effects visible until withState handles durable state', () => {
+      const program = modifyState(CounterState, count => [count + 1, undefined]).pipe(
+        transactionalState(CounterState)
       )
       const next = program[Symbol.iterator]().next()
 
       assert.equal(next.done, false)
-      assert.equal(Checkpoint.is(next.value), true)
+      assert.equal(GetState.is(next.value), true)
     })
 
-    it('removes Catch and introduces checkpoint state until checkpointed state is handled', () => {
-      const scoped = fail('body').pipe(
-        checkpoint(CounterState),
-        catchAll(ok),
-        runCatch
+    it('requires a stateful scope', () => {
+      const PlainScope = scope('test/State/Transactional/Plain')
+
+      // @ts-expect-error transactionalState requires a Stateful scope.
+      ok('plain').pipe(transactionalState(PlainScope))
+
+      assert.equal(typeof PlainScope, 'object')
+    })
+
+    it('preserves state effect typing until withState handles durable state', () => {
+      const scoped = modifyState(CounterState, count => [count + 1, undefined]).pipe(
+        transactionalState(CounterState)
       )
-      const handled = scoped.pipe(withCheckpointedState(CounterState, 0))
-      const otherState = getState(OtherState).pipe(withCheckpointedState(CounterState, 0))
+      const handled = scoped.pipe(withState(CounterState, 0))
+      const otherState = getState(OtherState).pipe(transactionalState(CounterState))
 
       type ScopedEffects = EffectOf<typeof scoped>
       type HandledEffects = EffectOf<typeof handled>
       type OtherStateEffects = EffectOf<typeof otherState>
-      const catchRemoved: Extract<ScopedEffects, import('./Fail.js').Catch<any, any, any, any, any>> extends never ? true : false = true
-      const checkpointVisible: Extract<ScopedEffects, Checkpoint<typeof CounterState, any, any>> extends never ? false : true = true
-      const checkpointHandled: Extract<HandledEffects, Checkpoint<typeof CounterState, any, any>> extends never ? true : false = true
-      const failHandled: Extract<HandledEffects, Fail<any>> extends never ? true : false = true
+      const counterGetVisible: Extract<ScopedEffects, GetState<typeof CounterState>> extends never ? false : true = true
+      const counterModifyVisible: Extract<ScopedEffects, ModifyState<typeof CounterState, any>> extends never ? false : true = true
+      const counterStateHandled: Extract<HandledEffects, GetState<typeof CounterState> | ModifyState<typeof CounterState, any>> extends never ? true : false = true
       const otherStateVisible: Extract<OtherStateEffects, GetState<typeof OtherState>> extends never ? false : true = true
 
-      assert.equal(catchRemoved, true)
-      assert.equal(checkpointVisible, true)
-      assert.equal(checkpointHandled, true)
-      assert.equal(failHandled, true)
+      assert.equal(counterGetVisible, true)
+      assert.equal(counterModifyVisible, true)
+      assert.equal(counterStateHandled, true)
       assert.equal(otherStateVisible, true)
     })
   })

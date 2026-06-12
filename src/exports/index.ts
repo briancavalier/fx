@@ -32,10 +32,6 @@ export {
   type Fx
 } from '../Fx.js'
 export {
-  checkpoint,
-  Checkpoint
-} from '../Checkpoint.js'
-export {
   control,
   handle,
   handleScoped,

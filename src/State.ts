@@ -2,8 +2,11 @@ import { ScopedEffect } from './Effect.js'
 import { Fail } from './Fail.js'
 import { Fx, fx, ok } from './Fx.js'
 import { handleScoped, type HandleScoped } from './Handler.js'
+import { HandlerCapture, type CapturedHandler } from './HandlerCapture.js'
 import type { AnyScope } from './Scope.js'
 import { sameScope } from './internal/scopeIdentity.js'
+import { ScopedHandlerCapture } from './internal/scopedHandlerCapture.js'
+import { ScopedFork } from './internal/scopedFork.js'
 
 declare const StatefulTypeId: unique symbol
 
@@ -96,22 +99,28 @@ const transact = <const Scope extends AnyScope & Stateful<unknown>, const E, con
   scope: Scope,
   body: Fx<E, A>
 ): Fx<E | StateEffects<Scope>, A> =>
+  transactWith(scope, body, createTransactionContext<Scope>(), true)
+
+const transactWith = <const Scope extends AnyScope & Stateful<unknown>, const E, const A>(
+  scope: Scope,
+  body: Fx<E, A>,
+  context: TransactionContext<Scope>,
+  commitOnSuccess: boolean
+): Fx<E | StateEffects<Scope>, A> =>
     fx(function* () {
       const iterator = body[Symbol.iterator]()
-      let initialized = false
-      let dirty = false
-      let state: StateOf<Scope>
 
       const initialize = function* (): Generator<GetState<Scope>, StateOf<Scope>, unknown> {
-        if (!initialized) {
-          state = (yield new GetState(scope, undefined)) as StateOf<Scope>
-          initialized = true
+        if (!context.initialized) {
+          context.state = (yield new GetState(scope, undefined)) as StateOf<Scope>
+          context.initialized = true
         }
 
-        return state
+        return context.state
       }
 
       const step = function* (ir: IteratorResult<E, A>, closing: boolean): Generator<E | StateEffects<Scope>, A | undefined, unknown> {
+        let captured: CapturedHandler | undefined
         while (!ir.done) {
           if (Fail.is(ir.value)) {
             if (!closing) {
@@ -132,17 +141,33 @@ const transact = <const Scope extends AnyScope & Stateful<unknown>, const E, con
             const current = yield* initialize()
             const effect = ir.value as ModifyState<Scope, unknown>
             const [next, result] = effect.arg(current)
-            state = next
-            dirty = true
+            context.state = next
+            context.dirty = true
             ir = iterator.next(result)
+            continue
+          }
+
+          if (ScopedFork.is(ir.value)) {
+            captured ??= capturedTransaction(scope, context)
+            const scoped = ir.value
+            ir = iterator.next(yield new ScopedFork(scoped.scope, {
+              ...scoped.arg,
+              fx: captured.wrap(scoped.arg.fx)
+            }) as E)
+            continue
+          }
+
+          if (HandlerCapture.is(ir.value) || ScopedHandlerCapture.is(ir.value)) {
+            captured ??= capturedTransaction(scope, context)
+            ir = iterator.next([captured, ...(yield ir.value) as readonly CapturedHandler[]])
             continue
           }
 
           ir = iterator.next(yield ir.value)
         }
 
-        if (dirty && !closing) {
-          yield new ModifyState(scope, () => [state, undefined])
+        if (context.dirty && commitOnSuccess && !closing) {
+          yield new ModifyState(scope, () => [context.state, undefined])
         }
 
         return ir.value
@@ -168,3 +193,22 @@ const close = function* <Y, E, A, R>(
   if (ir === undefined) return undefined
   return yield* step(ir, true)
 }
+
+interface TransactionContext<Scope extends AnyScope & Stateful<unknown>> {
+  initialized: boolean
+  dirty: boolean
+  state: StateOf<Scope>
+}
+
+const createTransactionContext = <Scope extends AnyScope & Stateful<unknown>>(): TransactionContext<Scope> => ({
+  initialized: false,
+  dirty: false,
+  state: undefined as StateOf<Scope>
+})
+
+const capturedTransaction = <Scope extends AnyScope & Stateful<unknown>>(
+  scope: Scope,
+  context: TransactionContext<Scope>
+): CapturedHandler => ({
+  wrap: fx => transactWith(scope, fx, context, false)
+})

@@ -3,8 +3,10 @@ import { describe, it } from 'node:test'
 
 import { catchAll, catchIf, Fail, fail, returnFail, runCatch } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
-import { finalizing, fx, ok, run, type Fx } from './Fx.js'
-import { scope, withScope } from './Scope.js'
+import { fork, forkIn, withUnboundedConcurrency } from './Concurrent.js'
+import { finalizing, fx, ok, run, runPromise, type Fx } from './Fx.js'
+import { scope, withScope, type Control } from './Scope.js'
+import { wait } from './Task.js'
 import {
   GetState,
   getState,
@@ -157,6 +159,8 @@ describe('State', () => {
   })
 
   describe('transactionalState', () => {
+    const ForkScope = scope<Control>()('test/State/Transactional/ForkScope')
+
     it('commits state when a transactional body succeeds', () => {
       const program = fx(function* () {
         yield* fx(function* () {
@@ -251,6 +255,80 @@ describe('State', () => {
       }).pipe(withState(CounterState, 0), run)
 
       assert.deepEqual(program, ['body:0', 10])
+    })
+
+    it('rolls back state changes from joined forked children', async () => {
+      const program = fx(function* () {
+        const recovered = yield* fx(function* () {
+          const task = yield* fork(fx(function* () {
+            yield* modifyState(CounterState, count => [count + 10, undefined])
+          }))
+          yield* wait(task)
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+          yield* fail('body')
+        }).pipe(
+          transactionalState(CounterState),
+          catchAll(error => fx(function* () {
+            const recoveredFrom = yield* getState(CounterState)
+            return `${error}:${recoveredFrom}`
+          })),
+          runCatch
+        )
+
+        return [recovered, yield* getState(CounterState)] as const
+      }).pipe(
+        withState(CounterState, 0),
+        withUnboundedConcurrency
+      )
+
+      assert.deepEqual(await program.pipe(runPromise), ['body:0', 0])
+    })
+
+    it('commits state changes from joined forked children when the transaction succeeds', async () => {
+      const program = fx(function* () {
+        yield* fx(function* () {
+          const task = yield* fork(fx(function* () {
+            yield* modifyState(CounterState, count => [count + 10, undefined])
+          }))
+          yield* wait(task)
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+        }).pipe(transactionalState(CounterState))
+
+        return yield* getState(CounterState)
+      }).pipe(
+        withState(CounterState, 0),
+        withUnboundedConcurrency
+      )
+
+      assert.equal(await program.pipe(runPromise), 11)
+    })
+
+    it('rolls back state changes from joined scoped forked children', async () => {
+      const program = fx(function* () {
+        const recovered = yield* fx(function* () {
+          const task = yield* forkIn(ForkScope, fx(function* () {
+            yield* modifyState(CounterState, count => [count + 10, undefined])
+          }))
+          yield* wait(task)
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+          yield* fail('body')
+        }).pipe(
+          transactionalState(CounterState),
+          catchAll(error => fx(function* () {
+            const recoveredFrom = yield* getState(CounterState)
+            return `${error}:${recoveredFrom}`
+          })),
+          runCatch
+        )
+
+        return [recovered, yield* getState(CounterState)] as const
+      }).pipe(
+        withScope(ForkScope),
+        withState(CounterState, 0),
+        withUnboundedConcurrency
+      )
+
+      assert.deepEqual(await program.pipe(returnFail, runPromise), ['body:0', 0])
     })
 
     it('does not roll back state for plain runCatch', () => {

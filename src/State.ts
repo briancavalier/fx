@@ -144,7 +144,8 @@ const transactWith = <const Scope extends AnyScope & Stateful<unknown>, const E,
               }
             } else if (cleanupFailures !== undefined) {
               cleanupFailures.push(ir.value.arg)
-              return undefined
+              ir = iterator.next(undefined)
+              continue
             }
             yield failure
             return undefined

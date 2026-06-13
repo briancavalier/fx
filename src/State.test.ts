@@ -289,6 +289,45 @@ describe('State', () => {
       assert.equal(finalState, 0)
     })
 
+    it('continues draining transactional cleanup after a cleanup failure before recovery runs', () => {
+      const events: string[] = []
+      const bodyFailure = new Error('body failed')
+      const cleanupFailure = new Error('cleanup failed')
+      const program = fx(function* () {
+        const recovered = yield* fx(function* () {
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+          yield* fail(bodyFailure)
+        }).pipe(
+          finalizing(fx(function* () {
+            events.push('failing cleanup')
+            yield* fail(cleanupFailure)
+          })),
+          finalizing(fx(function* () {
+            events.push('state cleanup')
+            yield* modifyState(CounterState, count => [count + 100, undefined])
+          })),
+          transactionalState(CounterState),
+          catchAll(error => fx(function* () {
+            events.push('recovery')
+            const recoveredFrom = yield* getState(CounterState)
+            return [error, recoveredFrom] as const
+          })),
+          runCatch
+        )
+
+        return [recovered, yield* getState(CounterState)] as const
+      }).pipe(withState(CounterState, 0), run)
+
+      const [recovered, finalState] = program
+      if (recovered === undefined) assert.fail('expected recovery')
+      const [failure, recoveredFrom] = recovered
+      assert.ok(failure instanceof AggregateError)
+      assert.deepEqual(failure.errors, [bodyFailure, cleanupFailure])
+      assert.deepEqual(events, ['failing cleanup', 'state cleanup', 'recovery'])
+      assert.equal(recoveredFrom, 0)
+      assert.equal(finalState, 0)
+    })
+
     it('rolls back state changes from joined forked children', async () => {
       const program = fx(function* () {
         const recovered = yield* fx(function* () {

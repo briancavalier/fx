@@ -2,7 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
-import { fail, Fail, returnFail } from './Fail.js'
+import { catchAll, fail, Fail, returnFail, runCatch } from './Fail.js'
 import { race, withUnboundedConcurrency } from './Concurrent.js'
 import { andFinallyIn, managed, usingIn, usingManagedIn } from './Finalization.js'
 import { bracket, finalizing, fx, ok, run, runPromise, runTask, type Fx } from './Fx.js'
@@ -433,6 +433,48 @@ describe('Interrupt masking', () => {
 
     assert.equal(result, 'inner:program')
     assert.deepEqual(handled, ['outer:cleanup'])
+  })
+
+  it('withScope balances finalizing cleanup failure recovered outside the scope', () => {
+    const CleanupScope = scope('test/Interrupt/finalizing/CleanupScope')
+    const cleanupFailure = new Error('cleanup failed')
+
+    const result = ok('value').pipe(
+      finalizing(fail(cleanupFailure)),
+      withScope(CleanupScope),
+      catchAll(error => ok(error)),
+      runCatch,
+      run
+    )
+
+    assert.equal(result, cleanupFailure)
+  })
+
+  it('withScope balances finalizing cleanup failure after body failure recovery', () => {
+    const CleanupScope = scope('test/Interrupt/finalizing/BodyFailureCleanupScope')
+    const bodyFailure = new Error('body failed')
+    const cleanupFailure = new Error('cleanup failed')
+    const events: string[] = []
+
+    const result = fx(function* () {
+      events.push('body')
+      yield* fail(bodyFailure)
+    }).pipe(
+      finalizing(fx(function* () {
+        events.push('cleanup')
+        yield* fail(cleanupFailure)
+      })),
+      withScope(CleanupScope),
+      catchAll(error => fx(function* () {
+        events.push('recovery')
+        return error
+      })),
+      runCatch,
+      run
+    )
+
+    assert.equal(result, bodyFailure)
+    assert.deepEqual(events, ['body', 'recovery', 'cleanup'])
   })
 
   it('restore re-enables interruption inside uninterruptibleMask', async () => {

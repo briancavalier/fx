@@ -1,13 +1,13 @@
 export {
-  getState,
   GetState,
-  modifyState,
   ModifyState,
+  getState,
+  modifyState,
   transactionalState,
   withState,
   withStateInit,
   type ExcludeState,
   type StateEffects,
-  type Stateful,
-  type StateOf
+  type StateOf,
+  type Stateful
 } from '../State.js'

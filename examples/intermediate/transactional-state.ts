@@ -1,6 +1,6 @@
 import { catchAll, fail, fx, runCatch, runPromise } from '@briancavalier/fx'
-import { scope } from '@briancavalier/fx/scope'
-import { getState, modifyState, transactionalState, type Stateful, withState } from '@briancavalier/fx/state'
+import { scope, withScope } from '@briancavalier/fx/scope'
+import { getState, modifyState, transactionalState, withState, type Stateful } from '@briancavalier/fx/state'
 
 type Session = {
   readonly requests: number
@@ -60,6 +60,7 @@ const transactional = fx(function* () {
 
   return yield* getState(SessionState)
 }).pipe(
+  withScope(SessionState),
   runCatch,
   withState(SessionState, initialSession),
   runPromise

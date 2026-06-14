@@ -1,22 +1,22 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { catchAll, catchIf, Fail, fail, returnFail, runCatch } from './Fail.js'
-import { andFinallyIn } from './Finalization.js'
 import { fork, forkIn, withUnboundedConcurrency } from './Concurrent.js'
+import { Fail, catchAll, catchIf, fail, returnFail, runCatch } from './Fail.js'
+import { andFinallyIn } from './Finalization.js'
 import { finalizing, fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { scope, withScope, type Control } from './Scope.js'
-import { wait } from './Task.js'
 import {
   GetState,
   getState,
   modifyState,
-  type ModifyState,
-  type Stateful,
   transactionalState,
   withState,
-  withStateInit
+  withStateInit,
+  type ModifyState,
+  type Stateful
 } from './State.js'
+import { wait } from './Task.js'
 
 describe('State', () => {
   const CounterState = scope<Stateful<number>>()('test/State/Counter')
@@ -257,7 +257,7 @@ describe('State', () => {
       assert.deepEqual(program, ['body:0', 10])
     })
 
-    it('preserves the original failure before transactional cleanup failures', () => {
+    it('preserves the original failure when transactional cleanup fails', () => {
       const bodyFailure = new Error('body failed')
       const cleanupFailure = new Error('cleanup failed')
       const program = fx(function* () {
@@ -283,13 +283,13 @@ describe('State', () => {
       const [recovered, finalState] = program
       if (recovered === undefined) assert.fail('expected recovery')
       const [failure, recoveredFrom] = recovered
-      assert.ok(failure instanceof AggregateError)
-      assert.deepEqual(failure.errors, [bodyFailure, cleanupFailure])
+      assert.equal(failure, bodyFailure)
       assert.equal(recoveredFrom, 0)
       assert.equal(finalState, 0)
+      assert.equal(cleanupFailure.message, 'cleanup failed')
     })
 
-    it('continues draining transactional cleanup after a cleanup failure before recovery runs', () => {
+    it('continues draining transactional cleanup after a cleanup failure', () => {
       const events: string[] = []
       const bodyFailure = new Error('body failed')
       const cleanupFailure = new Error('cleanup failed')
@@ -321,11 +321,11 @@ describe('State', () => {
       const [recovered, finalState] = program
       if (recovered === undefined) assert.fail('expected recovery')
       const [failure, recoveredFrom] = recovered
-      assert.ok(failure instanceof AggregateError)
-      assert.deepEqual(failure.errors, [bodyFailure, cleanupFailure])
-      assert.deepEqual(events, ['failing cleanup', 'state cleanup', 'recovery'])
+      assert.equal(failure, bodyFailure)
+      assert.deepEqual(events, ['recovery', 'failing cleanup', 'state cleanup'])
       assert.equal(recoveredFrom, 0)
       assert.equal(finalState, 0)
+      assert.equal(cleanupFailure.message, 'cleanup failed')
     })
 
     it('rolls back state changes from joined forked children', async () => {

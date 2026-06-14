@@ -77,6 +77,7 @@ describe('package import inference', () => {
     const noCheckpointConstructor: HasExport<typeof stateApi, `check${'point'}`> = false
     const noCheckpointedState: HasExport<typeof stateApi, `with${'Checkpointed'}State`> = false
     const noCheckpointedStateInit: HasExport<typeof stateApi, `with${'Checkpointed'}StateInit`> = false
+    const noTxState: HasExport<typeof stateApi, `tx${'State'}`> = false
     const noTimeoutInScope: HasExport<typeof timeoutApi, `timeout${'In'}Scope`> = false
     assert.equal(noConcurrentEffect, false)
     assert.equal(noConcurrentConstructor, false)
@@ -93,6 +94,7 @@ describe('package import inference', () => {
     assert.equal(noCheckpointConstructor, false)
     assert.equal(noCheckpointedState, false)
     assert.equal(noCheckpointedStateInit, false)
+    assert.equal(noTxState, false)
     assert.equal(noTimeoutInScope, false)
   })
 

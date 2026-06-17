@@ -22,7 +22,7 @@ export type ResumableExit<A, E extends ExitEffect = ExitEffect> =
   | InterruptedExit<Extract<E, InterruptFrom<AnyScope, any>>>
 
 export type FailureExit<E extends Fail<any>> =
-  E extends never ? never : { readonly type: 'failure', readonly failure: E }
+  E extends never ? never : { readonly type: 'failure', readonly effect: E }
 
 export type ReturnFromExit<E extends ReturnFrom<AnyControlScope, any>> =
   E extends never ? never : { readonly type: 'returnFrom', readonly effect: E }
@@ -34,8 +34,7 @@ export type InterruptedExit<E extends InterruptFrom<AnyScope, any>> =
   E extends never ? never : { readonly type: 'interrupted', readonly effect: E }
 
 type ResumableExitEffect<Exit> =
-  Exit extends { readonly failure: infer E extends Fail<any> } ? E
-  : Exit extends { readonly effect: infer E extends ExitEffect } ? E
+  Exit extends { readonly effect: infer E extends ExitEffect } ? E
   : never
 
 type ExitOf<E, A> = ResumableExit<A, Extract<E, ExitEffect>>
@@ -51,7 +50,6 @@ export const resumeExit = <const Exit extends ResumableExit<any, any>>(
 ): Fx<ResumableExitEffect<Exit>, Exit extends { readonly type: 'success', readonly value: infer A } ? A : never> =>
   fx(function* () {
     if (exit.type === 'success') return exit.value
-    if (exit.type === 'failure') return (yield exit.failure) as never
     return (yield exit.effect) as never
   }) as Fx<ResumableExitEffect<Exit>, Exit extends { readonly type: 'success', readonly value: infer A } ? A : never>
 
@@ -142,7 +140,7 @@ class ReturnExit<E, A> implements Fx<E, ResumableExit<A>>, Pipeable {
 }
 
 const toExit = <E, A>(effect: E): ExitOf<E, A> | undefined => {
-  if (Fail.is(effect)) return { type: 'failure', failure: effect } as ExitOf<E, A>
+  if (Fail.is(effect)) return { type: 'failure', effect } as ExitOf<E, A>
   if (ReturnFrom.is(effect)) return { type: 'returnFrom', effect } as ExitOf<E, A>
   if (Abort.is(effect)) return { type: 'abort', effect } as ExitOf<E, A>
   if (InterruptFrom.is(effect)) return { type: 'interrupted', effect } as ExitOf<E, A>

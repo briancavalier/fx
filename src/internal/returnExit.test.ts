@@ -29,7 +29,7 @@ describe('returnExit', () => {
     const exit = failure.pipe(returnExit, run)
 
     assert.equal(exit.type, 'failure')
-    assert.equal(exit.failure, failure)
+    assert.equal(exit.effect, failure)
 
     const next = resumeExit(exit)[Symbol.iterator]().next()
     assert.equal(next.done, false)
@@ -109,7 +109,7 @@ describe('returnExit', () => {
     )
 
     assert.equal(exit.type, 'failure')
-    assert.equal(exit.failure.arg, cleanupFailure)
+    assert.equal(exit.effect.arg, cleanupFailure)
   })
 
   it('returns cleanup failure after body returnFrom', () => {
@@ -121,7 +121,7 @@ describe('returnExit', () => {
     )
 
     assert.equal(exit.type, 'failure')
-    assert.equal(exit.failure.arg, cleanupFailure)
+    assert.equal(exit.effect.arg, cleanupFailure)
   })
 
   it('preserves body failure and keeps closing after cleanup failure', () => {
@@ -147,7 +147,7 @@ describe('returnExit', () => {
     }).pipe(withState(StateScope, 0), run)
 
     assert.equal(exit.type, 'failure')
-    assert.equal(exit.failure.arg, bodyFailure)
+    assert.equal(exit.effect.arg, bodyFailure)
     assert.deepEqual(events, ['failing cleanup', 'state cleanup'])
     assert.equal(state, 1)
   })

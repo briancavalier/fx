@@ -1,7 +1,8 @@
 import { ScopedEffect } from './Effect.js'
-import { Fx, fx, ok } from './Fx.js'
+import { Fx, flatMap, fx, ok } from './Fx.js'
 import { handleScoped, type HandleScoped } from './Handler.js'
-import type { AnyScope } from './Scope.js'
+import { AnyScope } from './Scope.js'
+import { returnExit, resumeExit } from './internal/returnExit.js'
 
 declare const StatefulTypeId: unique symbol
 
@@ -71,8 +72,40 @@ export const withStateInit = <const Scope extends AnyScope & Stateful<unknown>, 
   initially: Fx<IE, StateOf<Scope>>
 ) => <const E, const A>(
   f: Fx<E, A>
-): Fx<IE | ExcludeState<E, Scope>, A> =>
+) =>
+    initially.pipe(flatMap(s => f.pipe(withState(scope, s))))
+
+/**
+ * Run matching state operations transactionally for the named scope.
+ *
+ * The current durable state is copied before the protected region runs.
+ * Matching state operations update the local copy, and the transaction commits
+ * it back to the durable state only if the region succeeds or returns from a
+ * control scope.
+ */
+export const transactionalState = <const Scope extends AnyScope & Stateful<unknown>>(
+  scope: Scope
+) => <const E, const A>(
+  body: Fx<E, A>
+): Fx<ExcludeState<E, Scope> | StateEffects<Scope>, A> =>
     fx(function* () {
-      const initial = yield* initially
-      return yield* f.pipe(withState(scope, initial))
-    }) as Fx<IE | ExcludeState<E, Scope>, A>
+      let state = yield* getState(scope)
+      let dirty = false
+
+      const exit = yield* body.pipe(
+        returnExit,
+        handleScoped(GetState<Scope>, scope, () => ok(state)),
+        handleScoped(ModifyState<Scope, unknown>, scope, effect => {
+          const [next, result] = effect.arg(state)
+          state = next
+          dirty = true
+          return ok(result)
+        })
+      )
+
+      if (dirty && (exit.type === 'success' || exit.type === 'returnFrom')) {
+        yield* modifyState(scope, () => [state, undefined])
+      }
+
+      return yield* resumeExit(exit)
+    }) as Fx<ExcludeState<E, Scope> | StateEffects<Scope>, A>

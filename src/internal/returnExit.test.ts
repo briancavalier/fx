@@ -138,4 +138,36 @@ describe('returnExit', () => {
     assert.deepEqual(events, ['failing cleanup', 'state cleanup'])
     assert.equal(state, 1)
   })
+
+  it('closes the wrapped iterator when interrupted on a forwarded effect', () => {
+    class Wait extends Effect('test/returnExit/Wait')<void, void> { }
+    const events: string[] = []
+    const iterator = fx(function* () {
+      yield* new Wait(undefined)
+    }).pipe(
+      finalizing(fx(function* () {
+        events.push('cleanup')
+      })),
+      returnExit
+    )[Symbol.iterator]()
+
+    let result = iterator.next()
+    while (!result.done && !Wait.is(result.value)) {
+      result = iterator.next()
+    }
+
+    assert.equal(result.done, false)
+    assert.equal(Wait.is(result.value), true)
+    assert.deepEqual(events, [])
+
+    const returned = iterator.return?.()
+    if (returned !== undefined) {
+      result = returned
+      while (!result.done) {
+        result = iterator.next()
+      }
+    }
+
+    assert.deepEqual(events, ['cleanup'])
+  })
 })

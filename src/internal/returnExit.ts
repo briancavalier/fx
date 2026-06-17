@@ -108,24 +108,33 @@ class ReturnExit<E, A> implements Fx<E, ResumableExit<A>>, Pipeable {
       }
     }
 
-    let ir = i.next()
-    while (!ir.done) {
-      if (!isEffect(ir.value)) {
-        throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
+    let completed = false
+    try {
+      let ir = i.next()
+      while (!ir.done) {
+        if (!isEffect(ir.value)) {
+          throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
+        }
+
+        const nextExit = toExit<A>(ir.value)
+        if (nextExit !== undefined) {
+          exit = nextExit
+          yield* close()
+          if (exit === undefined) throw new Error('Exit unavailable after closing interrupted region')
+          completed = true
+          return exit
+        }
+
+        ir = i.next(yield ir.value as E)
       }
 
-      const nextExit = toExit<A>(ir.value)
-      if (nextExit !== undefined) {
-        exit = nextExit
+      completed = true
+      return { type: 'success', value: ir.value }
+    } finally {
+      if (!completed) {
         yield* close()
-        if (exit === undefined) throw new Error('Exit unavailable after closing interrupted region')
-        return exit
       }
-
-      ir = i.next(yield ir.value as E)
     }
-
-    return { type: 'success', value: ir.value }
   }
 }
 

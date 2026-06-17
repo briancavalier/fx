@@ -5,6 +5,7 @@ import { fork, forkIn, withUnboundedConcurrency } from './Concurrent.js'
 import { Fail, catchAll, catchIf, fail, returnFail, runCatch } from './Fail.js'
 import { andFinally, andFinallyIn } from './Finalization.js'
 import { finalizing, fx, ok, run, runPromise, type Fx } from './Fx.js'
+import { returnFrom } from './ReturnFrom.js'
 import { scope, withScope, type Control } from './Scope.js'
 import {
   GetState,
@@ -468,6 +469,28 @@ describe('State', () => {
       }).pipe(withState(CounterState, 0), run)
 
       assert.equal(program, 11)
+    })
+
+    it('rolls back and exposes cleanup failure after returnFrom', () => {
+      const cleanupFailure = new Error('cleanup failed')
+      const result = fx(function* () {
+        const returned = yield* fx(function* () {
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+          return yield* returnFrom(ForkScope, 'returned')
+        }).pipe(
+          finalizing(fail(cleanupFailure)),
+          transactionalState(CounterState),
+          withScope(ForkScope),
+          returnFail
+        )
+
+        return [returned, yield* getState(CounterState)] as const
+      }).pipe(withState(CounterState, 0), run)
+
+      const [returned, state] = result
+      if (!Fail.is(returned)) assert.fail('expected cleanup failure')
+      assert.equal(returned.arg, cleanupFailure)
+      assert.equal(state, 0)
     })
 
     it('does not become the nearest current scope', () => {

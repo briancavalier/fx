@@ -99,7 +99,7 @@ class ReturnExit<E, A> implements Fx<E, ResumableExit<A>>, Pipeable {
 
         const cleanupExit = toExit<A>(ir.value)
         if (cleanupExit !== undefined) {
-          exit ??= cleanupExit
+          if (exit?.type !== 'failure') exit = cleanupExit
           ir = safeInterruptReturn()
           continue
         }

@@ -1,10 +1,11 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
+import { assertPromise } from '../Async.js'
 import { abort } from '../Abort.js'
 import { Effect } from '../Effect.js'
 import { fail, Fail } from '../Fail.js'
-import { finalizing, fx, ok, run } from '../Fx.js'
+import { finalizing, fx, ok, run, runTask } from '../Fx.js'
 import { handle } from '../Handler.js'
 import { interruptFrom } from '../InterruptFrom.js'
 import { returnFrom } from '../ReturnFrom.js'
@@ -181,5 +182,24 @@ describe('returnExit', () => {
     }
 
     assert.deepEqual(events, ['cleanup'])
+  })
+
+  it('surfaces cleanup failures when interrupted on a forwarded effect', async () => {
+    const cleanupFailure = new Error('cleanup failed')
+    const task = fx(function* () {
+      yield* assertPromise(() => new Promise(() => { }))
+    }).pipe(
+      finalizing(fail(cleanupFailure)),
+      returnExit,
+      runTask
+    )
+
+    await assert.rejects(
+      () => task.interrupt(),
+      (e: unknown) =>
+        e instanceof Error
+        && e.message === 'Unhandled failure in forked task'
+        && e.cause === cleanupFailure
+    )
   })
 })

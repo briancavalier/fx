@@ -1,5 +1,5 @@
 import { Abort } from '../Abort.js'
-import { isEffect, type AnyEffect } from '../Effect.js'
+import { isEffect } from '../Effect.js'
 import { Fail } from '../Fail.js'
 import { Fx, fx } from '../Fx.js'
 import { InterruptFrom } from '../InterruptFrom.js'
@@ -62,7 +62,7 @@ class ReturnExit<E, A> implements Fx<E, ResumableExit<A>>, Pipeable {
 
   *[Symbol.iterator](): Iterator<E, ResumableExit<A>> {
     const i = this.fx[Symbol.iterator]()
-    let exit: ResumableExit<A> | undefined
+    let exit: ExitOf<E, A> | undefined
 
     const safeNext = (a: unknown): IteratorResult<E, A> | undefined => {
       try {
@@ -97,7 +97,7 @@ class ReturnExit<E, A> implements Fx<E, ResumableExit<A>>, Pipeable {
           throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
         }
 
-        const cleanupExit = toExit<A>(ir.value)
+        const cleanupExit = toExit<E, A>(ir.value)
         if (cleanupExit !== undefined) {
           if (exit?.type !== 'failure') exit = cleanupExit
           ir = safeInterruptReturn()
@@ -116,7 +116,7 @@ class ReturnExit<E, A> implements Fx<E, ResumableExit<A>>, Pipeable {
           throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
         }
 
-        const nextExit = toExit<A>(ir.value)
+        const nextExit = toExit<E, A>(ir.value)
         if (nextExit !== undefined) {
           exit = nextExit
           yield* close()
@@ -133,15 +133,18 @@ class ReturnExit<E, A> implements Fx<E, ResumableExit<A>>, Pipeable {
     } finally {
       if (!completed) {
         yield* close()
+        // The captured exit effect was yielded by this iterator or its cleanup,
+        // but TypeScript cannot prove that through ResumableExitEffect.
+        if (exit !== undefined) yield* (resumeExit(exit) as Fx<E, never>)
       }
     }
   }
 }
 
-const toExit = <A>(effect: AnyEffect): ResumableExit<A> | undefined => {
-  if (Fail.is(effect)) return { type: 'failure', failure: effect }
-  if (ReturnFrom.is(effect)) return { type: 'returnFrom', effect }
-  if (Abort.is(effect)) return { type: 'abort', effect }
-  if (InterruptFrom.is(effect)) return { type: 'interrupted', effect }
+const toExit = <E, A>(effect: E): ExitOf<E, A> | undefined => {
+  if (Fail.is(effect)) return { type: 'failure', failure: effect } as ExitOf<E, A>
+  if (ReturnFrom.is(effect)) return { type: 'returnFrom', effect } as ExitOf<E, A>
+  if (Abort.is(effect)) return { type: 'abort', effect } as ExitOf<E, A>
+  if (InterruptFrom.is(effect)) return { type: 'interrupted', effect } as ExitOf<E, A>
   return undefined
 }

@@ -1,8 +1,8 @@
 import { ScopedEffect } from './Effect.js'
-import { andFinally } from './Finalization.js'
-import { Fx, flatMap, fx, ok, unit } from './Fx.js'
+import { Fx, flatMap, fx, ok } from './Fx.js'
 import { handleScoped, type HandleScoped } from './Handler.js'
-import { AnyScope, scope as createScope, withScope } from './Scope.js'
+import { AnyScope } from './Scope.js'
+import { returnExit, resumeExit } from './internal/returnExit.js'
 
 declare const StatefulTypeId: unique symbol
 
@@ -78,28 +78,22 @@ export const withStateInit = <const Scope extends AnyScope & Stateful<unknown>, 
 /**
  * Run matching state operations transactionally for the named scope.
  *
- * The current durable state is copied into a private scope before the protected
- * region runs. Matching state operations update the local copy, and the private
- * scope commits it back to the durable state only if the region succeeds.
+ * The current durable state is copied before the protected region runs.
+ * Matching state operations update the local copy, and the transaction commits
+ * it back to the durable state only if the region succeeds or returns from a
+ * control scope.
  */
 export const transactionalState = <const Scope extends AnyScope & Stateful<unknown>>(
   scope: Scope
 ) => <const E, const A>(
   body: Fx<E, A>
 ): Fx<ExcludeState<E, Scope> | StateEffects<Scope>, A> =>
-    // The private scope only owns this transaction's commit finalizer.
-    // Its scope effects cannot escape, but TypeScript cannot reduce that
-    // through the generic body effect union.
     fx(function* () {
       let state = yield* getState(scope)
       let dirty = false
 
-      yield* andFinally(exit =>
-        dirty && (exit.type === 'success' || exit.type === 'returnFrom')
-          ? modifyState(scope, () => [state, undefined])
-          : unit)
-
-      return yield* body.pipe(
+      const exit = yield* body.pipe(
+        returnExit,
         handleScoped(GetState<Scope>, scope, () => ok(state)),
         handleScoped(ModifyState<Scope, unknown>, scope, effect => {
           const [next, result] = effect.arg(state)
@@ -108,4 +102,10 @@ export const transactionalState = <const Scope extends AnyScope & Stateful<unkno
           return ok(result)
         })
       )
-    }).pipe(withScope(createScope(Symbol('fx/State/transaction')))) as Fx<ExcludeState<E, Scope> | StateEffects<Scope>, A>
+
+      if (dirty && (exit.type === 'success' || exit.type === 'returnFrom')) {
+        yield* modifyState(scope, () => [state, undefined])
+      }
+
+      return yield* resumeExit(exit)
+    }) as Fx<ExcludeState<E, Scope> | StateEffects<Scope>, A>

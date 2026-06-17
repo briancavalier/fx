@@ -217,7 +217,6 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
       wrap: fx => new ScopeBoundary(fx, scope, controller)
     }
     let released = false
-    let releasedFailure = false
     const release = function* (exit: Exit<Scope>): Generator<unknown, ScopeRelease<Scope>> {
       if (released) return { exit, failures: [] }
       released = true
@@ -233,21 +232,12 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
       const { exit: finalExit, failures } = yield* release(exit)
       const allFailures = [...extraFailures, ...failures]
       if (finalExit.type === 'failure') {
-        releasedFailure = true
         const cleanupFailures = allFailures.flatMap(cleanupFailuresOf)
-        const recovered = cleanupFailures.length > 0
-          ? (yield* withMaybeActiveScope(failCleanup([finalExit.failure.arg, ...cleanupFailures]))) as A
-          : (yield finalExit.failure) as A
-        yield* drainIteratorReturn(i, step)
-        return recovered
+        if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup([finalExit.failure.arg, ...cleanupFailures]))) as A
+        return (yield finalExit.failure) as A
       }
       const cleanupFailures = allFailures.flatMap(cleanupFailuresOf)
-      if (cleanupFailures.length > 0) {
-        releasedFailure = true
-        const recovered = (yield* withMaybeActiveScope(failCleanup(cleanupFailures))) as A
-        yield* drainIteratorReturn(i, step)
-        return recovered
-      }
+      if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup(cleanupFailures))) as A
       if (finalExit.type === 'returnFrom') return finalExit.value as A
       if (finalExit.type === 'abort') {
         // Abort exits are only produced by Abort effects, whose public constructors require control scopes.
@@ -261,7 +251,7 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
       }
       return finalExit.value as A
     }
-    const step = function* (ir: IteratorResult<unknown, A>, discardFailures = false): Generator<unknown, A, unknown> {
+    const step = function* (ir: IteratorResult<unknown, A>): Generator<unknown, A, unknown> {
       while (!ir.done) {
         if (isEffect(ir.value)) {
           const effect = ir.value
@@ -302,10 +292,6 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
             }
             return yield* finishRoot(exit, interrupt)
           } else if (Fail.is(effect)) {
-            if (discardFailures) {
-              ir = i.next(undefined)
-              continue
-            }
             const exit = { type: 'failure', failure: effect } satisfies Exit
             if (!root) {
               return (yield effect) as A
@@ -357,11 +343,6 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
       completed = true
       return value
     } finally {
-      if (!completed && releasedFailure && !isInterpretingReturn()) {
-        yield* drainIteratorReturn<unknown, A, A>(i, function* (ir) {
-          return yield* step(ir, true)
-        })
-      }
       const cleanupFailures = root
         ? yield* collectInterruptedCleanupFailures(scope, release, completed, isInterpretingReturn(), i, step)
         : yield* collectInterruptedChildCleanupFailures(completed, isInterpretingReturn(), i, step)

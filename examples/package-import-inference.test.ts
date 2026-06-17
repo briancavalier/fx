@@ -78,6 +78,12 @@ describe('package import inference', () => {
     const noCheckpointedState: HasExport<typeof stateApi, `with${'Checkpointed'}State`> = false
     const noCheckpointedStateInit: HasExport<typeof stateApi, `with${'Checkpointed'}StateInit`> = false
     const noTxState: HasExport<typeof stateApi, `tx${'State'}`> = false
+    const noReturnExitMain: HasExport<typeof fxApi, `return${'Exit'}`> = false
+    const noResumeExitMain: HasExport<typeof fxApi, `resume${'Exit'}`> = false
+    const noReturnExitState: HasExport<typeof stateApi, `return${'Exit'}`> = false
+    const noResumeExitState: HasExport<typeof stateApi, `resume${'Exit'}`> = false
+    const noReturnExitScope: HasExport<typeof scopeApi, `return${'Exit'}`> = false
+    const noResumeExitScope: HasExport<typeof scopeApi, `resume${'Exit'}`> = false
     const noTimeoutInScope: HasExport<typeof timeoutApi, `timeout${'In'}Scope`> = false
     assert.equal(noConcurrentEffect, false)
     assert.equal(noConcurrentConstructor, false)
@@ -95,6 +101,12 @@ describe('package import inference', () => {
     assert.equal(noCheckpointedState, false)
     assert.equal(noCheckpointedStateInit, false)
     assert.equal(noTxState, false)
+    assert.equal(noReturnExitMain, false)
+    assert.equal(noResumeExitMain, false)
+    assert.equal(noReturnExitState, false)
+    assert.equal(noResumeExitState, false)
+    assert.equal(noReturnExitScope, false)
+    assert.equal(noResumeExitScope, false)
     assert.equal(noTimeoutInScope, false)
   })
 

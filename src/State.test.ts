@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 
 import { fork, forkIn, withUnboundedConcurrency } from './Concurrent.js'
 import { Fail, catchAll, catchIf, fail, returnFail, runCatch } from './Fail.js'
-import { andFinallyIn } from './Finalization.js'
+import { andFinally, andFinallyIn } from './Finalization.js'
 import { finalizing, fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { scope, withScope, type Control } from './Scope.js'
 import {
@@ -322,7 +322,7 @@ describe('State', () => {
       if (recovered === undefined) assert.fail('expected recovery')
       const [failure, recoveredFrom] = recovered
       assert.equal(failure, bodyFailure)
-      assert.deepEqual(events, ['recovery', 'failing cleanup', 'state cleanup'])
+      assert.deepEqual(events, ['failing cleanup', 'state cleanup', 'recovery'])
       assert.equal(recoveredFrom, 0)
       assert.equal(finalState, 0)
       assert.equal(cleanupFailure.message, 'cleanup failed')
@@ -468,6 +468,30 @@ describe('State', () => {
       }).pipe(withState(CounterState, 0), run)
 
       assert.equal(program, 11)
+    })
+
+    it('does not become the nearest current scope', () => {
+      const events: string[] = []
+
+      const result = fx(function* () {
+        yield* fx(function* () {
+          yield* andFinally(fx(function* () {
+            events.push('transaction finalizer')
+          }))
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+        }).pipe(transactionalState(CounterState))
+
+        events.push('after transaction')
+        return yield* getState(CounterState)
+      }).pipe(
+        withScope(ForkScope),
+        withState(CounterState, 0),
+        returnFail,
+        run
+      )
+
+      assert.equal(result, 1)
+      assert.deepEqual(events, ['after transaction', 'transaction finalizer'])
     })
 
     it('leaves state effects visible until withState handles durable state', () => {

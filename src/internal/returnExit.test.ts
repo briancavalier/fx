@@ -8,9 +8,10 @@ import { fail, Fail } from '../Fail.js'
 import { finalizing, fx, ok, run, runTask } from '../Fx.js'
 import { handle } from '../Handler.js'
 import { interruptFrom } from '../InterruptFrom.js'
-import { returnFrom } from '../ReturnFrom.js'
+import { ReturnFrom, returnFrom } from '../ReturnFrom.js'
 import { scope, type Control } from '../Scope.js'
 import { getState, modifyState, withState, type Stateful } from '../State.js'
+import { drainExitRegionReturn } from './exitRegion.js'
 import { returnExit, resumeExit } from './returnExit.js'
 
 describe('returnExit', () => {
@@ -156,6 +157,31 @@ describe('returnExit', () => {
     assert.equal(exit.cleanup.effect.arg, cleanupFailure)
     assert.deepEqual(events, ['failing cleanup', 'state cleanup'])
     assert.equal(state, 1)
+  })
+
+  it('preserves a recorded cleanup exit when cleanup interpretation completes', () => {
+    const cleanupFailure = new Fail(new Error('cleanup failed'))
+    const cleanupReturn = returnFrom(ControlScope, 'cleanup')
+    let interrupted = false
+    const iterator: Iterator<Fail<Error> | typeof cleanupReturn, void, unknown> = {
+      next: () => ({ done: true, value: undefined }),
+      return: () => ({ done: false, value: cleanupFailure }),
+      throw: () => {
+        interrupted = true
+        return { done: false, value: cleanupReturn }
+      }
+    }
+
+    const result = drainExitRegionReturn(iterator, {
+      classify: effect => Fail.is(effect) ? effect : undefined,
+      step: function* (effect) {
+        assert.equal(ReturnFrom.is(effect), true)
+        return { type: 'done', value: undefined }
+      }
+    }).next()
+
+    assert.deepEqual(result, { done: true, value: cleanupFailure })
+    assert.equal(interrupted, true)
   })
 
   it('closes the wrapped iterator when interrupted on a forwarded effect', () => {

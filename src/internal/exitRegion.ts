@@ -83,7 +83,7 @@ export function* drainExitRegionReturn<Y, A, Exit>(
     }
 
     const result = yield* options.step(ir.value)
-    if (result.type === 'done') return { type: 'success', value: result.value }
+    if (result.type === 'done') return exit ?? { type: 'success', value: result.value }
     ir = safeNext(result.value)
   }
 

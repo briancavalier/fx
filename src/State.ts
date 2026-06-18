@@ -2,7 +2,7 @@ import { ScopedEffect } from './Effect.js'
 import { Fx, flatMap, fx, ok } from './Fx.js'
 import { handleScoped, type HandleScoped } from './Handler.js'
 import { AnyScope } from './Scope.js'
-import { returnExit, resumeExit } from './internal/returnExit.js'
+import { effectiveExit, returnExit, resumeExit } from './internal/returnExit.js'
 
 declare const StatefulTypeId: unique symbol
 
@@ -103,7 +103,8 @@ export const transactionalState = <const Scope extends AnyScope & Stateful<unkno
         })
       )
 
-      if (dirty && (exit.type === 'success' || exit.type === 'returnFrom')) {
+      const effective = effectiveExit(exit)
+      if (dirty && (effective.type === 'success' || effective.type === 'returnFrom')) {
         yield* modifyState(scope, () => [state, undefined])
       }
 

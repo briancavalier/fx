@@ -8,19 +8,19 @@ export type ExitRegionSuccess<A> = {
   readonly value: A
 }
 
-export type ExitRegionWithCleanupExit<Exit> = {
+export type CapturedCleanupExit<Exit> = {
   readonly type: 'withCleanupExit'
   readonly primary: Exit
-  readonly cleanup: ExitRegionExit<Exit>
+  readonly cleanup: CapturedExit<Exit>
 }
 
-export type ExitRegionExit<Exit> =
+export type CapturedExit<Exit> =
   | Exit
-  | ExitRegionWithCleanupExit<Exit>
+  | CapturedCleanupExit<Exit>
 
 export type ExitRegionResult<A, Exit> =
   | ExitRegionSuccess<A>
-  | ExitRegionExit<Exit>
+  | CapturedExit<Exit>
 
 export type ExitRegionStep<A> =
   | { readonly type: 'continue', readonly value: unknown }
@@ -29,20 +29,20 @@ export type ExitRegionStep<A> =
 export interface ExitRegionOptions<E, A, Exit> {
   classify(effect: E): Exit | undefined
   step(effect: E): Generator<E, ExitRegionStep<A>, unknown>
-  resume(exit: ExitRegionExit<Exit>): Fx<E, never>
+  resume(exit: CapturedExit<Exit>): Fx<E, never>
 }
 
 export const exitRegion = <const E, const A, const Exit>(
   fx: Fx<E, A>,
   options: ExitRegionOptions<E, A, Exit>
-): Fx<E, ExitRegionSuccess<A> | ExitRegionExit<Exit>> =>
+): Fx<E, ExitRegionSuccess<A> | CapturedExit<Exit>> =>
   new ExitRegion(fx, options)
 
 export function* drainExitRegionReturn<Y, A, Exit>(
   iterator: Iterator<Y, A, unknown>,
   options: Pick<ExitRegionOptions<Y, A, Exit>, 'classify' | 'step'>
 ): Generator<Y, ExitRegionResult<A, Exit> | undefined, unknown> {
-  let exit: ExitRegionExit<Exit> | undefined
+  let exit: CapturedExit<Exit> | undefined
 
   const safeNext = (a: unknown): IteratorResult<Y, A> | undefined => {
     try {
@@ -90,7 +90,7 @@ export function* drainExitRegionReturn<Y, A, Exit>(
   return exit ?? (ir === undefined ? undefined : { type: 'success', value: ir.value })
 }
 
-class ExitRegion<E, A, Exit> implements Fx<E, ExitRegionSuccess<A> | ExitRegionExit<Exit>>, Pipeable {
+class ExitRegion<E, A, Exit> implements Fx<E, ExitRegionSuccess<A> | CapturedExit<Exit>>, Pipeable {
   public readonly pipe = pipeThis as Pipeable['pipe']
 
   constructor(
@@ -98,10 +98,10 @@ class ExitRegion<E, A, Exit> implements Fx<E, ExitRegionSuccess<A> | ExitRegionE
     public readonly options: ExitRegionOptions<E, A, Exit>
   ) { }
 
-  *[Symbol.iterator](): Iterator<E, ExitRegionSuccess<A> | ExitRegionExit<Exit>> {
+  *[Symbol.iterator](): Iterator<E, ExitRegionSuccess<A> | CapturedExit<Exit>> {
     const i = this.fx[Symbol.iterator]()
     const options = this.options
-    let exit: ExitRegionExit<Exit> | undefined
+    let exit: CapturedExit<Exit> | undefined
 
     const close = function* (): Generator<E, void, unknown> {
       const closeExit = yield* drainExitRegionReturn<E, A, Exit>(i, options)
@@ -144,11 +144,11 @@ class ExitRegion<E, A, Exit> implements Fx<E, ExitRegionSuccess<A> | ExitRegionE
 }
 
 const mergeCleanupExit = <Exit>(
-  current: ExitRegionExit<Exit> | undefined,
-  next: ExitRegionExit<Exit>
-): ExitRegionExit<Exit> => {
+  current: CapturedExit<Exit> | undefined,
+  next: CapturedExit<Exit>
+): CapturedExit<Exit> => {
   if (current === undefined) return next
-  if (isExitRegionWithCleanupExit(current)) return {
+  if (isCapturedCleanupExit(current)) return {
     type: 'withCleanupExit',
     primary: current.primary,
     cleanup: mergeCleanupExit(current.cleanup, next)
@@ -160,9 +160,9 @@ const mergeCleanupExit = <Exit>(
   }
 }
 
-const isExitRegionWithCleanupExit = <Exit>(
-  exit: ExitRegionExit<Exit>
-): exit is ExitRegionWithCleanupExit<Exit> =>
+const isCapturedCleanupExit = <Exit>(
+  exit: CapturedExit<Exit>
+): exit is CapturedCleanupExit<Exit> =>
   typeof exit === 'object'
   && exit !== null
   && 'type' in exit

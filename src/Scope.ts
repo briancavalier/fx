@@ -10,7 +10,7 @@ import { InterruptFrom } from './InterruptFrom.js'
 import { ReturnFrom } from './ReturnFrom.js'
 import { Fork } from './internal/concurrent/effects.js'
 import { cooperativeAssertPromise } from './internal/concurrent/cooperativeAsync.js'
-import { drainExitRegionReturn, isExitRegionSuccess, type ExitRegionExit, type ExitRegionStep } from './internal/exitRegion.js'
+import { drainExitRegionReturn, isExitRegionSuccess, type CapturedExit, type ExitRegionStep } from './internal/exitRegion.js'
 import { isInterpretingReturn, isInterruptedReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { interruptionReason, RuntimeScopeExit, withActiveScope, withScopeExitSource, withoutScopeExitSources, type ActiveScopeDiagnostic } from './internal/runtimeContext.js'
@@ -576,7 +576,7 @@ const drainScopeInterruptedReturn = function* <A>(
 }
 
 const cleanupFailuresOfExitRegion = <A>(
-  result: ExitRegionExit<Fail<unknown>> | { readonly type: 'success', readonly value: A } | undefined
+  result: CapturedExit<Fail<unknown>> | { readonly type: 'success', readonly value: A } | undefined
 ): readonly unknown[] =>
     result === undefined
       ? []

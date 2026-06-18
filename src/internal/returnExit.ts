@@ -4,7 +4,7 @@ import { Fx, fx } from '../Fx.js'
 import { InterruptFrom } from '../InterruptFrom.js'
 import { ReturnFrom } from '../ReturnFrom.js'
 import type { AnyControlScope, AnyScope } from '../Scope.js'
-import { exitRegion, type ExitRegionWithCleanupExit } from './exitRegion.js'
+import { exitRegion, type CapturedCleanupExit } from './exitRegion.js'
 
 type ExitEffect =
   | Fail<any>
@@ -24,7 +24,7 @@ export type NonSuccessExit<E extends ExitEffect = ExitEffect> =
   | InterruptedExit<Extract<E, InterruptFrom<AnyScope, any>>>
 
 export type WithCleanupExit<E extends ExitEffect = ExitEffect> =
-  ExitRegionWithCleanupExit<NonSuccessExit<E>>
+  CapturedCleanupExit<NonSuccessExit<E>>
 
 export type FailureExit<E extends Fail<any>> =
   E extends never ? never : { readonly type: 'failure', readonly effect: E }

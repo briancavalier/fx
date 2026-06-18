@@ -1,12 +1,10 @@
 import { Abort } from '../Abort.js'
-import { isEffect } from '../Effect.js'
 import { Fail } from '../Fail.js'
 import { Fx, fx } from '../Fx.js'
 import { InterruptFrom } from '../InterruptFrom.js'
 import { ReturnFrom } from '../ReturnFrom.js'
 import type { AnyControlScope, AnyScope } from '../Scope.js'
-import { InterruptedReturn, isInterruptedReturn } from './iteratorClose.js'
-import { Pipeable, pipeThis } from './pipe.js'
+import { exitRegion } from './exitRegion.js'
 
 type ExitEffect =
   | Fail<any>
@@ -43,7 +41,12 @@ type ReturnExitEffects<E> = Exclude<E, ExitEffect>
 export const returnExit = <const E, const A>(
   f: Fx<E, A>
 ): Fx<ReturnExitEffects<E>, ExitOf<E, A>> =>
-  new ReturnExit(f) as Fx<ReturnExitEffects<E>, ExitOf<E, A>>
+  exitRegion(f, {
+    classify: toExit<E, A>,
+    resume: exit => resumeExit(exit) as Fx<E, never>,
+    keepExit: (current, next) => current?.type === 'failure' ? current : next,
+    unavailableExitMessage: 'Exit unavailable after closing interrupted region'
+  }) as Fx<ReturnExitEffects<E>, ExitOf<E, A>>
 
 export const resumeExit = <const Exit extends ResumableExit<any, any>>(
   exit: Exit
@@ -52,92 +55,6 @@ export const resumeExit = <const Exit extends ResumableExit<any, any>>(
     if (exit.type === 'success') return exit.value
     return (yield exit.effect) as never
   }) as Fx<ResumableExitEffect<Exit>, Exit extends { readonly type: 'success', readonly value: infer A } ? A : never>
-
-class ReturnExit<E, A> implements Fx<E, ResumableExit<A>>, Pipeable {
-  public readonly pipe = pipeThis as Pipeable['pipe']
-
-  constructor(public readonly fx: Fx<E, A>) { }
-
-  *[Symbol.iterator](): Iterator<E, ResumableExit<A>> {
-    const i = this.fx[Symbol.iterator]()
-    let exit: ExitOf<E, A> | undefined
-
-    const safeNext = (a: unknown): IteratorResult<E, A> | undefined => {
-      try {
-        return i.next(a)
-      } catch (e) {
-        if (isInterruptedReturn(e)) return undefined
-        throw e
-      }
-    }
-    const safeReturn = (): IteratorResult<E, A> | undefined => {
-      try {
-        return i.return?.()
-      } catch (e) {
-        if (isInterruptedReturn(e)) return undefined
-        throw e
-      }
-    }
-    const safeInterruptReturn = (): IteratorResult<E, A> | undefined => {
-      try {
-        return i.throw?.(new InterruptedReturn()) ?? i.return?.()
-      } catch (e) {
-        if (isInterruptedReturn(e)) return undefined
-        throw e
-      }
-    }
-
-    const close = function* (): Generator<E, void, unknown> {
-      let ir = safeReturn()
-      while (ir !== undefined && !ir.done) {
-
-        if (!isEffect(ir.value)) {
-          throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
-        }
-
-        const cleanupExit = toExit<E, A>(ir.value)
-        if (cleanupExit !== undefined) {
-          if (exit?.type !== 'failure') exit = cleanupExit
-          ir = safeInterruptReturn()
-          continue
-        }
-
-        ir = safeNext(yield ir.value as E)
-      }
-    }
-
-    let completed = false
-    try {
-      let ir = i.next()
-      while (!ir.done) {
-        if (!isEffect(ir.value)) {
-          throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
-        }
-
-        const nextExit = toExit<E, A>(ir.value)
-        if (nextExit !== undefined) {
-          exit = nextExit
-          yield* close()
-          if (exit === undefined) throw new Error('Exit unavailable after closing interrupted region')
-          completed = true
-          return exit
-        }
-
-        ir = i.next(yield ir.value as E)
-      }
-
-      completed = true
-      return { type: 'success', value: ir.value }
-    } finally {
-      if (!completed) {
-        yield* close()
-        // The captured exit effect was yielded by this iterator or its cleanup,
-        // but TypeScript cannot prove that through ResumableExitEffect.
-        if (exit !== undefined) yield* (resumeExit(exit) as Fx<E, never>)
-      }
-    }
-  }
-}
 
 const toExit = <E, A>(effect: E): ExitOf<E, A> | undefined => {
   if (Fail.is(effect)) return { type: 'failure', effect } as ExitOf<E, A>

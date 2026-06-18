@@ -69,6 +69,9 @@ export const effectiveExit = <const A, const E extends ExitEffect>(
 export function resumeExit<const A>(
   exit: { readonly type: 'success', readonly value: A }
 ): Fx<never, A>
+export function resumeExit<const E extends ExitEffect>(
+  exit: NonSuccessExit<E> | WithCleanupExit<E>
+): Fx<E, never>
 export function resumeExit<const A, const E extends ExitEffect>(
   exit: ResumableExit<A, E>
 ): Fx<E, A>

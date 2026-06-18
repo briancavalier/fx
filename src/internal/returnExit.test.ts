@@ -5,7 +5,7 @@ import { assertPromise } from '../Async.js'
 import { abort } from '../Abort.js'
 import { Effect } from '../Effect.js'
 import { fail, Fail } from '../Fail.js'
-import { finalizing, fx, ok, run, runTask } from '../Fx.js'
+import { finalizing, fx, ok, run, runTask, type Fx } from '../Fx.js'
 import { handle } from '../Handler.js'
 import { interruptFrom } from '../InterruptFrom.js'
 import { ReturnFrom, returnFrom } from '../ReturnFrom.js'
@@ -35,6 +35,9 @@ describe('returnExit', () => {
     const next = resumeExit(exit)[Symbol.iterator]().next()
     assert.equal(next.done, false)
     assert.equal(next.value, failure)
+
+    const resumed: Fx<typeof failure, never> = resumeExit(exit)
+    void resumed
   })
 
   it('preserves and resumes the original ReturnFrom effect', () => {
@@ -150,6 +153,9 @@ describe('returnExit', () => {
     assert.equal(next.done, false)
     assert.ok(Fail.is(next.value))
     assert.equal(next.value.arg, cleanupFailure)
+
+    const resumed: Fx<Fail<Error> | ReturnFrom<typeof ControlScope, string>, never> = resumeExit(exit)
+    void resumed
   })
 
   it('preserves body failure and keeps closing after cleanup failure', () => {

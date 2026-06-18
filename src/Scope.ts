@@ -10,7 +10,7 @@ import { InterruptFrom } from './InterruptFrom.js'
 import { ReturnFrom } from './ReturnFrom.js'
 import { Fork } from './internal/concurrent/effects.js'
 import { cooperativeAssertPromise } from './internal/concurrent/cooperativeAsync.js'
-import { drainExitRegionReturn, isExitRegionSuccess, type ExitRegionExit, type ExitRegionStep, type ExitRegionWithCleanupExit } from './internal/exitRegion.js'
+import { drainExitRegionReturn, isExitRegionSuccess, type ExitRegionExit, type ExitRegionStep } from './internal/exitRegion.js'
 import { isInterpretingReturn, isInterruptedReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { interruptionReason, RuntimeScopeExit, withActiveScope, withScopeExitSource, withoutScopeExitSources, type ActiveScopeDiagnostic } from './internal/runtimeContext.js'
@@ -321,7 +321,9 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
           const cleanup = exit.type === 'failure' ? undefined : yield* returnFail(fx(function* () {
             return yield* drainScopeInterruptedReturn(i, step)
           }))
-          const failures = cleanup !== undefined && Fail.is(cleanup) ? cleanupFailuresOf(cleanup.arg) : []
+          const failures = cleanup === undefined
+            ? []
+            : Fail.is(cleanup) ? cleanupFailuresOf(cleanup.arg) : cleanup
           return doneWith(yield* finishRoot(exit, undefined, failures))
         }
         const { failures } = yield* release(interruptedExit(scope, result.reason))
@@ -529,6 +531,7 @@ const collectInterruptedCleanupFailures = function* <A, Scope extends AnyScope>(
         return yield* drainScopeInterruptedReturn(iterator, step)
       }))
       if (Fail.is(result)) failures.push(result.arg)
+      else failures.push(...result)
     })
   }
 
@@ -549,6 +552,7 @@ const collectInterruptedChildCleanupFailures = function* <A>(
         return yield* drainScopeInterruptedReturn(iterator, step)
       }))
       if (Fail.is(result)) failures.push(result.arg)
+      else failures.push(...result)
     })
   }
 
@@ -563,30 +567,22 @@ const interruptedExit = <Scope extends AnyScope>(scope: Scope, reason: unknown):
 const drainScopeInterruptedReturn = function* <A>(
   iterator: Iterator<unknown, A, unknown>,
   step: (effect: unknown) => Generator<unknown, ExitRegionStep<A>, unknown>
-): Generator<unknown, A | Fail<unknown> | undefined, unknown> {
+): Generator<unknown, readonly unknown[], unknown> {
   const result = yield* drainExitRegionReturn(iterator, {
     classify: effect => Fail.is(effect) ? effect : undefined,
     step
   })
-  return cleanupFailureOf(result)
+  return cleanupFailuresOfExitRegion(result)
 }
 
-const cleanupFailureOf = <A>(
+const cleanupFailuresOfExitRegion = <A>(
   result: ExitRegionExit<Fail<unknown>> | { readonly type: 'success', readonly value: A } | undefined
-): A | Fail<unknown> | undefined =>
+): readonly unknown[] =>
     result === undefined
-      ? undefined
-      : isExitRegionSuccess(result) ? result.value
-      : Fail.is(result) ? result
-        : isExitRegionWithCleanupExit(result) ? result.primary : result
-
-const isExitRegionWithCleanupExit = (
-  result: unknown
-): result is ExitRegionWithCleanupExit<Fail<unknown>> =>
-  typeof result === 'object'
-  && result !== null
-  && 'type' in result
-  && result.type === 'withCleanupExit'
+      ? []
+      : isExitRegionSuccess(result) ? []
+      : Fail.is(result) ? [result.arg]
+        : [...cleanupFailuresOfExitRegion(result.primary), ...cleanupFailuresOfExitRegion(result.cleanup)]
 
 const propagateRuntimeScopeExit = function* <A>(result: RuntimeScopeExit): Generator<unknown, A> {
   const exit = result.exit as Exit<AnyScope>

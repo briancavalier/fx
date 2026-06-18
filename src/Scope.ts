@@ -10,7 +10,7 @@ import { InterruptFrom } from './InterruptFrom.js'
 import { ReturnFrom } from './ReturnFrom.js'
 import { Fork } from './internal/concurrent/effects.js'
 import { cooperativeAssertPromise } from './internal/concurrent/cooperativeAsync.js'
-import { drainExitRegionReturn } from './internal/exitRegion.js'
+import { drainExitRegionReturn, type ExitRegionExit, type ExitRegionWithCleanupExit } from './internal/exitRegion.js'
 import { isInterpretingReturn, isInterruptedReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { interruptionReason, RuntimeScopeExit, withActiveScope, withScopeExitSource, withoutScopeExitSources, type ActiveScopeDiagnostic } from './internal/runtimeContext.js'
@@ -559,11 +559,26 @@ const drainScopeInterruptedReturn = function* <A>(
   iterator: Iterator<unknown, A, unknown>,
   step: (ir: IteratorResult<unknown, A>) => Generator<unknown, A, unknown>
 ): Generator<unknown, A | Fail<unknown> | undefined, unknown> {
-  return yield* drainExitRegionReturn(iterator, step, {
-    classify: effect => Fail.is(effect) ? effect : undefined,
-    keepExit: (current, next) => current ?? next
+  const result = yield* drainExitRegionReturn(iterator, step, {
+    classify: effect => Fail.is(effect) ? effect : undefined
   })
+  return cleanupFailureOf(result)
 }
+
+const cleanupFailureOf = <A>(
+  result: A | ExitRegionExit<Fail<unknown>> | undefined
+): A | Fail<unknown> | undefined =>
+    Fail.is(result)
+      ? result
+      : isExitRegionWithCleanupExit(result) ? result.primary : result
+
+const isExitRegionWithCleanupExit = (
+  result: unknown
+): result is ExitRegionWithCleanupExit<Fail<unknown>> =>
+  typeof result === 'object'
+  && result !== null
+  && 'type' in result
+  && result.type === 'withCleanupExit'
 
 const propagateRuntimeScopeExit = function* <A>(result: RuntimeScopeExit): Generator<unknown, A> {
   const exit = result.exit as Exit<AnyScope>

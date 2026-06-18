@@ -112,7 +112,7 @@ describe('returnExit', () => {
     assert.equal(exit.effect.arg, cleanupFailure)
   })
 
-  it('returns cleanup failure after body returnFrom', () => {
+  it('returns body returnFrom with cleanup failure after body returnFrom', () => {
     const cleanupFailure = new Error('cleanup failed')
     const exit = returnFrom(ControlScope, 'returned').pipe(
       finalizing(fail(cleanupFailure)),
@@ -120,8 +120,11 @@ describe('returnExit', () => {
       run
     )
 
-    assert.equal(exit.type, 'failure')
-    assert.equal(exit.effect.arg, cleanupFailure)
+    assert.equal(exit.type, 'withCleanupExit')
+    assert.equal(exit.primary.type, 'returnFrom')
+    assert.equal(exit.primary.effect.arg, 'returned')
+    assert.equal(exit.cleanup.type, 'failure')
+    assert.equal(exit.cleanup.effect.arg, cleanupFailure)
   })
 
   it('preserves body failure and keeps closing after cleanup failure', () => {
@@ -146,8 +149,11 @@ describe('returnExit', () => {
       return [exit, yield* getState(StateScope)] as const
     }).pipe(withState(StateScope, 0), run)
 
-    assert.equal(exit.type, 'failure')
-    assert.equal(exit.effect.arg, bodyFailure)
+    assert.equal(exit.type, 'withCleanupExit')
+    assert.equal(exit.primary.type, 'failure')
+    assert.equal(exit.primary.effect.arg, bodyFailure)
+    assert.equal(exit.cleanup.type, 'failure')
+    assert.equal(exit.cleanup.effect.arg, cleanupFailure)
     assert.deepEqual(events, ['failing cleanup', 'state cleanup'])
     assert.equal(state, 1)
   })

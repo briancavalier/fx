@@ -163,15 +163,9 @@ const mergeCleanupExit = <Exit>(
 const isCapturedCleanupExit = <Exit>(
   exit: CapturedExit<Exit>
 ): exit is CapturedCleanupExit<Exit> =>
-  typeof exit === 'object'
-  && exit !== null
-  && 'type' in exit
-  && exit.type === 'withCleanupExit'
+  (exit as { readonly type?: unknown } | null | undefined)?.type === 'withCleanupExit'
 
 export const isExitRegionSuccess = <A, Exit>(
   result: ExitRegionResult<A, Exit>
 ): result is ExitRegionSuccess<A> =>
-  typeof result === 'object'
-  && result !== null
-  && 'type' in result
-  && result.type === 'success'
+  (result as { readonly type?: unknown } | null | undefined)?.type === 'success'

@@ -140,8 +140,11 @@ describe('returnExit', () => {
     assert.equal(exit.type, 'withCleanupExit')
     assert.equal(exit.primary.type, 'returnFrom')
     assert.equal(exit.primary.effect.arg, 'body')
-    assert.equal(exit.cleanup.type, 'failure')
-    assert.equal(exit.cleanup.effect.arg, cleanupFailure)
+    assert.equal(exit.cleanup.type, 'withCleanupExit')
+    assert.equal(exit.cleanup.primary.type, 'returnFrom')
+    assert.equal(exit.cleanup.primary.effect.arg, 'cleanup')
+    assert.equal(exit.cleanup.cleanup.type, 'failure')
+    assert.equal(exit.cleanup.cleanup.effect.arg, cleanupFailure)
 
     const next = resumeExit(exit)[Symbol.iterator]().next()
     assert.equal(next.done, false)

@@ -2821,10 +2821,12 @@ describe('Task interruption finalization', () => {
     const TestScope = scope('test/Fork/InterruptedMultipleInnerCleanupFailures')
     const firstFailure = new Error('first release failed')
     const secondFailure = new Error('second release failed')
+    const thirdFailure = new Error('third release failed')
 
     const slow = awaitAbort().pipe(
       finalizing(fail(firstFailure)),
-      finalizing(fail(secondFailure))
+      finalizing(fail(secondFailure)),
+      finalizing(fail(thirdFailure))
     )
 
     const result = await race([ok('winner'), slow]).pipe(
@@ -2837,7 +2839,7 @@ describe('Task interruption finalization', () => {
     assert.ok(Fail.is(result))
     assert.ok(result.arg instanceof AggregateError)
     assert.equal(result.arg.message, 'Resource release failed')
-    assert.deepEqual(result.arg.errors, [firstFailure, secondFailure])
+    assert.deepEqual(result.arg.errors, [firstFailure, secondFailure, thirdFailure])
   })
 
   it('aggregates interrupted scoped cleanup failure with synchronous iterator return throw', async () => {

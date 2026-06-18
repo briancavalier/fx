@@ -38,27 +38,12 @@ export type AbortExit<E extends Abort<AnyControlScope>> =
 export type InterruptedExit<E extends InterruptFrom<AnyScope, any>> =
   E extends never ? never : { readonly type: 'interrupted', readonly effect: E }
 
-type ResumableExitEffect<Exit> =
-  Exit extends {
-    readonly type: 'withCleanupExit',
-    readonly primary: infer Primary,
-    readonly cleanup: infer Cleanup
-  } ? ResumableExitEffect<Primary> | ResumableExitEffect<Cleanup>
-  : Exit extends { readonly type: 'success' } ? never
-  : Exit extends { readonly effect: infer E extends ExitEffect } ? E
-  : never
-
-type EffectiveExit<Exit> =
-  Exit extends {
-    readonly type: 'withCleanupExit',
-    readonly primary: infer Primary extends NonSuccessExit<any>,
-    readonly cleanup: infer Cleanup extends NonSuccessExit<any>
-  } ? Primary extends { readonly type: 'failure' } ? Primary : EffectiveExit<Cleanup>
-  : Exit
-
 type ExitOf<E, A> = ResumableExit<A, Extract<E, ExitEffect>>
 type NonSuccessExitOf<E> = NonSuccessExit<Extract<E, ExitEffect>>
 type ReturnExitEffects<E> = Exclude<E, ExitEffect>
+type EffectiveExit<A, E extends ExitEffect> =
+  | { readonly type: 'success', readonly value: A }
+  | NonSuccessExit<E>
 
 export const returnExit = <const E, const A>(
   f: Fx<E, A>
@@ -71,24 +56,31 @@ export const returnExit = <const E, const A>(
     resume: exit => resumeExit(exit) as Fx<E, never>
   }) as Fx<ReturnExitEffects<E>, ExitOf<E, A>>
 
-export const effectiveExit = <const Exit extends ResumableExit<any, any>>(
-  exit: Exit
-): EffectiveExit<Exit> => {
-  let current: ResumableExit<any, any> = exit
+export const effectiveExit = <const A, const E extends ExitEffect>(
+  exit: ResumableExit<A, E>
+): EffectiveExit<A, E> => {
+  let current: ResumableExit<A, E> = exit
   while (current.type === 'withCleanupExit') {
     current = current.primary.type === 'failure' ? current.primary : current.cleanup
   }
-  return current as EffectiveExit<Exit>
+  return current as EffectiveExit<A, E>
 }
 
-export const resumeExit = <const Exit extends ResumableExit<any, any>>(
-  exit: Exit
-): Fx<ResumableExitEffect<Exit>, Exit extends { readonly type: 'success', readonly value: infer A } ? A : never> =>
-  fx(function* () {
+export function resumeExit<const A>(
+  exit: { readonly type: 'success', readonly value: A }
+): Fx<never, A>
+export function resumeExit<const A, const E extends ExitEffect>(
+  exit: ResumableExit<A, E>
+): Fx<E, A>
+export function resumeExit(
+  exit: ResumableExit<any, ExitEffect>
+): Fx<ExitEffect, any> {
+  return fx(function* () {
     const effective = effectiveExit(exit)
     if (effective.type === 'success') return effective.value
-    return (yield effective.effect) as never
-  }) as Fx<ResumableExitEffect<Exit>, Exit extends { readonly type: 'success', readonly value: infer A } ? A : never>
+    return yield effective.effect
+  })
+}
 
 const toExit = <E>(effect: E): NonSuccessExitOf<E> | undefined => {
   if (Fail.is(effect)) return { type: 'failure', effect } as NonSuccessExitOf<E>

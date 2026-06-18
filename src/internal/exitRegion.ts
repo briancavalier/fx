@@ -11,7 +11,7 @@ export type ExitRegionSuccess<A> = {
 export type ExitRegionWithCleanupExit<Exit> = {
   readonly type: 'withCleanupExit'
   readonly primary: Exit
-  readonly cleanup: Exit
+  readonly cleanup: ExitRegionExit<Exit>
 }
 
 export type ExitRegionExit<Exit> =
@@ -148,11 +148,10 @@ const mergeCleanupExit = <Exit>(
   next: ExitRegionExit<Exit>
 ): ExitRegionExit<Exit> => {
   if (current === undefined) return next
-  if (isExitRegionWithCleanupExit(current)) return current
-  if (isExitRegionWithCleanupExit(next)) return {
+  if (isExitRegionWithCleanupExit(current)) return {
     type: 'withCleanupExit',
-    primary: current,
-    cleanup: next.cleanup
+    primary: current.primary,
+    cleanup: mergeCleanupExit(current.cleanup, next)
   }
   return {
     type: 'withCleanupExit',

@@ -10,7 +10,7 @@ import { InterruptFrom } from './InterruptFrom.js'
 import { ReturnFrom } from './ReturnFrom.js'
 import { Fork } from './internal/concurrent/effects.js'
 import { cooperativeAssertPromise } from './internal/concurrent/cooperativeAsync.js'
-import { drainExitRegionReturn, type ExitRegionExit, type ExitRegionWithCleanupExit } from './internal/exitRegion.js'
+import { drainExitRegionReturn, isExitRegionSuccess, type ExitRegionExit, type ExitRegionStep, type ExitRegionWithCleanupExit } from './internal/exitRegion.js'
 import { isInterpretingReturn, isInterruptedReturn } from './internal/iteratorClose.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { interruptionReason, RuntimeScopeExit, withActiveScope, withScopeExitSource, withoutScopeExitSources, type ActiveScopeDiagnostic } from './internal/runtimeContext.js'
@@ -252,85 +252,90 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
       }
       return finalExit.value as A
     }
-    const step = function* (ir: IteratorResult<unknown, A>): Generator<unknown, A, unknown> {
-      while (!ir.done) {
-        if (isEffect(ir.value)) {
-          const effect = ir.value
-          const effectScope = (effect as { readonly scope?: AnyScope }).scope
-          const matchesScope = effectScope !== undefined && sameScope(effectScope, scope)
-          const matchesLifetimeScope = matchesScope || (effectScope !== undefined && sameScope(effectScope, currentScope))
+    const continueWith = (value: unknown): ExitRegionStep<A> => ({ type: 'continue', value })
+    const doneWith = (value: A): ExitRegionStep<A> => ({ type: 'done', value })
+    const step = function* (effect: unknown): Generator<unknown, ExitRegionStep<A>, unknown> {
+      if (!isEffect(effect)) {
+        throw new Error(`Unexpected non-Effect value yielded ${String(effect)}`)
+      }
 
-          if (matchesLifetimeScope && Finally.is(effect)) {
-            controller.addFinalizer(effect.arg)
-            ir = i.next(undefined)
-          } else if (matchesLifetimeScope && ScopedFork.is(effect)) {
-            const context = yield* new ScopedHandlerCapture(rootHandlerCaptureTarget)
-            const task = yield* controller.fork({
-              ...effect.arg,
-              fx: withHandlerContext([capturedShared, ...(context as readonly CapturedHandler[])], effect.arg.fx)
-            })
-            ir = i.next(task)
-          } else if (matchesScope && ReturnFrom.is(effect)) {
-            const exit = { type: 'returnFrom', scope, value: effect.arg } satisfies Exit<Scope>
-            if (!root) {
-              controller.requestExit(exit)
-              return effect.arg as A
-            }
-            return yield* finishRoot(exit)
-          } else if (matchesScope && Abort.is(effect)) {
-            const exit = { type: 'abort', scope } satisfies Exit<Scope>
-            if (!root) {
-              controller.requestExit(exit)
-              return undefined as A
-            }
-            return yield* finishRoot(exit, effect)
-          } else if (matchesLifetimeScope && InterruptFrom.is(effect)) {
-            const exit = interruptedExit(scope, effect.arg)
-            const interrupt = matchesScope ? effect : new InterruptFrom(scope, effect.arg)
-            if (!root) {
-              controller.requestExit(exit)
-              return undefined as A
-            }
-            return yield* finishRoot(exit, interrupt)
-          } else if (Fail.is(effect)) {
-            const exit = { type: 'failure', failure: effect } satisfies Exit
-            if (!root) {
-              return (yield effect) as A
-            }
-            return yield* finishRoot(exit)
-          } else if (ScopedHandlerCapture.is(effect)) {
-            const target = effect.arg
-            if (target.type === 'root') {
-              ir = i.next([capturedShared, ...(yield effect) as any])
-            } else if (target.type === 'nearestScope' || sameScope(target.scope, scope)) {
-              ir = i.next([capturedShared, ...(yield new ScopedHandlerCapture(rootHandlerCaptureTarget)) as any])
-            } else {
-              ir = i.next(yield effect as any)
-            }
-          } else if (HandlerCapture.is(effect)) {
-            const local = effect.arg === 'fx/Concurrent/ForkIn' ? capturedShared : captured
-            ir = i.next([local, ...(yield effect) as any])
-          } else {
-            const result = yield effect
-            if (result instanceof RuntimeScopeExit) {
-              if (sameScope(result.scope, scope)) {
-                const exit = result.exit as Exit<Scope>
-                const cleanup = exit.type === 'failure' ? undefined : yield* returnFail(fx(function* () {
-                  return yield* drainScopeInterruptedReturn(i, step)
-                }))
-                const failures = cleanup !== undefined && Fail.is(cleanup) ? cleanupFailuresOf(cleanup.arg) : []
-                return yield* finishRoot(exit, undefined, failures)
-              }
-              const { failures } = yield* release(interruptedExit(scope, result.reason))
-              const cleanupFailures = failures.flatMap(cleanupFailuresOf)
-              if (cleanupFailures.length > 0) return (yield* withMaybeActiveScope(failCleanup(cleanupFailures))) as A
-              return yield* propagateRuntimeScopeExit(result)
-            }
-            ir = i.next(result)
-          }
-        } else {
-          throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
+      const effectScope = (effect as { readonly scope?: AnyScope }).scope
+      const matchesScope = effectScope !== undefined && sameScope(effectScope, scope)
+      const matchesLifetimeScope = matchesScope || (effectScope !== undefined && sameScope(effectScope, currentScope))
+
+      if (matchesLifetimeScope && Finally.is(effect)) {
+        controller.addFinalizer(effect.arg)
+        return continueWith(undefined)
+      } else if (matchesLifetimeScope && ScopedFork.is(effect)) {
+        const context = yield* new ScopedHandlerCapture(rootHandlerCaptureTarget)
+        const task = yield* controller.fork({
+          ...effect.arg,
+          fx: withHandlerContext([capturedShared, ...(context as readonly CapturedHandler[])], effect.arg.fx)
+        })
+        return continueWith(task)
+      } else if (matchesScope && ReturnFrom.is(effect)) {
+        const exit = { type: 'returnFrom', scope, value: effect.arg } satisfies Exit<Scope>
+        if (!root) {
+          controller.requestExit(exit)
+          return doneWith(effect.arg as A)
         }
+        return doneWith(yield* finishRoot(exit))
+      } else if (matchesScope && Abort.is(effect)) {
+        const exit = { type: 'abort', scope } satisfies Exit<Scope>
+        if (!root) {
+          controller.requestExit(exit)
+          return doneWith(undefined as A)
+        }
+        return doneWith(yield* finishRoot(exit, effect))
+      } else if (matchesLifetimeScope && InterruptFrom.is(effect)) {
+        const exit = interruptedExit(scope, effect.arg)
+        const interrupt = matchesScope ? effect : new InterruptFrom(scope, effect.arg)
+        if (!root) {
+          controller.requestExit(exit)
+          return doneWith(undefined as A)
+        }
+        return doneWith(yield* finishRoot(exit, interrupt))
+      } else if (Fail.is(effect)) {
+        const exit = { type: 'failure', failure: effect } satisfies Exit
+        if (!root) {
+          return doneWith((yield effect) as A)
+        }
+        return doneWith(yield* finishRoot(exit))
+      } else if (ScopedHandlerCapture.is(effect)) {
+        const target = effect.arg
+        if (target.type === 'root') {
+          return continueWith([capturedShared, ...(yield effect) as any])
+        } else if (target.type === 'nearestScope' || sameScope(target.scope, scope)) {
+          return continueWith([capturedShared, ...(yield new ScopedHandlerCapture(rootHandlerCaptureTarget)) as any])
+        }
+        return continueWith(yield effect as any)
+      } else if (HandlerCapture.is(effect)) {
+        const local = effect.arg === 'fx/Concurrent/ForkIn' ? capturedShared : captured
+        return continueWith([local, ...(yield effect) as any])
+      }
+
+      const result = yield effect
+      if (result instanceof RuntimeScopeExit) {
+        if (sameScope(result.scope, scope)) {
+          const exit = result.exit as Exit<Scope>
+          const cleanup = exit.type === 'failure' ? undefined : yield* returnFail(fx(function* () {
+            return yield* drainScopeInterruptedReturn(i, step)
+          }))
+          const failures = cleanup !== undefined && Fail.is(cleanup) ? cleanupFailuresOf(cleanup.arg) : []
+          return doneWith(yield* finishRoot(exit, undefined, failures))
+        }
+        const { failures } = yield* release(interruptedExit(scope, result.reason))
+        const cleanupFailures = failures.flatMap(cleanupFailuresOf)
+        if (cleanupFailures.length > 0) return doneWith((yield* withMaybeActiveScope(failCleanup(cleanupFailures))) as A)
+        return doneWith(yield* propagateRuntimeScopeExit(result))
+      }
+      return continueWith(result)
+    }
+    const run = function* (ir: IteratorResult<unknown, A>): Generator<unknown, A, unknown> {
+      while (!ir.done) {
+        const result = yield* step(ir.value)
+        if (result.type === 'done') return result.value
+        ir = i.next(result.value)
       }
 
       const exit = { type: 'success', value: ir.value } satisfies Exit<Scope, A>
@@ -340,7 +345,7 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
 
     let completed = false
     try {
-      const value = yield* step(i.next())
+      const value = yield* run(i.next())
       completed = true
       return value
     } finally {
@@ -509,7 +514,7 @@ const collectInterruptedCleanupFailures = function* <A, Scope extends AnyScope>(
   completed: boolean,
   shouldDrainReturn: boolean,
   iterator: Iterator<unknown, A, unknown>,
-  step: (ir: IteratorResult<unknown, A>) => Generator<unknown, A, unknown>
+  step: (effect: unknown) => Generator<unknown, ExitRegionStep<A>, unknown>
 ): Generator<unknown, readonly unknown[], unknown> {
   const failures = [] as unknown[]
   const exit = interruptedExit(scope, interruptionReason())
@@ -534,7 +539,7 @@ const collectInterruptedChildCleanupFailures = function* <A>(
   completed: boolean,
   shouldDrainReturn: boolean,
   iterator: Iterator<unknown, A, unknown>,
-  step: (ir: IteratorResult<unknown, A>) => Generator<unknown, A, unknown>
+  step: (effect: unknown) => Generator<unknown, ExitRegionStep<A>, unknown>
 ): Generator<unknown, readonly unknown[], unknown> {
   const failures = [] as unknown[]
 
@@ -557,20 +562,23 @@ const interruptedExit = <Scope extends AnyScope>(scope: Scope, reason: unknown):
 
 const drainScopeInterruptedReturn = function* <A>(
   iterator: Iterator<unknown, A, unknown>,
-  step: (ir: IteratorResult<unknown, A>) => Generator<unknown, A, unknown>
+  step: (effect: unknown) => Generator<unknown, ExitRegionStep<A>, unknown>
 ): Generator<unknown, A | Fail<unknown> | undefined, unknown> {
-  const result = yield* drainExitRegionReturn(iterator, step, {
-    classify: effect => Fail.is(effect) ? effect : undefined
+  const result = yield* drainExitRegionReturn(iterator, {
+    classify: effect => Fail.is(effect) ? effect : undefined,
+    step
   })
   return cleanupFailureOf(result)
 }
 
 const cleanupFailureOf = <A>(
-  result: A | ExitRegionExit<Fail<unknown>> | undefined
+  result: ExitRegionExit<Fail<unknown>> | { readonly type: 'success', readonly value: A } | undefined
 ): A | Fail<unknown> | undefined =>
-    Fail.is(result)
-      ? result
-      : isExitRegionWithCleanupExit(result) ? result.primary : result
+    result === undefined
+      ? undefined
+      : isExitRegionSuccess(result) ? result.value
+      : Fail.is(result) ? result
+        : isExitRegionWithCleanupExit(result) ? result.primary : result
 
 const isExitRegionWithCleanupExit = (
   result: unknown

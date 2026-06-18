@@ -57,6 +57,9 @@ export const returnExit = <const E, const A>(
 ): Fx<ReturnExitEffects<E>, ExitOf<E, A>> =>
   exitRegion(f, {
     classify: toExit<E>,
+    step: function* (effect) {
+      return { type: 'continue', value: yield effect }
+    },
     resume: exit => resumeExit(exit) as Fx<E, never>
   }) as Fx<ReturnExitEffects<E>, ExitOf<E, A>>
 

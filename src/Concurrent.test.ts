@@ -2709,6 +2709,33 @@ describe('Task interruption finalization', () => {
     assert.deepEqual(released, ['inner'])
   })
 
+  it('interprets scope effects yielded from wrapped iterator return during interruption', async () => {
+    const TestScope = scope<Control>()('test/Fork/InterruptedInnerReturnScopeEffect')
+    const released = [] as string[]
+
+    const result = await fx(function* () {
+      return yield* fork(fx(function* () {
+        try {
+          yield* awaitAbort()
+        } finally {
+          released.push('inner')
+          yield* returnFrom(TestScope, 'cleanup')
+        }
+      }))
+    }).pipe(
+      withScope(TestScope),
+      withUnboundedConcurrency,
+      returnFail,
+      runPromise
+    )
+    assert.ok(result instanceof Task)
+    const task = result
+
+    await task.interrupt()
+
+    assert.deepEqual(released, ['inner'])
+  })
+
   it('drains wrapped iterator return after interrupted scoped finalizer yields', async () => {
     const TestScope = scope('test/Fork/InterruptedScopeThenInnerReturn')
     const released = [] as string[]

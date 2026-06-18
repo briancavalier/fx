@@ -57,8 +57,7 @@ export const returnExit = <const E, const A>(
 ): Fx<ReturnExitEffects<E>, ExitOf<E, A>> =>
   exitRegion(f, {
     classify: toExit<E>,
-    resume: exit => resumeExit(exit) as Fx<E, never>,
-    unavailableExitMessage: 'Exit unavailable after closing interrupted region'
+    resume: exit => resumeExit(exit) as Fx<E, never>
   }) as Fx<ReturnExitEffects<E>, ExitOf<E, A>>
 
 export const resumeExit = <const Exit extends ResumableExit<any, any>>(

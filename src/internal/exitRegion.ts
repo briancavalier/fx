@@ -21,7 +21,6 @@ export type ExitRegionExit<Exit> =
 export interface ExitRegionOptions<E, Exit> {
   classify(effect: E): Exit | undefined
   resume(exit: ExitRegionExit<Exit>): Fx<E, never>
-  unavailableExitMessage?: string
 }
 
 export const exitRegion = <const E, const A, const Exit>(
@@ -116,9 +115,6 @@ class ExitRegion<E, A, Exit> implements Fx<E, ExitRegionSuccess<A> | ExitRegionE
         if (nextExit !== undefined) {
           exit = mergeCleanupExit(exit, nextExit)
           yield* close()
-          if (exit === undefined) {
-            throw new Error(this.options.unavailableExitMessage ?? 'Exit unavailable after closing interrupted region')
-          }
           completed = true
           return exit
         }

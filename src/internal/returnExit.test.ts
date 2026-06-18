@@ -128,6 +128,27 @@ describe('returnExit', () => {
     assert.equal(exit.cleanup.effect.arg, cleanupFailure)
   })
 
+  it('returns later cleanup failure after cleanup returnFrom', () => {
+    const cleanupFailure = new Error('cleanup failed')
+    const exit = returnFrom(ControlScope, 'body').pipe(
+      finalizing(returnFrom(ControlScope, 'cleanup')),
+      finalizing(fail(cleanupFailure)),
+      returnExit,
+      run
+    )
+
+    assert.equal(exit.type, 'withCleanupExit')
+    assert.equal(exit.primary.type, 'returnFrom')
+    assert.equal(exit.primary.effect.arg, 'body')
+    assert.equal(exit.cleanup.type, 'failure')
+    assert.equal(exit.cleanup.effect.arg, cleanupFailure)
+
+    const next = resumeExit(exit)[Symbol.iterator]().next()
+    assert.equal(next.done, false)
+    assert.ok(Fail.is(next.value))
+    assert.equal(next.value.arg, cleanupFailure)
+  })
+
   it('preserves body failure and keeps closing after cleanup failure', () => {
     const bodyFailure = new Error('body failed')
     const cleanupFailure = new Error('cleanup failed')

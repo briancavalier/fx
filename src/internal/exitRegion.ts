@@ -42,7 +42,7 @@ export function* drainExitRegionReturn<Y, A, Exit>(
   iterator: Iterator<Y, A, unknown>,
   options: Pick<ExitRegionOptions<Y, A, Exit>, 'classify' | 'step'>
 ): Generator<Y, ExitRegionResult<A, Exit> | undefined, unknown> {
-  let exit: Exit | undefined
+  let exit: ExitRegionExit<Exit> | undefined
 
   const safeNext = (a: unknown): IteratorResult<Y, A> | undefined => {
     try {
@@ -77,7 +77,7 @@ export function* drainExitRegionReturn<Y, A, Exit>(
 
     const cleanupExit = options.classify(ir.value)
     if (cleanupExit !== undefined) {
-      exit ??= cleanupExit
+      exit = mergeCleanupExit(exit, cleanupExit)
       ir = safeInterruptReturn()
       continue
     }

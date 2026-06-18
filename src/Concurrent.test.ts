@@ -5,7 +5,7 @@ import { Effect } from './Effect.js'
 import { Fail, fail, returnFail } from './Fail.js'
 import { RaceAllFailed, all, withBoundedConcurrency, withCoopConcurrency, firstSuccess, fork, forkEach, forkIn, mapAll, race, withUnboundedConcurrency } from './Concurrent.js'
 import { andFinallyIn } from './Finalization.js'
-import { bracket, flatMap, fx, ok, runPromise, runTask, type Fx } from './Fx.js'
+import { bracket, finalizing, flatMap, fx, ok, runPromise, runTask, type Fx } from './Fx.js'
 import { handle } from './Handler.js'
 import { type HandlerCapture } from './HandlerCapture.js'
 import { interruptFrom, recoverInterrupt } from './InterruptFrom.js'
@@ -2709,6 +2709,33 @@ describe('Task interruption finalization', () => {
     assert.deepEqual(released, ['inner'])
   })
 
+  it('interprets scope effects yielded from wrapped iterator return during interruption', async () => {
+    const TestScope = scope<Control>()('test/Fork/InterruptedInnerReturnScopeEffect')
+    const released = [] as string[]
+
+    const result = await fx(function* () {
+      return yield* fork(fx(function* () {
+        try {
+          yield* awaitAbort()
+        } finally {
+          released.push('inner')
+          yield* returnFrom(TestScope, 'cleanup')
+        }
+      }))
+    }).pipe(
+      withScope(TestScope),
+      withUnboundedConcurrency,
+      returnFail,
+      runPromise
+    )
+    assert.ok(result instanceof Task)
+    const task = result
+
+    await task.interrupt()
+
+    assert.deepEqual(released, ['inner'])
+  })
+
   it('drains wrapped iterator return after interrupted scoped finalizer yields', async () => {
     const TestScope = scope('test/Fork/InterruptedScopeThenInnerReturn')
     const released = [] as string[]
@@ -2788,6 +2815,31 @@ describe('Task interruption finalization', () => {
     assert.ok(result.arg instanceof AggregateError)
     assert.equal(result.arg.message, 'Resource release failed')
     assert.deepEqual(result.arg.errors, [innerFailure, scopeFailure])
+  })
+
+  it('aggregates multiple interrupted wrapped iterator cleanup failures', async () => {
+    const TestScope = scope('test/Fork/InterruptedMultipleInnerCleanupFailures')
+    const firstFailure = new Error('first release failed')
+    const secondFailure = new Error('second release failed')
+    const thirdFailure = new Error('third release failed')
+
+    const slow = awaitAbort().pipe(
+      finalizing(fail(firstFailure)),
+      finalizing(fail(secondFailure)),
+      finalizing(fail(thirdFailure))
+    )
+
+    const result = await race([ok('winner'), slow]).pipe(
+      withScope(TestScope),
+      withUnboundedConcurrency,
+      returnFail,
+      runPromise
+    )
+
+    assert.ok(Fail.is(result))
+    assert.ok(result.arg instanceof AggregateError)
+    assert.equal(result.arg.message, 'Resource release failed')
+    assert.deepEqual(result.arg.errors, [firstFailure, secondFailure, thirdFailure])
   })
 
   it('aggregates interrupted scoped cleanup failure with synchronous iterator return throw', async () => {

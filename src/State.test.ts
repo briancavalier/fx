@@ -493,6 +493,24 @@ describe('State', () => {
       assert.equal(state, 0)
     })
 
+    it('commits state for effective cleanup returnFrom after body returnFrom', () => {
+      const result = fx(function* () {
+        const returned = yield* fx(function* () {
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+          return yield* returnFrom(ForkScope, 'body')
+        }).pipe(
+          finalizing(returnFrom(ForkScope, 'cleanup')),
+          transactionalState(CounterState),
+          withScope(ForkScope),
+          returnFail
+        )
+
+        return [returned, yield* getState(CounterState)] as const
+      }).pipe(withState(CounterState, 0), run)
+
+      assert.deepEqual(result, ['cleanup', 1])
+    })
+
     it('does not become the nearest current scope', () => {
       const events: string[] = []
 

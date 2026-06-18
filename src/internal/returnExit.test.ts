@@ -5,12 +5,13 @@ import { assertPromise } from '../Async.js'
 import { abort } from '../Abort.js'
 import { Effect } from '../Effect.js'
 import { fail, Fail } from '../Fail.js'
-import { finalizing, fx, ok, run, runTask } from '../Fx.js'
+import { finalizing, fx, ok, run, runTask, type Fx } from '../Fx.js'
 import { handle } from '../Handler.js'
 import { interruptFrom } from '../InterruptFrom.js'
-import { returnFrom } from '../ReturnFrom.js'
+import { ReturnFrom, returnFrom } from '../ReturnFrom.js'
 import { scope, type Control } from '../Scope.js'
 import { getState, modifyState, withState, type Stateful } from '../State.js'
+import { drainExitRegionReturn } from './exitRegion.js'
 import { returnExit, resumeExit } from './returnExit.js'
 
 describe('returnExit', () => {
@@ -34,6 +35,9 @@ describe('returnExit', () => {
     const next = resumeExit(exit)[Symbol.iterator]().next()
     assert.equal(next.done, false)
     assert.equal(next.value, failure)
+
+    const resumed: Fx<typeof failure, never> = resumeExit(exit)
+    void resumed
   })
 
   it('preserves and resumes the original ReturnFrom effect', () => {
@@ -112,7 +116,7 @@ describe('returnExit', () => {
     assert.equal(exit.effect.arg, cleanupFailure)
   })
 
-  it('returns cleanup failure after body returnFrom', () => {
+  it('returns body returnFrom with cleanup failure after body returnFrom', () => {
     const cleanupFailure = new Error('cleanup failed')
     const exit = returnFrom(ControlScope, 'returned').pipe(
       finalizing(fail(cleanupFailure)),
@@ -120,8 +124,38 @@ describe('returnExit', () => {
       run
     )
 
-    assert.equal(exit.type, 'failure')
-    assert.equal(exit.effect.arg, cleanupFailure)
+    assert.equal(exit.type, 'withCleanupExit')
+    assert.equal(exit.primary.type, 'returnFrom')
+    assert.equal(exit.primary.effect.arg, 'returned')
+    assert.equal(exit.cleanup.type, 'failure')
+    assert.equal(exit.cleanup.effect.arg, cleanupFailure)
+  })
+
+  it('returns later cleanup failure after cleanup returnFrom', () => {
+    const cleanupFailure = new Error('cleanup failed')
+    const exit = returnFrom(ControlScope, 'body').pipe(
+      finalizing(returnFrom(ControlScope, 'cleanup')),
+      finalizing(fail(cleanupFailure)),
+      returnExit,
+      run
+    )
+
+    assert.equal(exit.type, 'withCleanupExit')
+    assert.equal(exit.primary.type, 'returnFrom')
+    assert.equal(exit.primary.effect.arg, 'body')
+    assert.equal(exit.cleanup.type, 'withCleanupExit')
+    assert.equal(exit.cleanup.primary.type, 'returnFrom')
+    assert.equal(exit.cleanup.primary.effect.arg, 'cleanup')
+    assert.equal(exit.cleanup.cleanup.type, 'failure')
+    assert.equal(exit.cleanup.cleanup.effect.arg, cleanupFailure)
+
+    const next = resumeExit(exit)[Symbol.iterator]().next()
+    assert.equal(next.done, false)
+    assert.ok(Fail.is(next.value))
+    assert.equal(next.value.arg, cleanupFailure)
+
+    const resumed: Fx<Fail<Error> | ReturnFrom<typeof ControlScope, string>, never> = resumeExit(exit)
+    void resumed
   })
 
   it('preserves body failure and keeps closing after cleanup failure', () => {
@@ -146,10 +180,38 @@ describe('returnExit', () => {
       return [exit, yield* getState(StateScope)] as const
     }).pipe(withState(StateScope, 0), run)
 
-    assert.equal(exit.type, 'failure')
-    assert.equal(exit.effect.arg, bodyFailure)
+    assert.equal(exit.type, 'withCleanupExit')
+    assert.equal(exit.primary.type, 'failure')
+    assert.equal(exit.primary.effect.arg, bodyFailure)
+    assert.equal(exit.cleanup.type, 'failure')
+    assert.equal(exit.cleanup.effect.arg, cleanupFailure)
     assert.deepEqual(events, ['failing cleanup', 'state cleanup'])
     assert.equal(state, 1)
+  })
+
+  it('preserves a recorded cleanup exit when cleanup interpretation completes', () => {
+    const cleanupFailure = new Fail(new Error('cleanup failed'))
+    const cleanupReturn = returnFrom(ControlScope, 'cleanup')
+    let interrupted = false
+    const iterator: Iterator<Fail<Error> | typeof cleanupReturn, void, unknown> = {
+      next: () => ({ done: true, value: undefined }),
+      return: () => ({ done: false, value: cleanupFailure }),
+      throw: () => {
+        interrupted = true
+        return { done: false, value: cleanupReturn }
+      }
+    }
+
+    const result = drainExitRegionReturn(iterator, {
+      classify: effect => Fail.is(effect) ? effect : undefined,
+      step: function* (effect) {
+        assert.equal(ReturnFrom.is(effect), true)
+        return { type: 'done', value: undefined }
+      }
+    }).next()
+
+    assert.deepEqual(result, { done: true, value: cleanupFailure })
+    assert.equal(interrupted, true)
   })
 
   it('closes the wrapped iterator when interrupted on a forwarded effect', () => {

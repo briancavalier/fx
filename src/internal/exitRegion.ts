@@ -90,16 +90,13 @@ class ExitRegion<E, A, Exit> implements Fx<E, ExitRegionSuccess<A> | ExitRegionE
 
   *[Symbol.iterator](): Iterator<E, ExitRegionSuccess<A> | ExitRegionExit<Exit>> {
     const i = this.fx[Symbol.iterator]()
-    const classify = (effect: E): Exit | undefined => this.options.classify(effect)
-    const resume = (exit: ExitRegionExit<Exit>): Fx<E, never> => this.options.resume(exit)
+    const options = this.options
     let exit: ExitRegionExit<Exit> | undefined
 
     const close = function* (): Generator<E, void, unknown> {
       const closeExit = yield* drainExitRegionReturn<E, A, undefined, Exit>(i, function* () {
         return undefined
-      }, {
-        classify
-      })
+      }, options)
       if (closeExit !== undefined) exit = mergeCleanupExit(exit, closeExit)
     }
 
@@ -111,7 +108,7 @@ class ExitRegion<E, A, Exit> implements Fx<E, ExitRegionSuccess<A> | ExitRegionE
           throw new Error(`Unexpected non-Effect value yielded ${String(ir.value)}`)
         }
 
-        const nextExit = classify(ir.value)
+        const nextExit = options.classify(ir.value)
         if (nextExit !== undefined) {
           exit = mergeCleanupExit(exit, nextExit)
           yield* close()
@@ -127,7 +124,7 @@ class ExitRegion<E, A, Exit> implements Fx<E, ExitRegionSuccess<A> | ExitRegionE
     } finally {
       if (!completed) {
         yield* close()
-        if (exit !== undefined) yield* resume(exit)
+        if (exit !== undefined) yield* options.resume(exit)
       }
     }
   }

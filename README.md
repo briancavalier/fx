@@ -1,9 +1,11 @@
 # fx
 
-A small, strongly typed, **scope-centered algebraic runtime** for TypeScript.
+A small, strongly typed algebraic runtime for TypeScript, built around explicit
+effects, handlers, and scoped ownership.
 
-`fx` lets programs describe operations, delimit their meaning with named scopes,
-and interpret those operations later with handlers.
+`fx` lets programs describe operations, keep runtime requirements visible in
+their types, and interpret those operations through handlers at explicit scope
+and platform boundaries.
 
 ---
 
@@ -20,7 +22,8 @@ Most solutions rely on dependency injection or implicit runtime behavior.
 
 `fx` takes a different approach:
 
-> **Programs describe operations. Named scopes define dynamic regions of meaning. Handlers define semantics.**
+> **Programs describe operations. Handlers define semantics. Scoped ownership
+> keeps dynamic lifetimes explicit.**
 
 ---
 
@@ -45,28 +48,37 @@ yield* fail(new Error("boom"))
 yield* fork(otherProgram)
 ```
 
-Named scopes add an ownership boundary around effects whose meaning depends on a
-dynamic region. A scope can own cleanup, interruption, early return, yielding,
-and recovery boundaries.
-
 Handlers progressively eliminate effects until the program can run.
 
 ---
 
-## Why named scopes?
+## Why scoped ownership?
 
 Many application concerns are not just dependencies. They are regions of
 execution:
 
 - a request lifetime that may be interrupted
 - a resource lifetime that must be finalized
-- a timeout boundary where callers choose the recovery policy
+- a timeout boundary where callers choose the interruption policy
 - a progress or event channel that receives yielded values
 - a concurrent group that must clean up cancelled work
 - a parser or workflow step that may return early
+- state that should be local to one dynamic lifetime
 
-In `fx`, these regions are named scopes. Scope names make ownership explicit
-without introducing service containers, global runtimes, or framework wiring.
+In `fx`, named scopes are the public handle for these dynamic ownership
+boundaries. A scope can delimit cleanup, interruption, early return, yielding,
+timeout, and scoped state without introducing service containers, global
+runtimes, or framework wiring.
+
+### Region-indexed capabilities
+
+Some operations only make sense inside a dynamic lifetime. `fx` models those as
+focused capabilities indexed by a scope or region: `andFinallyIn` for cleanup,
+`yieldFrom` for scoped events, `timeoutIn` for deadlines, interruption for
+cooperative cancellation, and scoped state for local mutation.
+
+This keeps public APIs specific while giving them one shared lifecycle model:
+the program names the region, and handlers decide what that region means.
 
 ---
 
@@ -76,92 +88,85 @@ Application logic performs operations. Handlers decide what those operations
 mean:
 
 ```ts
-import { consoleLog, defaultConsole, fx, handle, runPromise } from "@briancavalier/fx"
+import {
+  consoleLog,
+  defaultConsole,
+  fx,
+  run
+} from "@briancavalier/fx"
 
-const getUser = fx(function* () {
-  yield* consoleLog("fetching user")
-
-  const user = yield* Db.query(
-    "select * from users where id = ?",
-    [1]
-  )
-
-  return user
+const program = fx(function* () {
+  yield* consoleLog("Hello from fx")
+  return "done"
 })
 
-const program =
-  getUser.pipe(
-    handle(DbQuery, ({ arg: { sql, params } }) => runQuery(sql, params)),
-    defaultConsole,
-    runPromise
-  )
+const result = program.pipe(
+  defaultConsole,
+  run
+)
 ```
 
-Scopes let lifecycle semantics stay explicit too. An operation timeout uses a
-private diagnostic-hidden scope for the operation, scoped finalizers observe how
-the operation exited, and the caller chooses how to recover:
+Runtime boundaries are effects too. Rejected promises become recoverable
+`Fail<unknown>` values, and callers choose where to recover:
+
+```ts
+import {
+  catchAll,
+  ok,
+  tryPromise,
+  runCatch,
+  runPromise
+} from "@briancavalier/fx"
+
+const loadText = (url: string) =>
+  tryPromise(signal =>
+    fetch(url, { signal }).then(response => response.text())
+  )
+
+const text = await loadText("https://example.com").pipe(
+  catchAll(error => ok(`failed: ${String(error)}`)),
+  runCatch,
+  runPromise
+)
+```
+
+Scopes let lifecycle semantics stay explicit. Finalizers observe how the scope
+exited, and handlers decide where that cleanup runs:
 
 ```ts
 import {
   assert as assertNoFail,
   consoleLog,
-  control,
   defaultConsole,
   fx,
-  runPromise
+  run
 } from "@briancavalier/fx"
-import { withUnboundedConcurrency } from "@briancavalier/fx/concurrent"
-import { andFinallyIn, InterruptFrom, scope, withScope } from "@briancavalier/fx/scope"
-import { defaultTime, sleep } from "@briancavalier/fx/time"
-import { timeout, timeoutIn } from "@briancavalier/fx/timeout"
+import { andFinallyIn, scope, withScope } from "@briancavalier/fx/scope"
 
 const RequestScope = scope("request")
 
-const loadUser = fx(function* () {
+const request = fx(function* () {
   yield* andFinallyIn(RequestScope, exit =>
-    consoleLog(`request cleanup after ${exit.type}`)
+    consoleLog(`cleanup after ${exit.type}`)
   )
 
-  yield* sleep(1000)
-  return { id: 1, name: "Ada" }
+  yield* consoleLog("handling request")
 })
 
-const program = fx(function* () {
-  const user = yield* loadUser.pipe(
-    timeout({ ms: 500, label: "load user" })
-  )
-
-  yield* consoleLog("loaded user", user)
-})
-
-await program.pipe(
+request.pipe(
   withScope(RequestScope),
-  control(InterruptFrom, () => consoleLog("request timed out")),
-  defaultTime,
-  withUnboundedConcurrency,
   defaultConsole,
   assertNoFail,
-  runPromise
+  run
 )
 ```
 
-Use `timeoutIn(scope, options)` when the deadline is a delayed interruption of a
-caller-owned scope rather than a timeout for one operation. The caller still
-owns the scope boundary, and a fork scheduler outside that boundary schedules
-the internal timer:
-
-```ts
-const request = fx(function* () {
-  yield* timeoutIn(RequestScope, { ms: 500, label: "request deadline" })
-  return yield* loadUser
-}).pipe(
-  withScope(RequestScope),
-  withUnboundedConcurrency
-)
-```
-
-That timer is daemon scoped work: it can interrupt the scope while other scoped
-work keeps the scope alive, but it does not keep the scope alive by itself.
+Advanced scoped deadlines use `timeout` and `timeoutIn` from
+`@briancavalier/fx/timeout`. See
+[`docs/recipes/use-structured-concurrency.md`](docs/recipes/use-structured-concurrency.md)
+and
+[`examples/intermediate/scope-owned-forks.ts`](examples/intermediate/scope-owned-forks.ts)
+for scheduler ordering, scope-owned forks, and caller-owned deadlines.
 
 Core primitives are exported from `@briancavalier/fx`. Optional features are
 exported from named subpaths, so effect signatures stay concise:
@@ -200,7 +205,8 @@ their named subpaths.
 
 ### Operations over dependencies
 
-There are no privileged concepts like services or environments.
+There is no service container or dependency graph. Context is modeled as
+ordinary effects and handlers.
 
 Logging, DB access, concurrency, failure, resource management, and lifecycle
 control are all operations that programs can request and handlers can interpret.
@@ -257,6 +263,9 @@ No container, no wiring graph—just a pipeline.
 - **Structured concurrency**  
   `Fork`, `Task`, `all`, and `race` provide owned, composable concurrency
 
+- **Handler-provided concurrency policy**
+  The same program can run under bounded, unbounded, or cooperative scheduling
+
 - **Guaranteed finalization**
   Finalizers run when a scope succeeds, fails, returns, aborts, or is interrupted
 
@@ -264,8 +273,8 @@ No container, no wiring graph—just a pipeline.
   Programs emit values to named channels with `yieldFrom`
 
 - **External data boundaries**
-  Branded codec keys keep parsing, serialization, and validation explicit
-  without coupling reusable programs to a schema library
+  Encoding and decoding are effects, so reusable programs can declare external
+  data contracts without choosing a schema library
 
 - **Explicit runtime boundaries**
   Async, platform, HTTP, time, random, trace, and Node behavior are interpreted
@@ -281,10 +290,7 @@ No container, no wiring graph—just a pipeline.
 
 ### No dependency graph abstraction
 
-There is no built-in concept of:
-- services  
-- layers  
-- dependency injection  
+There is no built-in service container, layer system, or dependency graph.
 
 Instead:
 - programs express **operations**  
@@ -299,10 +305,10 @@ Instead:
 
 ### Minimal runtime
 
-The runtime is small and focused:
-- no scheduler framework  
-- no supervision system  
-- no built-in observability stack  
+The runtime is small and handler-driven rather than centralized:
+- concurrency handlers provide scheduling policy
+- no single global scheduler framework is imposed
+- no built-in supervision system or observability stack
 
 **Tradeoff:**
 - easy to understand and reason about  
@@ -356,7 +362,7 @@ Because the core is minimal:
 
 `fx` explores a simple idea:
 
-> **Model operations as effects, delimit their meaning with named scopes, and compose interpretation with handlers.**
+> **Model operations as effects, delimit scoped ownership with explicit regions, and compose interpretation with handlers.**
 
 This leads to:
 

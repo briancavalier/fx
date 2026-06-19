@@ -70,6 +70,10 @@ boundaries. A scope can delimit cleanup, interruption, early return, yielding,
 timeout, and scoped state without introducing service containers, global
 runtimes, or framework wiring.
 
+Ownership means the scope controls the lifetime and exit semantics of operations
+registered within it: cleanup runs when the scope exits, interruptions target
+the scope, and scoped state or yielding stays local to that boundary.
+
 ### Region-indexed capabilities
 
 Some operations only make sense inside a dynamic lifetime. `fx` models those as
@@ -205,8 +209,8 @@ their named subpaths.
 
 ### Operations over dependencies
 
-There is no service container or dependency graph. Context is modeled as
-ordinary effects and handlers.
+There is no service container or dependency graph. When context is needed, it is
+modeled as ordinary effects and handlers.
 
 Logging, DB access, concurrency, failure, resource management, and lifecycle
 control are all operations that programs can request and handlers can interpret.
@@ -265,6 +269,8 @@ No container, no wiring graph—just a pipeline.
 
 - **Handler-provided concurrency policy**
   The same program can run under bounded, unbounded, or cooperative scheduling
+  policies; see
+  [`use-structured-concurrency`](docs/recipes/use-structured-concurrency.md)
 
 - **Guaranteed finalization**
   Finalizers run when a scope succeeds, fails, returns, aborts, or is interrupted

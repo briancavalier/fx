@@ -1,5 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { abort, orReturn } from './Abort.js'
 import { assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
 import { fail, Fail, returnFail } from './Fail.js'
@@ -9,7 +10,8 @@ import { bracket, finalizing, fx, ok, run, runPromise, runTask, type Fx } from '
 import { control, handle } from './Handler.js'
 import { InterruptFrom, interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible, uninterruptibleMask, type Interrupt, type RestoreInterrupt } from './Interrupt.js'
-import { scope, withScope, type Exit } from './Scope.js'
+import { returnFrom } from './ReturnFrom.js'
+import { currentScope, scope, withScope, type Control, type Exit } from './Scope.js'
 
 describe('Typed interruption', () => {
   const TestScope = scope('test/InterruptFrom')
@@ -318,6 +320,43 @@ describe('Interrupt masking', () => {
     assert.deepEqual(released, ['resource'])
   })
 
+  it('bracket provides a success exit to release', () => {
+    const exits = [] as Exit[]
+
+    const result = bracket(
+      ok('resource'),
+      (resource: string, exit: Exit) => fx(function* () {
+        assert.equal(resource, 'resource')
+        exits.push(exit)
+      }),
+      resource => ok(`${resource}:value` as const)
+    ).pipe(run)
+
+    assert.equal(result, 'resource:value')
+    assert.deepEqual(exits, [{ type: 'success', value: 'resource:value' }])
+  })
+
+  it('bracket provides a failure exit to release', () => {
+    const failure = new Error('failed')
+    const exits = [] as Exit[]
+
+    const result = bracket(
+      ok('resource'),
+      (resource: string, exit: Exit) => fx(function* () {
+        assert.equal(resource, 'resource')
+        exits.push(exit)
+      }),
+      () => fail(failure)
+    ).pipe(returnFail, run)
+
+    assert.ok(Fail.is(result))
+    assert.equal(result.arg, failure)
+    assert.equal(exits.length, 1)
+    const [exit] = exits
+    assert.equal(exit.type, 'failure')
+    if (exit.type === 'failure') assert.equal(exit.failure.arg, failure)
+  })
+
   it('finalizing runs cleanup after success and preserves the result', () => {
     const released = [] as string[]
 
@@ -352,6 +391,112 @@ describe('Interrupt masking', () => {
     assert.deepEqual(released, ['cleanup'])
   })
 
+  it('finalizing provides a success exit to cleanup', () => {
+    const exits = [] as Exit[]
+
+    const result = ok('value').pipe(
+      finalizing(exit => fx(function* () {
+        exits.push(exit)
+      })),
+      run
+    )
+
+    assert.equal(result, 'value')
+    assert.deepEqual(exits, [{ type: 'success', value: 'value' }])
+  })
+
+  it('finalizing provides a failure exit to cleanup', () => {
+    const failure = new Error('failed')
+    const exits = [] as Exit[]
+
+    const result = fail(failure).pipe(
+      finalizing(exit => fx(function* () {
+        exits.push(exit)
+      })),
+      returnFail,
+      run
+    )
+
+    assert.ok(Fail.is(result))
+    assert.equal(result.arg, failure)
+    assert.equal(exits.length, 1)
+    const [exit] = exits
+    assert.equal(exit.type, 'failure')
+    if (exit.type === 'failure') assert.equal(exit.failure.arg, failure)
+  })
+
+  it('finalizing provides a returnFrom exit to cleanup', () => {
+    const ControlScope = scope<Control>()('test/Interrupt/finalizing/ReturnFromExit')
+    const exits = [] as Exit[]
+
+    const result = returnFrom(ControlScope, 'returned').pipe(
+      finalizing(exit => fx(function* () {
+        exits.push(exit)
+      })),
+      withScope(ControlScope),
+      run
+    )
+
+    assert.equal(result, 'returned')
+    assert.deepEqual(exits, [{ type: 'returnFrom', scope: ControlScope, value: 'returned' }])
+  })
+
+  it('finalizing provides an abort exit to cleanup', () => {
+    const ControlScope = scope<Control>()('test/Interrupt/finalizing/AbortExit')
+    const exits = [] as Exit[]
+
+    const result = abort(ControlScope).pipe(
+      finalizing(exit => fx(function* () {
+        exits.push(exit)
+      })),
+      withScope(ControlScope),
+      orReturn(ControlScope, 'aborted'),
+      run
+    )
+
+    assert.equal(result, 'aborted')
+    assert.deepEqual(exits, [{ type: 'abort', scope: ControlScope }])
+  })
+
+  it('finalizing provides an interruptFrom exit to cleanup', () => {
+    const InterruptScope = scope('test/Interrupt/finalizing/InterruptFromExit')
+    const reason = { type: 'lexical-interrupt' }
+    const exits = [] as Exit[]
+
+    const result = interruptFrom(InterruptScope, reason).pipe(
+      finalizing(exit => fx(function* () {
+        exits.push(exit)
+      })),
+      recoverInterrupt(InterruptScope, () => ok('interrupted')),
+      run
+    )
+
+    assert.equal(result, 'interrupted')
+    assert.deepEqual(exits, [{ type: 'interrupted', scope: InterruptScope, reason }])
+  })
+
+  it('finalizing surfaces cleanup failure after observing the primary failure', () => {
+    const programFailure = new Error('program failed')
+    const cleanupFailure = new Error('cleanup failed')
+    const exits = [] as Exit[]
+
+    const result = fail(programFailure).pipe(
+      finalizing(exit => fx(function* () {
+        exits.push(exit)
+        yield* fail(cleanupFailure)
+      })),
+      returnFail,
+      run
+    )
+
+    assert.ok(Fail.is(result))
+    assert.equal(result.arg, cleanupFailure)
+    assert.equal(exits.length, 1)
+    const [exit] = exits
+    assert.equal(exit.type, 'failure')
+    if (exit.type === 'failure') assert.equal(exit.failure.arg, programFailure)
+  })
+
   it('finalizing runs cleanup exactly once', () => {
     let released = 0
 
@@ -382,6 +527,25 @@ describe('Interrupt masking', () => {
     await task.interrupt()
 
     assert.deepEqual(released, ['cleanup'])
+  })
+
+  it('finalizing provides an interrupted exit when task interruption closes the region', async () => {
+    const exits = [] as Exit[]
+    let started = false
+
+    const task = assertPromise<void>(() => new Promise(() => {
+      started = true
+    })).pipe(
+      finalizing(exit => fx(function* () {
+        exits.push(exit)
+      })),
+      runTask
+    )
+
+    await eventually(() => started)
+    await task.interrupt()
+
+    assert.deepEqual(exits, [{ type: 'interrupted', scope: currentScope }])
   })
 
   it('finalizing drains async cleanup effects during interruption', async () => {

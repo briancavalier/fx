@@ -5,11 +5,14 @@ import { Fail, assert } from './Fail.js'
 import { HandlerCapture } from './HandlerCapture.js'
 import { uninterruptibleMask } from './Interrupt.js'
 import type { Interrupt } from './Interrupt.js'
+import { currentScope, type Exit } from './Scope.js'
 import { Task } from './Task.js'
 import { isEffect } from './Effect.js'
 import * as generator from './internal/generator.js'
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './internal/interrupt.js'
 import { Pipeable } from './internal/pipe.js'
+import { effectiveExit, returnExit, resumeExit, type ExitEffect, type ResumableExit } from './internal/returnExit.js'
+import { interruptionReason } from './internal/runtimeContext.js'
 import { RunForkOptions, runFork } from './internal/runFork.js'
 import { ScopedHandlerCapture } from './internal/scopedHandlerCapture.js'
 import { TrySync } from './internal/sync.js'
@@ -190,33 +193,75 @@ export const run = <const R>(f: Fx<Interrupt, R>): R =>
     return ir.value as R
   })
 
+export function bracket<const IE, const FE, const E, const R, const A>(
+  initially: Fx<IE, R>,
+  andFinally: (a: R) => Fx<FE, void>,
+  f: (a: R) => Fx<E, A>
+): Fx<IE | FE | E | Interrupt, A>
 /**
  * Acquire a resource, use it, and release it even if use fails or is
  * interrupted.
  *
  * `bracket` is useful for local acquire/use/release flows. For named resource
  * scopes, prefer the helpers in `Finalization`.
+ *
+ * The release operation may inspect the lexical region's exit.
  */
-export const bracket = <const IE, const FE, const E, const R, const A>(
+export function bracket<const IE, const FE, const E, const R, const A>(
   initially: Fx<IE, R>,
-  andFinally: (a: R) => Fx<FE, void>,
+  andFinally: (a: R, exit: Exit) => Fx<FE, void>,
   f: (a: R) => Fx<E, A>
-) => uninterruptibleMask(restore => fx(function* () {
-  const r = yield* initially
-  try {
-    return yield* restore(f(r))
-  } finally {
-    yield* andFinally(r)
+): Fx<IE | FE | E | Interrupt, A>
+export function bracket<const IE, const FE, const E, const R, const A>(
+  initially: Fx<IE, R>,
+  andFinally: (a: R, exit: Exit) => Fx<FE, void>,
+  f: (a: R) => Fx<E, A>
+): Fx<IE | FE | E | Interrupt, A> {
+  if (andFinally.length < 2) {
+    return uninterruptibleMask(restore => fx(function* () {
+      const r = yield* initially
+      try {
+        return yield* restore(f(r))
+      } finally {
+        yield* (andFinally as (a: R) => Fx<FE, void>)(r)
+      }
+    }))
   }
-}))
+
+  return uninterruptibleMask(restore => fx(function* () {
+    const r = yield* initially
+    let exit: ResumableExit<A, Extract<E, ExitEffect>> | undefined
+    let released = false
+    try {
+      exit = yield* returnExit(restore(f(r)))
+      if (exit === undefined) return undefined as A
+      released = true
+      yield* andFinally(r, toExit(exit))
+      return yield* restore(resumeExit(exit))
+    } finally {
+      if (!released) yield* andFinally(r, exit === undefined ? interruptedExit() : toExit(exit))
+    }
+  }))
+}
+
+export function finalizing<const FE>(
+  finally_: Fx<FE, void>
+): <const E, const A>(program: Fx<E, A>) => Fx<E | FE | Interrupt, A>
 
 /**
  * Run cleanup when a lexical computation exits, without registering it with a
  * scope.
+ *
+ * The cleanup operation may inspect the lexical region's exit.
  */
-export const finalizing =
-  <const FE>(finally_: Fx<FE, void>) =>
-    <const E, const A>(program: Fx<E, A>): Fx<E | FE | Interrupt, A> =>
+export function finalizing<const FE>(
+  finally_: (exit: Exit) => Fx<FE, void>
+): <const E, const A>(program: Fx<E, A>) => Fx<E | FE | Interrupt, A>
+export function finalizing<const FE>(
+  finally_: Fx<FE, void> | ((exit: Exit) => Fx<FE, void>)
+): <const E, const A>(program: Fx<E, A>) => Fx<E | FE | Interrupt, A> {
+  if (typeof finally_ !== 'function') {
+    return <const E, const A>(program: Fx<E, A>): Fx<E | FE | Interrupt, A> =>
       uninterruptibleMask(restore => fx(function* () {
         try {
           return yield* restore(program)
@@ -224,3 +269,51 @@ export const finalizing =
           yield* finally_
         }
       }))
+  }
+
+  return <const E, const A>(program: Fx<E, A>): Fx<E | FE | Interrupt, A> =>
+    uninterruptibleMask(restore => fx(function* () {
+      let exit: ResumableExit<A, Extract<E, ExitEffect>> | undefined
+      let finalized = false
+      try {
+        exit = yield* returnExit(restore(program))
+        if (exit === undefined) return undefined as A
+        finalized = true
+        yield* finalize(finally_, toExit(exit))
+        return yield* restore(resumeExit(exit))
+      } finally {
+        if (!finalized) yield* finalize(finally_, exit === undefined ? interruptedExit() : toExit(exit))
+      }
+    }))
+}
+
+const finalize = <const FE>(
+  finally_: Fx<FE, void> | ((exit: Exit) => Fx<FE, void>),
+  exit: Exit
+): Fx<FE, void> =>
+  typeof finally_ === 'function' ? finally_(exit) : finally_
+
+const toExit = <const A>(exit: ResumableExit<A>): Exit => {
+  const effective = effectiveExit(exit)
+  switch (effective.type) {
+    case 'success':
+      return { type: 'success', value: effective.value }
+    case 'failure':
+      return { type: 'failure', failure: effective.effect }
+    case 'returnFrom':
+      return { type: 'returnFrom', scope: effective.effect.scope, value: effective.effect.arg }
+    case 'abort':
+      return { type: 'abort', scope: effective.effect.scope }
+    case 'interrupted':
+      return effective.effect.arg === undefined
+        ? { type: 'interrupted', scope: effective.effect.scope }
+        : { type: 'interrupted', scope: effective.effect.scope, reason: effective.effect.arg }
+  }
+}
+
+const interruptedExit = (): Exit => {
+  const reason = interruptionReason()
+  return reason === undefined
+    ? { type: 'interrupted', scope: currentScope }
+    : { type: 'interrupted', scope: currentScope, reason }
+}

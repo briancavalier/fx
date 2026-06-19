@@ -6,7 +6,7 @@ import { ReturnFrom } from '../ReturnFrom.js'
 import type { AnyControlScope, AnyScope } from '../Scope.js'
 import { exitRegion, type CapturedCleanupExit } from './exitRegion.js'
 
-type ExitEffect =
+export type ExitEffect =
   | Fail<any>
   | ReturnFrom<AnyControlScope, any>
   | Abort<AnyControlScope>

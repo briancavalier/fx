@@ -165,6 +165,10 @@ request.pipe(
 )
 ```
 
+For more runnable examples, see
+[`examples/README.md`](examples/README.md), which groups examples by basic,
+intermediate, and advanced use cases.
+
 Advanced scoped deadlines use `timeout` and `timeoutIn` from
 `@briancavalier/fx/timeout`. See
 [`docs/recipes/use-structured-concurrency.md`](docs/recipes/use-structured-concurrency.md)

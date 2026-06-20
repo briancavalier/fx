@@ -11,7 +11,7 @@ import { isEffect } from './Effect.js'
 import * as generator from './internal/generator.js'
 import { InterruptMaskBegin, InterruptMaskEnd, InterruptMaskState } from './internal/interrupt.js'
 import { Pipeable } from './internal/pipe.js'
-import { effectiveExit, returnExit, resumeExit, type ExitEffect, type ResumableExit } from './internal/returnExit.js'
+import { effectiveExit, returnExit, resumeExit, withCleanupExit, type ExitEffect, type ResumableExit } from './internal/returnExit.js'
 import { interruptionReason } from './internal/runtimeContext.js'
 import { RunForkOptions, runFork } from './internal/runFork.js'
 import { ScopedHandlerCapture } from './internal/scopedHandlerCapture.js'
@@ -236,8 +236,8 @@ export function bracket<const IE, const FE, const E, const R, const A>(
       exit = yield* returnExit(restore(f(r)))
       if (exit === undefined) return undefined as A
       released = true
-      yield* andFinally(r, toRegionExit(exit))
-      return yield* restore(resumeExit(exit))
+      const cleanup = yield* returnExit(andFinally(r, toRegionExit(exit)))
+      return yield* restore(resumeExit(withCleanupExit(exit, cleanup)))
     } finally {
       if (!released) yield* andFinally(r, exit === undefined ? interruptedExit() : toRegionExit(exit))
     }
@@ -279,8 +279,8 @@ export function finalizing<const FE>(
         exit = yield* returnExit(restore(program))
         if (exit === undefined) return undefined as A
         finalized = true
-        yield* finalize(finally_, toRegionExit(exit))
-        return yield* restore(resumeExit(exit))
+        const cleanup = yield* returnExit(finalize(finally_, toRegionExit(exit)))
+        return yield* restore(resumeExit(withCleanupExit(exit, cleanup)))
       } finally {
         if (!finalized) yield* finalize(finally_, exit === undefined ? interruptedExit() : toRegionExit(exit))
       }

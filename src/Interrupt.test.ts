@@ -493,7 +493,7 @@ describe('Interrupt masking', () => {
     assert.deepEqual(exits, [{ type: 'interrupted', reason }])
   })
 
-  it('finalizing surfaces cleanup failure after observing the primary failure', () => {
+  it('finalizing preserves primary failure when cleanup fails after observing it', () => {
     const programFailure = new Error('program failed')
     const cleanupFailure = new Error('cleanup failed')
     const exits = [] as RegionExit[]
@@ -508,11 +508,12 @@ describe('Interrupt masking', () => {
     )
 
     assert.ok(Fail.is(result))
-    assert.equal(result.arg, cleanupFailure)
+    assert.equal(result.arg, programFailure)
     assert.equal(exits.length, 1)
     const [exit] = exits
     assert.equal(exit.type, 'failure')
     if (exit.type === 'failure') assert.equal(exit.failure.arg, programFailure)
+    assert.equal(cleanupFailure.message, 'cleanup failed')
   })
 
   it('finalizing runs cleanup exactly once', () => {

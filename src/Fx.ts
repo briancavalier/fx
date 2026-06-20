@@ -5,7 +5,7 @@ import { Fail, assert } from './Fail.js'
 import { HandlerCapture } from './HandlerCapture.js'
 import { uninterruptibleMask } from './Interrupt.js'
 import type { Interrupt } from './Interrupt.js'
-import { currentScope, type Exit } from './Scope.js'
+import type { RegionExit } from './Scope.js'
 import { Task } from './Task.js'
 import { isEffect } from './Effect.js'
 import * as generator from './internal/generator.js'
@@ -209,12 +209,12 @@ export function bracket<const IE, const FE, const E, const R, const A>(
  */
 export function bracket<const IE, const FE, const E, const R, const A>(
   initially: Fx<IE, R>,
-  andFinally: (a: R, exit: Exit) => Fx<FE, void>,
+  andFinally: (a: R, exit: RegionExit) => Fx<FE, void>,
   f: (a: R) => Fx<E, A>
 ): Fx<IE | FE | E | Interrupt, A>
 export function bracket<const IE, const FE, const E, const R, const A>(
   initially: Fx<IE, R>,
-  andFinally: (a: R, exit: Exit) => Fx<FE, void>,
+  andFinally: (a: R, exit: RegionExit) => Fx<FE, void>,
   f: (a: R) => Fx<E, A>
 ): Fx<IE | FE | E | Interrupt, A> {
   if (andFinally.length < 2) {
@@ -236,10 +236,10 @@ export function bracket<const IE, const FE, const E, const R, const A>(
       exit = yield* returnExit(restore(f(r)))
       if (exit === undefined) return undefined as A
       released = true
-      yield* andFinally(r, toExit(exit))
+      yield* andFinally(r, toRegionExit(exit))
       return yield* restore(resumeExit(exit))
     } finally {
-      if (!released) yield* andFinally(r, exit === undefined ? interruptedExit() : toExit(exit))
+      if (!released) yield* andFinally(r, exit === undefined ? interruptedExit() : toRegionExit(exit))
     }
   }))
 }
@@ -255,10 +255,10 @@ export function finalizing<const FE>(
  * The cleanup operation may inspect the lexical region's exit.
  */
 export function finalizing<const FE>(
-  finally_: (exit: Exit) => Fx<FE, void>
+  finally_: (exit: RegionExit) => Fx<FE, void>
 ): <const E, const A>(program: Fx<E, A>) => Fx<E | FE | Interrupt, A>
 export function finalizing<const FE>(
-  finally_: Fx<FE, void> | ((exit: Exit) => Fx<FE, void>)
+  finally_: Fx<FE, void> | ((exit: RegionExit) => Fx<FE, void>)
 ): <const E, const A>(program: Fx<E, A>) => Fx<E | FE | Interrupt, A> {
   if (typeof finally_ !== 'function') {
     return <const E, const A>(program: Fx<E, A>): Fx<E | FE | Interrupt, A> =>
@@ -279,21 +279,21 @@ export function finalizing<const FE>(
         exit = yield* returnExit(restore(program))
         if (exit === undefined) return undefined as A
         finalized = true
-        yield* finalize(finally_, toExit(exit))
+        yield* finalize(finally_, toRegionExit(exit))
         return yield* restore(resumeExit(exit))
       } finally {
-        if (!finalized) yield* finalize(finally_, exit === undefined ? interruptedExit() : toExit(exit))
+        if (!finalized) yield* finalize(finally_, exit === undefined ? interruptedExit() : toRegionExit(exit))
       }
     }))
 }
 
 const finalize = <const FE>(
-  finally_: Fx<FE, void> | ((exit: Exit) => Fx<FE, void>),
-  exit: Exit
+  finally_: Fx<FE, void> | ((exit: RegionExit) => Fx<FE, void>),
+  exit: RegionExit
 ): Fx<FE, void> =>
   typeof finally_ === 'function' ? finally_(exit) : finally_
 
-const toExit = <const A>(exit: ResumableExit<A>): Exit => {
+const toRegionExit = <const A>(exit: ResumableExit<A>): RegionExit => {
   const effective = effectiveExit(exit)
   switch (effective.type) {
     case 'success':
@@ -301,19 +301,19 @@ const toExit = <const A>(exit: ResumableExit<A>): Exit => {
     case 'failure':
       return { type: 'failure', failure: effective.effect }
     case 'returnFrom':
-      return { type: 'returnFrom', scope: effective.effect.scope, value: effective.effect.arg }
+      return { type: 'returnFrom', value: effective.effect.arg }
     case 'abort':
-      return { type: 'abort', scope: effective.effect.scope }
+      return { type: 'abort' }
     case 'interrupted':
       return effective.effect.arg === undefined
-        ? { type: 'interrupted', scope: effective.effect.scope }
-        : { type: 'interrupted', scope: effective.effect.scope, reason: effective.effect.arg }
+        ? { type: 'interrupted' }
+        : { type: 'interrupted', reason: effective.effect.arg }
   }
 }
 
-const interruptedExit = (): Exit => {
+const interruptedExit = (): RegionExit => {
   const reason = interruptionReason()
   return reason === undefined
-    ? { type: 'interrupted', scope: currentScope }
-    : { type: 'interrupted', scope: currentScope, reason }
+    ? { type: 'interrupted' }
+    : { type: 'interrupted', reason }
 }

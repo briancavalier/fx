@@ -11,7 +11,7 @@ import { control, handle } from './Handler.js'
 import { InterruptFrom, interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible, uninterruptibleMask, type Interrupt, type RestoreInterrupt } from './Interrupt.js'
 import { returnFrom } from './ReturnFrom.js'
-import { currentScope, scope, withScope, type Control, type Exit } from './Scope.js'
+import { currentScope, scope, withScope, type Control, type Exit, type RegionExit } from './Scope.js'
 
 describe('Typed interruption', () => {
   const TestScope = scope('test/InterruptFrom')
@@ -321,11 +321,11 @@ describe('Interrupt masking', () => {
   })
 
   it('bracket provides a success exit to release', () => {
-    const exits = [] as Exit[]
+    const exits = [] as RegionExit[]
 
     const result = bracket(
       ok('resource'),
-      (resource: string, exit: Exit) => fx(function* () {
+      (resource: string, exit: RegionExit) => fx(function* () {
         assert.equal(resource, 'resource')
         exits.push(exit)
       }),
@@ -338,11 +338,11 @@ describe('Interrupt masking', () => {
 
   it('bracket provides a failure exit to release', () => {
     const failure = new Error('failed')
-    const exits = [] as Exit[]
+    const exits = [] as RegionExit[]
 
     const result = bracket(
       ok('resource'),
-      (resource: string, exit: Exit) => fx(function* () {
+      (resource: string, exit: RegionExit) => fx(function* () {
         assert.equal(resource, 'resource')
         exits.push(exit)
       }),
@@ -392,7 +392,7 @@ describe('Interrupt masking', () => {
   })
 
   it('finalizing provides a success exit to cleanup', () => {
-    const exits = [] as Exit[]
+    const exits = [] as RegionExit[]
 
     const result = ok('value').pipe(
       finalizing(exit => fx(function* () {
@@ -407,7 +407,7 @@ describe('Interrupt masking', () => {
 
   it('finalizing provides a failure exit to cleanup', () => {
     const failure = new Error('failed')
-    const exits = [] as Exit[]
+    const exits = [] as RegionExit[]
 
     const result = fail(failure).pipe(
       finalizing(exit => fx(function* () {
@@ -427,7 +427,7 @@ describe('Interrupt masking', () => {
 
   it('finalizing provides a returnFrom exit to cleanup', () => {
     const ControlScope = scope<Control>()('test/Interrupt/finalizing/ReturnFromExit')
-    const exits = [] as Exit[]
+    const exits = [] as RegionExit[]
 
     const result = returnFrom(ControlScope, 'returned').pipe(
       finalizing(exit => fx(function* () {
@@ -438,12 +438,12 @@ describe('Interrupt masking', () => {
     )
 
     assert.equal(result, 'returned')
-    assert.deepEqual(exits, [{ type: 'returnFrom', scope: ControlScope, value: 'returned' }])
+    assert.deepEqual(exits, [{ type: 'returnFrom', value: 'returned' }])
   })
 
   it('finalizing provides an abort exit to cleanup', () => {
     const ControlScope = scope<Control>()('test/Interrupt/finalizing/AbortExit')
-    const exits = [] as Exit[]
+    const exits = [] as RegionExit[]
 
     const result = abort(ControlScope).pipe(
       finalizing(exit => fx(function* () {
@@ -455,13 +455,13 @@ describe('Interrupt masking', () => {
     )
 
     assert.equal(result, 'aborted')
-    assert.deepEqual(exits, [{ type: 'abort', scope: ControlScope }])
+    assert.deepEqual(exits, [{ type: 'abort' }])
   })
 
   it('finalizing provides an interruptFrom exit to cleanup', () => {
     const InterruptScope = scope('test/Interrupt/finalizing/InterruptFromExit')
     const reason = { type: 'lexical-interrupt' }
-    const exits = [] as Exit[]
+    const exits = [] as RegionExit[]
 
     const result = interruptFrom(InterruptScope, reason).pipe(
       finalizing(exit => fx(function* () {
@@ -472,13 +472,31 @@ describe('Interrupt masking', () => {
     )
 
     assert.equal(result, 'interrupted')
-    assert.deepEqual(exits, [{ type: 'interrupted', scope: InterruptScope, reason }])
+    assert.deepEqual(exits, [{ type: 'interrupted', reason }])
+  })
+
+  it('finalizing does not expose unresolved currentScope as a lexical exit scope', () => {
+    const LexicalScope = scope('test/Interrupt/finalizing/CurrentScopeLexicalExit')
+    const reason = { type: 'current-scope-lexical-interrupt' }
+    const exits = [] as RegionExit[]
+
+    const result = interruptFrom(currentScope, reason).pipe(
+      finalizing(exit => fx(function* () {
+        exits.push(exit)
+      })),
+      withScope(LexicalScope),
+      recoverInterrupt(LexicalScope, () => ok('interrupted')),
+      run
+    )
+
+    assert.equal(result, 'interrupted')
+    assert.deepEqual(exits, [{ type: 'interrupted', reason }])
   })
 
   it('finalizing surfaces cleanup failure after observing the primary failure', () => {
     const programFailure = new Error('program failed')
     const cleanupFailure = new Error('cleanup failed')
-    const exits = [] as Exit[]
+    const exits = [] as RegionExit[]
 
     const result = fail(programFailure).pipe(
       finalizing(exit => fx(function* () {
@@ -530,7 +548,7 @@ describe('Interrupt masking', () => {
   })
 
   it('finalizing provides an interrupted exit when task interruption closes the region', async () => {
-    const exits = [] as Exit[]
+    const exits = [] as RegionExit[]
     let started = false
 
     const task = assertPromise<void>(() => new Promise(() => {
@@ -545,7 +563,7 @@ describe('Interrupt masking', () => {
     await eventually(() => started)
     await task.interrupt()
 
-    assert.deepEqual(exits, [{ type: 'interrupted', scope: currentScope }])
+    assert.deepEqual(exits, [{ type: 'interrupted' }])
   })
 
   it('finalizing drains async cleanup effects during interruption', async () => {

@@ -91,6 +91,17 @@ export type Exit<
   | Aborted<Scope>
   | Interrupted<Scope>
 
+export type RegionExit<
+  A = unknown,
+  F extends Fail<unknown> = Fail<unknown>,
+  R = unknown
+> =
+  | Success<A>
+  | Failure<F>
+  | RegionReturned<R>
+  | RegionAborted
+  | RegionInterrupted
+
 export interface Success<A> {
   readonly type: 'success'
   readonly value: A
@@ -101,22 +112,28 @@ export interface Failure<F extends Fail<unknown>> {
   readonly failure: F
 }
 
-export interface ReturnedFrom<Scope extends AnyScope, A> {
+export interface RegionReturned<A> {
   readonly type: 'returnFrom'
-  readonly scope: Scope
   readonly value: A
 }
 
-export interface Aborted<Scope extends AnyScope> {
+export type ReturnedFrom<Scope extends AnyScope, A> =
+  RegionReturned<A> & { readonly scope: Scope }
+
+export interface RegionAborted {
   readonly type: 'abort'
-  readonly scope: Scope
 }
 
-export interface Interrupted<Scope extends AnyScope> {
+export type Aborted<Scope extends AnyScope> =
+  RegionAborted & { readonly scope: Scope }
+
+export interface RegionInterrupted {
   readonly type: 'interrupted'
-  readonly scope: Scope
   readonly reason?: unknown
 }
+
+export type Interrupted<Scope extends AnyScope> =
+  RegionInterrupted & { readonly scope: Scope }
 
 /**
  * Logical nearest lifetime scope token.

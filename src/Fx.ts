@@ -274,23 +274,17 @@ export function finalizing<const FE>(
         if (exit === undefined) return undefined as A
         finalized = true
         if (isSuccessExit(exit)) {
-          yield* finalize(finally_, toRegionExit(exit))
+          yield* finally_(toRegionExit(exit))
           return exit.value
         }
-        const cleanup = yield* returnExit(finalize(finally_, toRegionExit(exit)))
+        const cleanup = yield* returnExit(finally_(toRegionExit(exit)))
         const combined: ResumableExit<A, Extract<E | FE, ExitEffect>> = withCleanupExit(exit, cleanup)
         return yield* restore(resumeExit(combined))
       } finally {
-        if (!finalized) yield* finalize(finally_, exit === undefined ? interruptedExit() : toRegionExit(exit))
+        if (!finalized) yield* finally_(exit === undefined ? interruptedExit() : toRegionExit(exit))
       }
     }))
 }
-
-const finalize = <const FE>(
-  finally_: Fx<FE, void> | ((exit: RegionExit) => Fx<FE, void>),
-  exit: RegionExit
-): Fx<FE, void> =>
-  typeof finally_ === 'function' ? finally_(exit) : finally_
 
 const isSuccessExit = <const A>(
   exit: ResumableExit<A>

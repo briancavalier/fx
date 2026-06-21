@@ -217,7 +217,7 @@ export function bracket<const IE, const FE, const E, const R, const A>(
   andFinally: (a: R, exit: RegionExit) => Fx<FE, void>,
   f: (a: R) => Fx<E, A>
 ): Fx<IE | FE | E | Interrupt, A> {
-  return uninterruptibleMask(restore => fx(function* () {
+  return uninterruptibleMask(restore => fx(function* (): Generator<IE | FE | E | Interrupt, A, unknown> {
     const r = yield* initially
     let exit: ResumableExit<A, Extract<E, ExitEffect>> | undefined
     let released = false
@@ -225,8 +225,13 @@ export function bracket<const IE, const FE, const E, const R, const A>(
       exit = yield* returnExit(restore(f(r)))
       if (exit === undefined) return undefined as A
       released = true
+      if (isSuccessExit(exit)) {
+        yield* andFinally(r, toRegionExit(exit))
+        return exit.value
+      }
       const cleanup = yield* returnExit(andFinally(r, toRegionExit(exit)))
-      return yield* restore(resumeExit(withCleanupExit(exit, cleanup)))
+      const combined: ResumableExit<A, Extract<E | FE, ExitEffect>> = withCleanupExit(exit, cleanup)
+      return yield* restore(resumeExit(combined))
     } finally {
       if (!released) yield* andFinally(r, exit === undefined ? interruptedExit() : toRegionExit(exit))
     }
@@ -261,15 +266,20 @@ export function finalizing<const FE>(
   }
 
   return <const E, const A>(program: Fx<E, A>): Fx<E | FE | Interrupt, A> =>
-    uninterruptibleMask(restore => fx(function* () {
+    uninterruptibleMask(restore => fx(function* (): Generator<E | FE | Interrupt, A, unknown> {
       let exit: ResumableExit<A, Extract<E, ExitEffect>> | undefined
       let finalized = false
       try {
         exit = yield* returnExit(restore(program))
         if (exit === undefined) return undefined as A
         finalized = true
+        if (isSuccessExit(exit)) {
+          yield* finalize(finally_, toRegionExit(exit))
+          return exit.value
+        }
         const cleanup = yield* returnExit(finalize(finally_, toRegionExit(exit)))
-        return yield* restore(resumeExit(withCleanupExit(exit, cleanup)))
+        const combined: ResumableExit<A, Extract<E | FE, ExitEffect>> = withCleanupExit(exit, cleanup)
+        return yield* restore(resumeExit(combined))
       } finally {
         if (!finalized) yield* finalize(finally_, exit === undefined ? interruptedExit() : toRegionExit(exit))
       }
@@ -281,6 +291,11 @@ const finalize = <const FE>(
   exit: RegionExit
 ): Fx<FE, void> =>
   typeof finally_ === 'function' ? finally_(exit) : finally_
+
+const isSuccessExit = <const A>(
+  exit: ResumableExit<A>
+): exit is { readonly type: 'success', readonly value: A } =>
+  exit.type === 'success'
 
 const toRegionExit = <const A>(exit: ResumableExit<A>): RegionExit => {
   const effective = effectiveExit(exit)

@@ -336,6 +336,26 @@ describe('Interrupt masking', () => {
     assert.deepEqual(exits, [{ type: 'success', value: 'resource:value' }])
   })
 
+  it('bracket provides an exit to release callbacks with defaulted exit parameters', () => {
+    const fallback = { type: 'abort' } as const
+    const exits = [] as RegionExit[]
+
+    const release = (resource: string, exit: RegionExit = fallback) => fx(function* () {
+      assert.equal(resource, 'resource')
+      exits.push(exit)
+    })
+
+    const result = bracket(
+      ok('resource'),
+      release,
+      resource => ok(`${resource}:value` as const)
+    ).pipe(run)
+
+    assert.equal(release.length, 1)
+    assert.equal(result, 'resource:value')
+    assert.deepEqual(exits, [{ type: 'success', value: 'resource:value' }])
+  })
+
   it('bracket provides a failure exit to release', () => {
     const failure = new Error('failed')
     const exits = [] as RegionExit[]

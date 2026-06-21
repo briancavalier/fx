@@ -217,17 +217,6 @@ export function bracket<const IE, const FE, const E, const R, const A>(
   andFinally: (a: R, exit: RegionExit) => Fx<FE, void>,
   f: (a: R) => Fx<E, A>
 ): Fx<IE | FE | E | Interrupt, A> {
-  if (andFinally.length < 2) {
-    return uninterruptibleMask(restore => fx(function* () {
-      const r = yield* initially
-      try {
-        return yield* restore(f(r))
-      } finally {
-        yield* (andFinally as (a: R) => Fx<FE, void>)(r)
-      }
-    }))
-  }
-
   return uninterruptibleMask(restore => fx(function* () {
     const r = yield* initially
     let exit: ResumableExit<A, Extract<E, ExitEffect>> | undefined

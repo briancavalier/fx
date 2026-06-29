@@ -44,6 +44,19 @@ describe('currentScope', () => {
     )
   })
 
+  it('rejects closed lexical handles passed to explicit withScope', () => {
+    let leaked: AnyLifetimeScope | undefined
+
+    withScope(scope => fx(function* () {
+      leaked = scope
+    })).pipe(run)
+
+    assert.throws(
+      () => withScope(leaked!),
+      /used after its scope exited/
+    )
+  })
+
   it('allocates lexical lifetime handles per execution', () => {
     const handles: AnyLifetimeScope[] = []
     const program = withScope({ label: 'repeatable' }, scope => fx(function* () {
@@ -74,6 +87,24 @@ describe('currentScope', () => {
     assert.equal(handles[0]?.label, 'repeatable control')
     assert.equal(handles[1]?.label, 'repeatable control')
     assert.equal(sameScope(handles[0]!, handles[1]!), false)
+  })
+
+  it('does not type callback scopes as handling effects for outer lifetime handles', () => {
+    const OwnerScope = scope('test/CurrentScope/owner')
+    const program = withScope(_ => forkIn(OwnerScope, ok('child')))
+
+    // @ts-expect-error The fresh lexical scope does not own OwnerScope effects.
+    const runnable: Fx<never, unknown> = program
+    void runnable
+  })
+
+  it('does not type callback control scopes as handling effects for outer control handles', () => {
+    const OwnerScope = scope<Control>()('test/CurrentScope/control-owner')
+    const program = withControlScope(_ => abort(OwnerScope))
+
+    // @ts-expect-error The fresh lexical scope does not handle OwnerScope aborts.
+    const runnable: Fx<never, unknown> = program
+    void runnable
   })
 
   it('is eliminated by withScope', () => {

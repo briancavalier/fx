@@ -180,24 +180,25 @@ export const currentScope: CurrentLifetimeScope = createCurrentScope() as Curren
   readonly [CurrentScopeTypeId]: true
 }
 
-export function withScope<const E, const A>(
-  body: <S>(scope: LifetimeScope<S>) => Fx<E, A>
-): Fx<ScopeEffects<E, AnyLifetimeScope>, A | ReturnValue<E, AnyLifetimeScope>>
-export function withScope<const E, const A>(
+export function withScope<const S, const E, const A>(
+  body: (scope: LifetimeScope<S>) => Fx<E, A>
+): Fx<ScopeEffects<E, LifetimeScope<S>>, A | ReturnValue<E, LifetimeScope<S>>>
+export function withScope<const S, const E, const A>(
   options: ScopeOptions,
-  body: <S>(scope: LifetimeScope<S>) => Fx<E, A>
-): Fx<ScopeEffects<E, AnyLifetimeScope>, A | ReturnValue<E, AnyLifetimeScope>>
+  body: (scope: LifetimeScope<S>) => Fx<E, A>
+): Fx<ScopeEffects<E, LifetimeScope<S>>, A | ReturnValue<E, LifetimeScope<S>>>
 export function withScope<const Scope extends AnyLifetimeScope>(
   scope: Scope
 ): <const E, const A>(f: Fx<E, A>) => Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>>
 export function withScope<const E, const A>(
-  optionsOrBody: ScopeOptions | AnyLifetimeScope | (<S>(scope: LifetimeScope<S>) => Fx<E, A>),
-  body?: <S>(scope: LifetimeScope<S>) => Fx<E, A>
+  optionsOrBody: ScopeOptions | AnyLifetimeScope | ((scope: AnyLifetimeScope) => Fx<E, A>),
+  body?: (scope: AnyLifetimeScope) => Fx<E, A>
 ): Fx<ScopeEffects<E, AnyLifetimeScope>, A | ReturnValue<E, AnyLifetimeScope>> | (<const E2, const A2>(f: Fx<E2, A2>) => Fx<ScopeEffects<E2, AnyLifetimeScope>, A2 | ReturnValue<E2, AnyLifetimeScope>>) {
   if (typeof optionsOrBody === 'object' && ScopeTypeId in optionsOrBody) {
     const scope = optionsOrBody as AnyLifetimeScope
+    assertScopeOpen(scope)
     return <const E2, const A2>(f: Fx<E2, A2>) =>
-      new ScopeBoundary(f, scope) as Fx<ScopeEffects<E2, AnyLifetimeScope>, A2 | ReturnValue<E2, AnyLifetimeScope>>
+      new ScopeBoundary(f, scope) as Fx<ScopeEffects<E2, typeof scope>, A2 | ReturnValue<E2, typeof scope>>
   }
   const options = typeof optionsOrBody === 'function' ? undefined : optionsOrBody
   const f = typeof optionsOrBody === 'function' ? optionsOrBody : body!
@@ -207,16 +208,16 @@ export function withScope<const E, const A>(
   }) as Fx<ScopeEffects<E, AnyLifetimeScope>, A | ReturnValue<E, AnyLifetimeScope>>
 }
 
-export function withControlScope<const E, const A>(
-  body: <S>(scope: ControlScope<S>) => Fx<E, A>
-): Fx<ScopeEffects<E, AnyControlScope>, A | ReturnValue<E, AnyControlScope>>
-export function withControlScope<const E, const A>(
+export function withControlScope<const S, const E, const A>(
+  body: (scope: ControlScope<S>) => Fx<E, A>
+): Fx<ScopeEffects<E, ControlScope<S>>, A | ReturnValue<E, ControlScope<S>>>
+export function withControlScope<const S, const E, const A>(
   options: ScopeOptions,
-  body: <S>(scope: ControlScope<S>) => Fx<E, A>
-): Fx<ScopeEffects<E, AnyControlScope>, A | ReturnValue<E, AnyControlScope>>
+  body: (scope: ControlScope<S>) => Fx<E, A>
+): Fx<ScopeEffects<E, ControlScope<S>>, A | ReturnValue<E, ControlScope<S>>>
 export function withControlScope<const E, const A>(
-  optionsOrBody: ScopeOptions | (<S>(scope: ControlScope<S>) => Fx<E, A>),
-  body?: <S>(scope: ControlScope<S>) => Fx<E, A>
+  optionsOrBody: ScopeOptions | ((scope: AnyControlScope) => Fx<E, A>),
+  body?: (scope: AnyControlScope) => Fx<E, A>
 ): Fx<ScopeEffects<E, AnyControlScope>, A | ReturnValue<E, AnyControlScope>> {
   const options = typeof optionsOrBody === 'function' ? undefined : optionsOrBody
   const f = typeof optionsOrBody === 'function' ? optionsOrBody : body!

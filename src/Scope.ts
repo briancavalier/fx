@@ -202,7 +202,7 @@ export function withScope<const E, const A>(
   const options = typeof optionsOrBody === 'function' ? undefined : optionsOrBody
   const f = typeof optionsOrBody === 'function' ? optionsOrBody : body!
   const scope = createLifetimeScope(options)
-  return new ScopeBoundary(f(scope as unknown as LifetimeScope<never>), scope) as Fx<ScopeEffects<E, AnyLifetimeScope>, A | ReturnValue<E, AnyLifetimeScope>>
+  return new ScopeBoundary(f(scope as unknown as LifetimeScope<never>), scope, undefined, true) as Fx<ScopeEffects<E, AnyLifetimeScope>, A | ReturnValue<E, AnyLifetimeScope>>
 }
 
 export function withControlScope<const E, const A>(
@@ -219,7 +219,7 @@ export function withControlScope<const E, const A>(
   const options = typeof optionsOrBody === 'function' ? undefined : optionsOrBody
   const f = typeof optionsOrBody === 'function' ? optionsOrBody : body!
   const scope = createControlScope(options)
-  return new ScopeBoundary(f(scope as unknown as ControlScope<never>), scope) as Fx<ScopeEffects<E, AnyControlScope>, A | ReturnValue<E, AnyControlScope>>
+  return new ScopeBoundary(f(scope as unknown as ControlScope<never>), scope, undefined, true) as Fx<ScopeEffects<E, AnyControlScope>, A | ReturnValue<E, AnyControlScope>>
 }
 
 export type ScopeEffects<E, Scope extends AnyLifetimeScope> =
@@ -268,7 +268,8 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
   constructor(
     public readonly fx: Fx<E, A>,
     public readonly scope: Scope,
-    controller?: ScopeController<Scope>
+    controller?: ScopeController<Scope>,
+    private readonly closeOnExit = false
   ) {
     this.controller = controller
     this.root = controller === undefined
@@ -438,7 +439,7 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
         : yield* collectInterruptedChildCleanupFailures(completed, isInterpretingReturn(), i, step)
       const filteredCleanupFailures = cleanupFailures.flatMap(cleanupFailuresOf)
       if (filteredCleanupFailures.length > 0) yield* withMaybeActiveScope(failCleanup(filteredCleanupFailures))
-      if (root) closeScope(scope)
+      if (root && this.closeOnExit) closeScope(scope)
     }
   }
 }

@@ -7,7 +7,7 @@ import { fail, Fail, returnFail } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope, withScope, type Control } from './Scope.js'
+import { scope, withControlScope, withScope, type Control } from './Scope.js'
 
 describe('Abort', () => {
   const TestScope = scope<Control>()('test/Abort')
@@ -193,6 +193,30 @@ describe('Abort', () => {
       assert.ok(result.arg instanceof AggregateError)
       assert.deepEqual(result.arg.errors, [cleanupFailure])
       assert.equal(attempts, 1)
+    })
+
+    it('keeps lexical control handles open across restart attempt boundaries', () => {
+      let attempts = 0
+      const released = [] as string[]
+
+      const result = withControlScope({ label: 'restartable' }, controlScope => fx(function* () {
+        attempts += 1
+        const attempt = attempts
+        yield* andFinallyIn(controlScope, fx(function* () {
+          released.push(`release:${attempt}`)
+        }))
+
+        if (attempt === 1) yield* abort(controlScope)
+        return 'done'
+      }).pipe(
+        restartOnAbort(controlScope, { restarts: 1 }),
+        orReturn(controlScope, 'exhausted'),
+        returnFail
+      )).pipe(run)
+
+      assert.equal(result, 'done')
+      assert.equal(attempts, 2)
+      assert.deepEqual(released, ['release:1', 'release:2'])
     })
 
     it('preserves Abort typing until a downstream handler interprets exhaustion', () => {

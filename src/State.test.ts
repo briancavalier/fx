@@ -5,6 +5,7 @@ import { fork, forkIn, withUnboundedConcurrency } from './Concurrent.js'
 import { Fail, catchAll, catchIf, fail, returnFail, runCatch } from './Fail.js'
 import { andFinally, andFinallyIn } from './Finalization.js'
 import { finalizing, fx, ok, run, runPromise, type Fx } from './Fx.js'
+import { key } from './Key.js'
 import { returnFrom } from './ReturnFrom.js'
 import { scope, withScope, type Control } from './Scope.js'
 import {
@@ -20,9 +21,9 @@ import {
 import { wait } from './Task.js'
 
 describe('State', () => {
-  const CounterState = scope<Stateful<number>>()('test/State/Counter')
-  const OtherState = scope<Stateful<string>>()('test/State/Other')
-  const ObjectState = scope<Stateful<{ readonly count: number }>>()('test/State/Object')
+  const CounterState = key<Stateful<number>>()('test/State/Counter')
+  const OtherState = key<Stateful<string>>()('test/State/Other')
+  const ObjectState = key<Stateful<{ readonly count: number }>>()('test/State/Object')
 
   it('gets the initial state', () => {
     const program = getState(CounterState).pipe(withState(CounterState, 1), run)
@@ -70,12 +71,12 @@ describe('State', () => {
 
     assert.equal(next.done, false)
     assert.equal(GetState.is(next.value), true)
-    assert.equal((next.value as GetState<typeof OtherState>).scope, OtherState)
+    assert.equal((next.value as GetState<typeof OtherState>).key, OtherState)
   })
 
   it('handles same-id state scope tokens', () => {
-    const FirstScope = scope<Stateful<number>>()('test/State/SameName')
-    const SecondScope = scope<Stateful<number>>()('test/State/SameName')
+    const FirstScope = key<Stateful<number>>()('test/State/SameName')
+    const SecondScope = key<Stateful<number>>()('test/State/SameName')
     const result = getState(SecondScope).pipe(withState(FirstScope, 1), run)
 
     assert.equal(result, 1)
@@ -126,27 +127,29 @@ describe('State', () => {
   })
 
   it('handles state effects requested during scope cleanup', () => {
+    const CleanupScope = scope('test/State/Cleanup')
     let finalizerState = 0
     const program = fx(function* () {
       yield* modifyState(CounterState, count => [count + 1, undefined])
-      yield* andFinallyIn(CounterState, fx(function* () {
+      yield* andFinallyIn(CleanupScope, fx(function* () {
         finalizerState = yield* modifyState(CounterState, count => [count + 1, count])
       }))
 
       return yield* getState(CounterState)
-    }).pipe(withScope(CounterState), withState(CounterState, 1), returnFail, run)
+    }).pipe(withScope(CleanupScope), withState(CounterState, 1), returnFail, run)
 
     assert.equal(program, 2)
     assert.equal(finalizerState, 2)
   })
 
   it('leaves cleanup state effects typed when withState is inside the scope boundary', () => {
+    const CleanupScope = scope('test/State/Cleanup/type')
     const program = fx(function* () {
-      yield* andFinallyIn(CounterState, modifyState(CounterState, count => [count + 1, undefined]))
+      yield* andFinallyIn(CleanupScope, modifyState(CounterState, count => [count + 1, undefined]))
       return 'done'
     })
-    const wrongOrder = program.pipe(withState(CounterState, 1), withScope(CounterState))
-    const rightOrder = program.pipe(withScope(CounterState), withState(CounterState, 1))
+    const wrongOrder = program.pipe(withState(CounterState, 1), withScope(CleanupScope))
+    const rightOrder = program.pipe(withScope(CleanupScope), withState(CounterState, 1))
 
     type WrongEffects = typeof wrongOrder extends Fx<infer E, 'done'> ? E : never
     type RightEffects = typeof rightOrder extends Fx<infer E, 'done'> ? E : never
@@ -442,8 +445,8 @@ describe('State', () => {
     })
 
     it('handles same-id state scope tokens', () => {
-      const FirstScope = scope<Stateful<number>>()('test/State/Transactional/SameName')
-      const SecondScope = scope<Stateful<number>>()('test/State/Transactional/SameName')
+      const FirstScope = key<Stateful<number>>()('test/State/Transactional/SameName')
+      const SecondScope = key<Stateful<number>>()('test/State/Transactional/SameName')
       const result = fail('body').pipe(
         transactionalState(SecondScope),
         catchAll(() => getState(SecondScope)),
@@ -546,7 +549,7 @@ describe('State', () => {
     })
 
     it('requires a stateful scope', () => {
-      const PlainScope = scope('test/State/Transactional/Plain')
+      const PlainScope = key('test/State/Transactional/Plain')
 
       // @ts-expect-error transactionalState requires a Stateful scope.
       ok('plain').pipe(transactionalState(PlainScope))

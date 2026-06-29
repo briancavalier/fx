@@ -66,6 +66,10 @@
       "types": "./dist/exports/timeout.d.ts",
       "import": "./dist/exports/timeout.js"
     },
+    "./yield": {
+      "types": "./dist/exports/yield.d.ts",
+      "import": "./dist/exports/yield.js"
+    },
     "./trace": {
       "types": "./dist/exports/trace.d.ts",
       "import": "./dist/exports/trace.js"

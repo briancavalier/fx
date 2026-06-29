@@ -1,7 +1,9 @@
 import { EffectType } from './Effect.js'
 import { Fx } from './Fx.js'
+import type { AnyKey } from './Key.js'
 import type { AnyScope } from './Scope.js'
 import { Answer, Arg, Control, Handler } from './internal/Handler.js'
+import { sameKey } from './internal/keyIdentity.js'
 import { sameScope } from './internal/scopeIdentity.js'
 export type { Arg }
 
@@ -17,6 +19,9 @@ export type HandleReturn<E, A, R> = E extends A ? R : never
 
 type MatchedScopedEffect<A, Scope extends AnyScope> =
   A & { readonly scope: Scope }
+
+type MatchedKeyedEffect<A, Key extends AnyKey> =
+  A & { readonly key: Key }
 
 type ResidualScopedEffect<E, Scope extends AnyScope> =
   E extends { readonly scope: infer EffectScope extends AnyScope }
@@ -37,11 +42,36 @@ export type HandleScoped<E, A, Scope extends AnyScope, B = never> =
     : E
   : E
 
+type ResidualKeyedEffect<E, Key extends AnyKey> =
+  E extends { readonly key: infer EffectKey extends AnyKey }
+  ? Exclude<EffectKey, Key> extends never
+    ? never
+    : E & { readonly key: Exclude<EffectKey, Key> }
+  : E
+
+/**
+ * Replace matching keyed effects in `E` with effects produced by a handler.
+ */
+export type HandleKeyed<E, A, Key extends AnyKey, B = never> =
+  E extends A
+  ? E extends { readonly key: infer EffectKey extends AnyKey }
+    ? Extract<EffectKey, Key> extends never
+      ? E
+      : B | ResidualKeyedEffect<E, Key>
+    : E
+  : E
+
 type ScopedEffectType =
   EffectType & { new(...args: readonly any[]): { readonly scope: AnyScope } }
 
 type EffectScope<T extends ScopedEffectType> =
   InstanceType<T>['scope']
+
+type KeyedEffectType =
+  EffectType & { new(...args: readonly any[]): { readonly key: AnyKey } }
+
+type EffectKey<T extends KeyedEffectType> =
+  InstanceType<T>['key']
 
 /**
  * Handle effects of the given type.
@@ -106,6 +136,26 @@ export const handleScoped = <T extends ScopedEffectType, const Scope extends Eff
 
       return effect as Fx<InstanceType<T>, Answer<T>>
     }) as Fx<HandleScoped<E, InstanceType<T>, Scope, HandlerEffects>, A>
+
+/**
+ * Handle keyed effects of the given type from one key.
+ *
+ * Effects of the same type from other keys are left unhandled.
+ */
+export const handleKeyed = <T extends KeyedEffectType, const Key extends EffectKey<T>, HandlerEffects>(
+  e: T,
+  key: Key,
+  f: (effect: MatchedKeyedEffect<InstanceType<T>, Key>) => Fx<HandlerEffects, Answer<T>>
+) => <const E, const A>(
+  fx: Fx<E, A>
+): Fx<HandleKeyed<E, InstanceType<T>, Key, HandlerEffects>, A> =>
+    new Handler(fx, e._fxEffectId, effect => {
+      if (sameKey(effect.key, key)) {
+        return f(effect as MatchedKeyedEffect<InstanceType<T>, Key>)
+      }
+
+      return effect as Fx<InstanceType<T>, Answer<T>>
+    }) as Fx<HandleKeyed<E, InstanceType<T>, Key, HandlerEffects>, A>
 
 /**
  * Handle effects of the given type with control over resuming the program.

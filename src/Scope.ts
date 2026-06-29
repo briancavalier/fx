@@ -201,8 +201,10 @@ export function withScope<const E, const A>(
   }
   const options = typeof optionsOrBody === 'function' ? undefined : optionsOrBody
   const f = typeof optionsOrBody === 'function' ? optionsOrBody : body!
-  const scope = createLifetimeScope(options)
-  return new ScopeBoundary(f(scope as unknown as LifetimeScope<never>), scope, undefined, true) as Fx<ScopeEffects<E, AnyLifetimeScope>, A | ReturnValue<E, AnyLifetimeScope>>
+  return fx(function* () {
+    const scope = createLifetimeScope(options)
+    return yield* new ScopeBoundary(f(scope as unknown as LifetimeScope<never>), scope, undefined, true)
+  }) as Fx<ScopeEffects<E, AnyLifetimeScope>, A | ReturnValue<E, AnyLifetimeScope>>
 }
 
 export function withControlScope<const E, const A>(
@@ -218,8 +220,10 @@ export function withControlScope<const E, const A>(
 ): Fx<ScopeEffects<E, AnyControlScope>, A | ReturnValue<E, AnyControlScope>> {
   const options = typeof optionsOrBody === 'function' ? undefined : optionsOrBody
   const f = typeof optionsOrBody === 'function' ? optionsOrBody : body!
-  const scope = createControlScope(options)
-  return new ScopeBoundary(f(scope as unknown as ControlScope<never>), scope, undefined, true) as Fx<ScopeEffects<E, AnyControlScope>, A | ReturnValue<E, AnyControlScope>>
+  return fx(function* () {
+    const scope = createControlScope(options)
+    return yield* new ScopeBoundary(f(scope as unknown as ControlScope<never>), scope, undefined, true)
+  }) as Fx<ScopeEffects<E, AnyControlScope>, A | ReturnValue<E, AnyControlScope>>
 }
 
 export type ScopeEffects<E, Scope extends AnyLifetimeScope> =

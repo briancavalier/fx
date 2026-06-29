@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { abort, Abort } from './Abort.js'
+import { abort, Abort, orReturn } from './Abort.js'
 import { forkIn, withUnboundedConcurrency } from './Concurrent.js'
 import { assert as assertNoFail, fail, Fail, returnFail } from './Fail.js'
 import { andFinally, andFinallyIn } from './Finalization.js'
@@ -9,7 +9,7 @@ import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { interruptFrom, InterruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { returnFrom, ReturnFrom } from './ReturnFrom.js'
 import { scoped } from './Scoped.js'
-import { currentScope, sameScope, scope, withScope, type AnyLifetimeScope, type Control } from './Scope.js'
+import { currentScope, sameScope, scope, withControlScope, withScope, type AnyControlScope, type AnyLifetimeScope, type Control } from './Scope.js'
 import { getState, modifyState } from './State.js'
 import { yieldFrom } from './YieldFrom.js'
 
@@ -42,6 +42,38 @@ describe('currentScope', () => {
       () => andFinallyIn(leaked!, ok(undefined)),
       /used after its scope exited/
     )
+  })
+
+  it('allocates lexical lifetime handles per execution', () => {
+    const handles: AnyLifetimeScope[] = []
+    const program = withScope({ label: 'repeatable' }, scope => fx(function* () {
+      handles.push(scope)
+      yield* andFinallyIn(scope, ok(undefined))
+      return 'ok' as const
+    })).pipe(returnFail)
+
+    assert.equal(run(program), 'ok')
+    assert.equal(run(program), 'ok')
+    assert.equal(handles.length, 2)
+    assert.equal(handles[0]?.label, 'repeatable')
+    assert.equal(handles[1]?.label, 'repeatable')
+    assert.equal(sameScope(handles[0]!, handles[1]!), false)
+  })
+
+  it('allocates lexical control handles per execution', () => {
+    const handles: AnyControlScope[] = []
+    const program = withControlScope({ label: 'repeatable control' }, scope => fx(function* () {
+      handles.push(scope)
+      yield* abort(scope)
+      return 'late' as const
+    }).pipe(orReturn(scope, 'aborted' as const), returnFail))
+
+    assert.equal(run(program), 'aborted')
+    assert.equal(run(program), 'aborted')
+    assert.equal(handles.length, 2)
+    assert.equal(handles[0]?.label, 'repeatable control')
+    assert.equal(handles[1]?.label, 'repeatable control')
+    assert.equal(sameScope(handles[0]!, handles[1]!), false)
   })
 
   it('is eliminated by withScope', () => {

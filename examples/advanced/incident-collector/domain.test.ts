@@ -8,8 +8,6 @@ import { withScope } from '@briancavalier/fx/scope'
 import { withClock, VirtualClock } from '@briancavalier/fx/time'
 
 import {
-  BundleScope,
-  CollectorScope,
   collectIncidentSnapshot,
   createIncidentCollectorFixture,
   type IncidentCollectorError,
@@ -104,22 +102,25 @@ describe('incident collector example', () => {
   })
 
   it('keeps domain effects visible until handlers remove them', () => {
-    const program = collectIncidentSnapshot({
-      incidentId: 'INC-types',
-      services: ['api']
-    })
-    // @ts-expect-error the raw domain program still requires incident collector effects.
-    const unhandled: Fx<never, SnapshotSummary> = program
-    void unhandled
-
     const fixture = createIncidentCollectorFixture()
-    const handled = program.pipe(
-      fixture.handle,
-      withScope(CollectorScope),
-      withClock(new VirtualClock(0)),
+    const handled = withScope(bundleScope =>
+      withScope(collectorScope => {
+        const program = collectIncidentSnapshot(bundleScope, collectorScope, {
+          incidentId: 'INC-types',
+          services: ['api']
+        })
+        // @ts-expect-error the raw domain program still requires incident collector effects.
+        const unhandled: Fx<never, SnapshotSummary> = program
+        void unhandled
+
+        return program.pipe(
+          fixture.handle,
+          withClock(new VirtualClock(0)),
+          withBoundedConcurrency(6)
+        )
+      })
+    ).pipe(
       collect,
-      withBoundedConcurrency(6),
-      withScope(BundleScope),
       returnAll
     )
 
@@ -132,16 +133,17 @@ const runSnapshot = async (
   fixture: ReturnType<typeof createIncidentCollectorFixture>,
   clock = new VirtualClock(Date.parse('2026-05-17T00:00:00.000Z'))
 ): Promise<SnapshotSummary | IncidentCollectorError | AggregateError | Error> => {
-  const running = collectIncidentSnapshot({
-    incidentId: 'INC-1',
-    services: ['api', 'worker', 'billing']
-  }).pipe(
-    fixture.handle,
-    withScope(CollectorScope),
-    withClock(clock),
+  const running = withScope({ label: 'bundle' }, bundleScope =>
+    withScope({ label: 'collector' }, collectorScope => collectIncidentSnapshot(bundleScope, collectorScope, {
+      incidentId: 'INC-1',
+      services: ['api', 'worker', 'billing']
+    }).pipe(
+      fixture.handle,
+      withClock(clock),
+      withBoundedConcurrency(6)
+    ))
+  ).pipe(
     collect,
-    withBoundedConcurrency(6),
-    withScope(BundleScope),
     returnAll,
     runPromise
   )

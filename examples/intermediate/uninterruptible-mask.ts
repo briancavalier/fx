@@ -1,7 +1,7 @@
 import { assert as assertNoFail, consoleLog, control, defaultConsole, fx, runPromise, uninterruptibleMask } from '@briancavalier/fx'
 import { withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 
-import { andFinallyIn, InterruptFrom, scope, withScope } from '@briancavalier/fx/scope'
+import { andFinallyIn, InterruptFrom, withScope, type AnyLifetimeScope } from '@briancavalier/fx/scope'
 
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 import { timeout } from '@briancavalier/fx/timeout'
@@ -14,8 +14,6 @@ import { timeout } from '@briancavalier/fx/timeout'
  * Interruption is deferred until the acquire/register section completes, so
  * cleanup is registered before the slow operation is interrupted.
  */
-
-const ExampleScope = scope('examples/intermediate/uninterruptible-mask')
 
 const acquireResource = fx(function* () {
   yield* consoleLog('slow: acquiring resource')
@@ -30,9 +28,9 @@ const useResource = (resource: string) => fx(function* () {
   yield* consoleLog(`slow: done using ${resource}`)
 })
 
-const slow = uninterruptibleMask(restore => fx(function* () {
+const slow = (exampleScope: AnyLifetimeScope) => uninterruptibleMask(restore => fx(function* () {
   const resource = yield* acquireResource
-  yield* andFinallyIn(ExampleScope, exit => fx(function* () {
+  yield* andFinallyIn(exampleScope, exit => fx(function* () {
     const reason = exit.type === 'interrupted' && exit.reason instanceof Error
       ? ` (${exit.reason.message})`
       : ''
@@ -46,14 +44,13 @@ const slow = uninterruptibleMask(restore => fx(function* () {
 }))
 
 const main = fx(function* () {
-  const result = yield* slow.pipe(
+  const result = yield* withScope({ label: 'uninterruptible mask example' }, exampleScope => slow(exampleScope).pipe(
     timeout({ ms: 50 })
-  )
+  ))
   yield* consoleLog('result:', result)
 })
 
 await main.pipe(
-  withScope(ExampleScope),
   control(InterruptFrom, () => fx(function* () {
     yield* consoleLog('result: timed out')
   })),

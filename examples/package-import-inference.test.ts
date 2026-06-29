@@ -19,7 +19,7 @@ import {
   withCoopConcurrency,
   withUnboundedConcurrency
 } from '@briancavalier/fx/concurrent'
-import { andFinally, andFinallyIn, sameScope, scope, scopeId, scopeLabel, using, usingIn, usingManaged, usingManagedIn, withScope, type AnyScope } from '@briancavalier/fx/scope'
+import { andFinally, andFinallyIn, sameScope, scopeId, scopeLabel, using, usingIn, usingManaged, usingManagedIn, withScope, type AnyScope } from '@briancavalier/fx/scope'
 import { getState, modifyState, transactionalState } from '@briancavalier/fx/state'
 import { TimeoutInterrupt, timeout, timeoutIn } from '@briancavalier/fx/timeout'
 
@@ -41,7 +41,6 @@ describe('package import inference', () => {
     assert.equal(typeof withCoopConcurrency, 'function')
     assert.equal(typeof RaceAllFailed, 'function')
 
-    assert.equal(typeof scope, 'function')
     assert.equal(typeof scopeId, 'function')
     assert.equal(typeof scopeLabel, 'function')
     assert.equal(typeof sameScope, 'function')
@@ -69,6 +68,7 @@ describe('package import inference', () => {
     const noFirstSettledPolicy: HasExport<typeof concurrentApi, `first${'Settled'}Policy`> = false
     const noFirstSuccessPolicy: HasExport<typeof concurrentApi, `first${'Success'}Policy`> = false
     const noScopeTypeId: HasExport<typeof scopeApi, `Scope${'Type'}Id`> = false
+    const noScopeConstructor: HasExport<typeof scopeApi, `sc${'ope'}`> = false
     const noScopeFinalizing: HasExport<typeof scopeApi, `final${'izing'}`> = false
     const noRunCatchScoped: HasExport<typeof fxApi, `runCatch${'Scoped'}`> = false
     const noCheckpointMain: HasExport<typeof fxApi, `check${'point'}`> = false
@@ -92,6 +92,7 @@ describe('package import inference', () => {
     assert.equal(noFirstSettledPolicy, false)
     assert.equal(noFirstSuccessPolicy, false)
     assert.equal(noScopeTypeId, false)
+    assert.equal(noScopeConstructor, false)
     assert.equal(noScopeFinalizing, false)
     assert.equal(noRunCatchScoped, false)
     assert.equal(noCheckpointMain, false)
@@ -129,21 +130,23 @@ describe('package import inference', () => {
   })
 
   it('preserves ScopedEffect instance types through package declarations', () => {
-    const Scope = scope('test/package-import-inference/ScopedAsk')
     class ScopedAsk<const S extends AnyScope> extends ScopedEffect('test/package-import-inference/ScopedAsk')<S, string, string> { }
 
-    const program = fx(function* () {
-      return yield* new ScopedAsk(Scope, 'name')
+    const program = withScope(scope => {
+      const scopedProgram = fx(function* () {
+        return yield* new ScopedAsk(scope, 'name')
+      })
+      const effectIsScopedAsk: EffectOf<typeof scopedProgram> extends ScopedAsk<typeof scope> ? true : false = true
+      assert.equal(effectIsScopedAsk, true)
+      return scopedProgram
     })
 
     const effectIsAny: IsAny<EffectOf<typeof program>> = false
-    const effectIsScopedAsk: EffectOf<typeof program> extends ScopedAsk<typeof Scope> ? true : false = true
 
     // @ts-expect-error ScopedAsk remains visible until a scoped handler removes it.
     const runnable: Fx<never, string> = program
 
     assert.equal(effectIsAny, false)
-    assert.equal(effectIsScopedAsk, true)
     void runnable
   })
 })

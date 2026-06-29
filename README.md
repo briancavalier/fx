@@ -145,20 +145,17 @@ import {
   fx,
   run
 } from "@briancavalier/fx"
-import { andFinallyIn, scope, withScope } from "@briancavalier/fx/scope"
+import { andFinallyIn, withScope } from "@briancavalier/fx/scope"
 
-const RequestScope = scope("request")
-
-const request = fx(function* () {
-  yield* andFinallyIn(RequestScope, exit =>
+const request = withScope({ label: "request" }, scope => fx(function* () {
+  yield* andFinallyIn(scope, exit =>
     consoleLog(`cleanup after ${exit.type}`)
   )
 
   yield* consoleLog("handling request")
-})
+}))
 
 request.pipe(
-  withScope(RequestScope),
   defaultConsole,
   assertNoFail,
   run

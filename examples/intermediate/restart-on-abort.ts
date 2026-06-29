@@ -1,7 +1,5 @@
-import { abort, managed, orReturn, restartOnAbort, scope, usingManagedIn, type Control } from '@briancavalier/fx/scope'
+import { abort, managed, orReturn, restartOnAbort, usingManagedIn, withControlScope, type AnyControlScope } from '@briancavalier/fx/scope'
 import { assert as assertNoFail, consoleLog, defaultConsole, fx, run } from '@briancavalier/fx'
-
-const SubmitOrder = scope<Control>()('examples/intermediate/restart-on-abort/SubmitOrder')
 
 type AuthToken = {
   readonly value: string
@@ -37,12 +35,12 @@ const refreshToken = () => fx(function* () {
   token = { value: 'fresh-token', expired: false }
 })
 
-const submitToGateway = (session: OrderSession) => fx(function* () {
+const submitToGateway = (submitOrder: AnyControlScope, session: OrderSession) => fx(function* () {
   yield* consoleLog(`submit order in session ${session.id} with ${token.value}`)
 
   if (token.expired) {
     yield* refreshToken()
-    yield* abort(SubmitOrder)
+    yield* abort(submitOrder)
   }
 
   const confirmation = `order-${nextConfirmationId}`
@@ -51,13 +49,13 @@ const submitToGateway = (session: OrderSession) => fx(function* () {
   return { type: 'confirmed', confirmation } satisfies OrderResult
 })
 
-const submitOrder = fx(function* () {
-  const session = yield* usingManagedIn(SubmitOrder, openOrderSession())
-  return yield* submitToGateway(session)
+const submitOrder = withControlScope({ label: 'submit order' }, submitOrder => fx(function* () {
+  const session = yield* usingManagedIn(submitOrder, openOrderSession())
+  return yield* submitToGateway(submitOrder, session)
 }).pipe(
-  restartOnAbort(SubmitOrder, { restarts: 1 }),
-  orReturn(SubmitOrder, { type: 'failed', reason: 'auth refresh did not recover' } satisfies OrderResult)
-)
+  restartOnAbort(submitOrder, { restarts: 1 }),
+  orReturn(submitOrder, { type: 'failed', reason: 'auth refresh did not recover' } satisfies OrderResult)
+))
 
 const main = fx(function* () {
   const result = yield* submitOrder

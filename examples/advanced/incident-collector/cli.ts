@@ -5,8 +5,6 @@ import { withConsoleLog } from '@briancavalier/fx/log'
 import { withScope } from '@briancavalier/fx/scope'
 import { defaultTime } from '@briancavalier/fx/time'
 import {
-  BundleScope,
-  CollectorScope,
   collectIncidentSnapshot,
   createIncidentCollectorFixture
 } from './domain.js'
@@ -17,21 +15,22 @@ const runSnapshot = (label: string, failDeploy: boolean) => fx(function* () {
     primaryRuntimeFails: true
   })
 
-  const result = yield* collectIncidentSnapshot({
-    incidentId: failDeploy ? 'INC-2026-05-17-B' : 'INC-2026-05-17-A',
-    services: ['api', 'worker', 'billing']
-  }).pipe(
-    fixture.handle,
-    withScope(CollectorScope),
+  const result = yield* withScope({ label: 'bundle' }, bundleScope =>
+    withScope({ label: 'collector' }, collectorScope => collectIncidentSnapshot(bundleScope, collectorScope, {
+      incidentId: failDeploy ? 'INC-2026-05-17-B' : 'INC-2026-05-17-A',
+      services: ['api', 'worker', 'billing']
+    }).pipe(
+      fixture.handle,
+      // Toggle scheduler handlers:
+      // fork-backed scheduling:
+      // withBoundedConcurrency(6),
+      // cooperative scheduling:
+      withCoopConcurrency({ concurrency: 6, yieldBudget: 64 })
+    ))
+  ).pipe(
     withConsoleLog,
     defaultTime,
-    // Toggle scheduler handlers:
-    // fork-backed scheduling:
-    // withBoundedConcurrency(6),
-    // cooperative scheduling:
-    withCoopConcurrency({ concurrency: 6, yieldBudget: 64 }),
-    withScope(BundleScope),
-    returnAll,
+    returnAll
   )
 
   yield* consoleLog(`\n${label}`)

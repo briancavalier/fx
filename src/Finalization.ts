@@ -2,7 +2,7 @@ import { ScopedEffect } from './Effect.js'
 import { Fx, fx } from './Fx.js'
 import { uninterruptible } from './Interrupt.js'
 import type { Interrupt } from './Interrupt.js'
-import { currentScope, type AnyLifetimeScope, type Exit } from './Scope.js'
+import { assertScopeOpen, currentScope, type AnyLifetimeScope, type Exit } from './Scope.js'
 
 // ----------------------------------------------------------------------
 // Guaranteed finalization effects within a scope
@@ -70,6 +70,7 @@ export function andFinallyIn<const Scope extends AnyLifetimeScope, E>(
   scope: Scope,
   f: Fx<E, void> | ((exit: Exit) => Fx<E, void>)
 ): Fx<Finally<Scope, E>, void> {
+  assertScopeOpen(scope)
   return new Finally(scope, typeof f === 'function' ? f : () => f)
 }
 

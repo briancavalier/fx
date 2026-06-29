@@ -6,13 +6,14 @@ import { Fail, fail, returnFail } from './Fail.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { andFinally, andFinallyIn, managed, using, usingIn, usingManaged, usingManagedIn, type Finally, type Managed } from './Finalization.js'
 import type { Interrupt } from './Interrupt.js'
+import { key } from './Key.js'
 import { returnFrom } from './ReturnFrom.js'
 import { currentScope, scope, withScope, type Control, type Exit } from './Scope.js'
 import { collectFrom, YieldFrom, yieldFrom, type Yielding } from './YieldFrom.js'
 
 describe('Finalization', () => {
   const TestScope = scope<Control>()('test/Finalization')
-  const CleanupEvents = scope<Yielding<'cleanup'>>()('test/Finalization/cleanup')
+  const CleanupEvents = key<Yielding<'cleanup'>>()('test/Finalization/cleanup')
 
   it('preserves finalizer effects in constructor types', () => {
     const releaseFailure = new Error('release failed')
@@ -116,7 +117,7 @@ describe('Finalization', () => {
       return 'done'
     }).pipe(withScope(TestScope))
 
-    const _: typeof scoped extends Fx<Finally<typeof OtherScope, YieldFrom<typeof CleanupEvents>>, 'done'> ? true : false = true
+    const _: typeof scoped extends Fx<Finally<typeof OtherScope, YieldFrom<typeof CleanupEvents>> | Fail<AggregateError>, 'done'> ? true : false = true
     const next = scoped[Symbol.iterator]().next()
 
     assert.equal(typeof _, 'boolean')

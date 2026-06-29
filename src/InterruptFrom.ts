@@ -2,7 +2,7 @@ import { at } from './Breadcrumb.js'
 import { ScopedEffect, withOrigin } from './Effect.js'
 import { Fx } from './Fx.js'
 import { control } from './Handler.js'
-import type { AnyLifetimeScope, AnyScope } from './Scope.js'
+import { assertScopeOpen, type AnyLifetimeScope, type AnyScope } from './Scope.js'
 import { sameScope } from './internal/scopeIdentity.js'
 
 /**
@@ -19,6 +19,7 @@ export function interruptFrom<const Scope extends AnyLifetimeScope, const Reason
   reason: Reason
 ): Fx<InterruptFrom<Scope, Reason>, never>
 export function interruptFrom(scope: AnyLifetimeScope, reason?: unknown): Fx<InterruptFrom<AnyLifetimeScope, unknown>, never> {
+  assertScopeOpen(scope)
   return withOrigin(
     new InterruptFrom(scope, reason),
     at('fx/InterruptFrom/interruptFrom', interruptFrom)

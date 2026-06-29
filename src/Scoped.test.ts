@@ -9,11 +9,41 @@ import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { interruptFrom, InterruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { returnFrom, ReturnFrom } from './ReturnFrom.js'
 import { scoped } from './Scoped.js'
-import { currentScope, scope, withScope, type Control } from './Scope.js'
+import { currentScope, sameScope, scope, withScope, type AnyLifetimeScope, type Control } from './Scope.js'
 import { getState, modifyState } from './State.js'
 import { yieldFrom } from './YieldFrom.js'
 
 describe('currentScope', () => {
+  it('creates distinct lexical handles for scopes with the same label', () => {
+    let first: AnyLifetimeScope | undefined
+    let second: AnyLifetimeScope | undefined
+
+    const result = withScope({ label: 'request' }, outer => fx(function* () {
+      first = outer
+      return yield* withScope({ label: 'request' }, inner => fx(function* () {
+        second = inner
+        return sameScope(outer, inner)
+      }))
+    })).pipe(run)
+
+    assert.equal(result, false)
+    assert.equal(first?.label, 'request')
+    assert.equal(second?.label, 'request')
+  })
+
+  it('rejects scope handles used after their lexical scope exits', () => {
+    let leaked: AnyLifetimeScope | undefined
+
+    withScope(scope => fx(function* () {
+      leaked = scope
+    })).pipe(run)
+
+    assert.throws(
+      () => andFinallyIn(leaked!, ok(undefined)),
+      /used after its scope exited/
+    )
+  })
+
   it('is eliminated by withScope', () => {
     const TestScope = scope('test/CurrentScope/type')
     const program = andFinally(ok(undefined)).pipe(withScope(TestScope))

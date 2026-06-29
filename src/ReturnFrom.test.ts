@@ -45,7 +45,7 @@ describe('ReturnFrom', () => {
     const next = f[Symbol.iterator]().next()
 
     assert.equal(ReturnFrom.is(next.value), true)
-    const effect = next.value as ReturnFrom<typeof OtherScope, 'other'>
+    const effect = next.value as unknown as ReturnFrom<typeof OtherScope, 'other'>
     assert.equal(effect.scope, OtherScope)
     assert.equal(effect.arg, 'other')
   })

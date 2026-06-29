@@ -78,7 +78,7 @@ describe('Typed interruption', () => {
     const next = f[Symbol.iterator]().next()
 
     assert.equal(InterruptFrom.is(next.value), true)
-    assert.equal((next.value as InterruptFrom<typeof OtherScope, 'other'>).scope, OtherScope)
+    assert.equal((next.value as unknown as InterruptFrom<typeof OtherScope, 'other'>).scope, OtherScope)
   })
 
   it('surfaces cleanup failures before recovering an interruption', () => {

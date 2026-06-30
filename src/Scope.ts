@@ -197,8 +197,10 @@ export function withScope<const E, const A>(
   if (typeof optionsOrBody === 'object' && ScopeTypeId in optionsOrBody) {
     const scope = optionsOrBody as AnyLifetimeScope
     assertScopeOpen(scope)
-    return <const E2, const A2>(f: Fx<E2, A2>) =>
-      new ScopeBoundary(f, scope) as Fx<ScopeEffects<E2, typeof scope>, A2 | ReturnValue<E2, typeof scope>>
+    return <const E2, const A2>(f: Fx<E2, A2>) => {
+      assertScopeOpen(scope)
+      return new ScopeBoundary(f, scope) as Fx<ScopeEffects<E2, typeof scope>, A2 | ReturnValue<E2, typeof scope>>
+    }
   }
   const options = typeof optionsOrBody === 'function' ? undefined : optionsOrBody
   const f = typeof optionsOrBody === 'function' ? optionsOrBody : body!

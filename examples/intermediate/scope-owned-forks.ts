@@ -15,7 +15,7 @@ const child = (name: string, ms: number) => fx(function* () {
   return name
 })
 
-const request = (requestScope: AnyLifetimeScope) => fx(function* () {
+const request = <const S extends AnyLifetimeScope>(requestScope: S) => fx(function* () {
   yield* timeoutIn(requestScope, { ms: 35, label: 'request deadline' })
   yield* forkIn(requestScope, child('fast-cache-refresh', 20))
   yield* forkIn(requestScope, child('slow-profile-load', 80))

@@ -57,6 +57,19 @@ describe('currentScope', () => {
     )
   })
 
+  it('rejects cached withScope pipeables for closed lexical handles', () => {
+    let cached: ((f: Fx<unknown, unknown>) => Fx<unknown, unknown>) | undefined
+
+    withScope(scope => fx(function* () {
+      cached = withScope(scope)
+    })).pipe(run)
+
+    assert.throws(
+      () => cached!(andFinally(ok(undefined))),
+      /used after its scope exited/
+    )
+  })
+
   it('allocates lexical lifetime handles per execution', () => {
     const handles: AnyLifetimeScope[] = []
     const program = withScope({ label: 'repeatable' }, scope => fx(function* () {

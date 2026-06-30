@@ -28,7 +28,7 @@ const fetchFromCache = fx(function* () {
   return 'cached result'
 })
 
-const fetchFromDatabase = (requestScope: AnyLifetimeScope) => fx(function* () {
+const fetchFromDatabase = <const S extends AnyLifetimeScope>(requestScope: S) => fx(function* () {
   const connection = yield* usingIn(
     requestScope,
     openConnection,
@@ -45,7 +45,7 @@ const fetchFromDatabase = (requestScope: AnyLifetimeScope) => fx(function* () {
   return 'database result'
 })
 
-const main = (requestScope: AnyLifetimeScope) => fx(function* () {
+const main = <const S extends AnyLifetimeScope>(requestScope: S) => fx(function* () {
   const result = yield* race([
     fetchFromCache,
     fetchFromDatabase(requestScope),

@@ -22,7 +22,7 @@ type IndexedCsvRow = {
 const CsvRows = key<Yielding<CsvRow>>()('examples/intermediate/CsvRows')
 const IndexedCsvRows = key<Yielding<IndexedCsvRow>>()('examples/intermediate/IndexedCsvRows')
 
-const stopImport = (scope: AnyControlScope, reason: string) =>
+const stopImport = <const S extends AnyControlScope>(scope: S, reason: string) =>
   returnFrom(scope, { type: 'skipped', reason } satisfies ImportResult)
 
 const openCsv = (path: string, text: string) => fx(function* () {
@@ -57,7 +57,7 @@ const withIndex = <E>(rows: Fx<E | YieldFrom<typeof CsvRows>, void>) => fx(funct
   })))
 })
 
-const validateHeader = (scope: AnyControlScope, header: readonly string[] | undefined) => fx(function* () {
+const validateHeader = <const S extends AnyControlScope>(scope: S, header: readonly string[] | undefined) => fx(function* () {
   if (header === undefined) {
     return yield* stopImport(scope, 'CSV is empty')
   }
@@ -67,7 +67,7 @@ const validateHeader = (scope: AnyControlScope, header: readonly string[] | unde
   }
 })
 
-const importRows = (scope: AnyControlScope, file: CsvFile) => fx(function* () {
+const importRows = <const S extends AnyControlScope>(scope: S, file: CsvFile) => fx(function* () {
   let count = 0
 
   yield* readCsvRows(file).pipe(

@@ -4,7 +4,7 @@ import { withBoundedConcurrency } from '@briancavalier/fx/concurrent'
 import { type Async, type Fx, type HandlerCapture, type Interrupt, returnAll, runPromise } from '@briancavalier/fx'
 
 import { collect } from '@briancavalier/fx/log'
-import { withScope } from '@briancavalier/fx/scope'
+import { withScope, type Finally, type LifetimeScope } from '@briancavalier/fx/scope'
 import { withClock, VirtualClock } from '@briancavalier/fx/time'
 
 import {
@@ -13,6 +13,12 @@ import {
   type IncidentCollectorError,
   type SnapshotSummary
 } from './domain.js'
+
+type EffectOf<T> = T extends Fx<infer E, unknown> ? E : never
+declare const BundleScopeBrand: unique symbol
+declare const CollectorScopeBrand: unique symbol
+declare const BundleScopeForTest: LifetimeScope<typeof BundleScopeBrand>
+declare const CollectorScopeForTest: LifetimeScope<typeof CollectorScopeBrand>
 
 describe('incident collector example', () => {
   it('writes snapshot entries and a manifest when collectors succeed', async () => {
@@ -126,6 +132,20 @@ describe('incident collector example', () => {
 
     const runnable: Fx<Async | HandlerCapture<string> | Interrupt, unknown> = handled
     void runnable
+  })
+
+  it('keeps bundle finalizers visible when only the collector scope is handled', () => {
+    const typecheck = (): void => {
+      const handled = collectIncidentSnapshot(BundleScopeForTest, CollectorScopeForTest, {
+        incidentId: 'INC-types',
+        services: ['api']
+      }).pipe(withScope(CollectorScopeForTest))
+
+      const bundleFinalizerVisible: Extract<EffectOf<typeof handled>, Finally<typeof BundleScopeForTest>> extends never ? false : true = true
+      assert.equal(bundleFinalizerVisible, true)
+    }
+
+    void typecheck
   })
 })
 

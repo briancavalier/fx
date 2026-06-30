@@ -35,7 +35,7 @@ const refreshToken = () => fx(function* () {
   token = { value: 'fresh-token', expired: false }
 })
 
-const submitToGateway = (submitOrder: AnyControlScope, session: OrderSession) => fx(function* () {
+const submitToGateway = <const S extends AnyControlScope>(submitOrder: S, session: OrderSession) => fx(function* () {
   yield* consoleLog(`submit order in session ${session.id} with ${token.value}`)
 
   if (token.expired) {

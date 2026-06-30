@@ -28,7 +28,7 @@ const useResource = (resource: string) => fx(function* () {
   yield* consoleLog(`slow: done using ${resource}`)
 })
 
-const slow = (exampleScope: AnyLifetimeScope) => uninterruptibleMask(restore => fx(function* () {
+const slow = <const S extends AnyLifetimeScope>(exampleScope: S) => uninterruptibleMask(restore => fx(function* () {
   const resource = yield* acquireResource
   yield* andFinallyIn(exampleScope, exit => fx(function* () {
     const reason = exit.type === 'interrupted' && exit.reason instanceof Error

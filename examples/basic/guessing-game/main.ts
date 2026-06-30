@@ -16,7 +16,7 @@ export class Read extends Effect('Read')<string, string> { }
 
 const read = (prompt: string) => new Read(prompt)
 
-export const toInteger = (parseInteger: AnyControlScope, s: string) => {
+export const toInteger = <const S extends AnyControlScope>(parseInteger: S, s: string) => {
   const i = Number.parseInt(s, 10)
   return Number.isInteger(i) ? ok(i) : abort(parseInteger)
 }

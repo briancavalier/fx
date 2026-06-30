@@ -97,10 +97,10 @@ export const askModel = (request: ModelRequest) => new AskModel(request)
 export const runTool = (call: ToolCall) => new RunTool(call)
 export const startAgentSession = (task: string) => new StartAgentSession(task)
 
-export const runAgent = (
-  agentSessionScope: AnyLifetimeScope,
+export const runAgent = <const SessionScope extends AnyLifetimeScope>(
+  agentSessionScope: SessionScope,
   task: string
-): Fx<ToolAgentEffects, AgentAnswer> => fx(function* () {
+): Fx<ToolAgentEffects<SessionScope>, AgentAnswer> => fx(function* () {
   const session = yield* usingManagedIn(agentSessionScope, startAgentSession(task))
   yield* info('agent session started', { session: session.id, task })
 

@@ -292,26 +292,28 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
     public readonly fx: Fx<E, A>,
     public readonly scope: Scope,
     controller?: ScopeController<Scope>,
-    private readonly closeOnExit = false
+    private readonly closeOnExit = false,
+    private readonly checkOnEnter = true
   ) {
     this.controller = controller
     this.root = controller === undefined
   }
 
   wrap(fx: Fx<unknown, unknown>): Fx<unknown, unknown> {
-    return new ScopeBoundary(fx, this.scope)
+    // Captured handlers may replay after lexical exit; matching scoped effects still assert below.
+    return new ScopeBoundary(fx, this.scope, undefined, false, false)
   }
 
   wrapShared(fx: Fx<unknown, unknown>): Fx<unknown, unknown> {
     return this.controller === undefined
-      ? new ScopeBoundary(fx, this.scope)
-      : new ScopeBoundary(fx, this.scope, this.controller)
+      ? new ScopeBoundary(fx, this.scope, undefined, false, false)
+      : new ScopeBoundary(fx, this.scope, this.controller, false, false)
   }
 
   *[Symbol.iterator](): Iterator<unknown, A> {
     const { scope } = this
     const root = this.root
-    if (root) assertScopeOpen(scope)
+    if (root && this.checkOnEnter) assertScopeOpen(scope)
     const controller = this.controller ?? new ScopeController(scope)
     const activeScope = root && scope.diagnostic !== false ? scopeDiagnostic(scope) : undefined
     const withMaybeActiveScope = <E, A>(fx: Fx<E, A>): Fx<E, A> =>
@@ -319,10 +321,10 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
     const scopedFx = root ? controller.withExitSource(this.fx) : this.fx
     const i = withMaybeActiveScope(scopedFx)[Symbol.iterator]()
     const captured: CapturedHandler = {
-      wrap: fx => new ScopeBoundary(fx, scope)
+      wrap: fx => new ScopeBoundary(fx, scope, undefined, false, false)
     }
     const capturedShared: CapturedHandler = {
-      wrap: fx => new ScopeBoundary(fx, scope, controller)
+      wrap: fx => new ScopeBoundary(fx, scope, controller, false, false)
     }
     let released = false
     const release = function* (exit: Exit<Scope>): Generator<unknown, ScopeRelease<Scope>> {
@@ -368,6 +370,7 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
 
       const effectScope = (effect as { readonly scope?: AnyScope }).scope
       const matchesScope = effectScope !== undefined && sameScope(effectScope, scope)
+      if (matchesScope) assertScopeOpen(effectScope)
 
       if (matchesScope && Finally.is(effect)) {
         controller.addFinalizer(effect.arg)

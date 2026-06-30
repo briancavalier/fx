@@ -11,7 +11,7 @@ import { type HandlerCapture } from './HandlerCapture.js'
 import { interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible } from './Interrupt.js'
 import { ReturnFrom, returnFrom } from './ReturnFrom.js'
-import { scope, inScope, type Control, type Exit } from './Scope.js'
+import { scope, withScope, inScope, type Control, type Exit } from './Scope.js'
 import { Task, wait } from './Task.js'
 import { getTrace, snapshotError } from './Trace.js'
 
@@ -2381,6 +2381,33 @@ describe('Scope-owned fork lifetime', () => {
     assert.deepEqual(events, [])
     await task.promise
     assert.deepEqual(events, ['fork done'])
+  })
+
+  it('runs queued caller-owned fork work after lexical scope exit', async () => {
+    const events = [] as string[]
+
+    const result = await fx(function* () {
+      const task = yield* withScope(scope => inScope(scope, fx(function* () {
+        yield* fork(fx(function* () {
+          events.push('blocker start')
+          yield* delayFx(10)
+          events.push('blocker done')
+        }))
+        return yield* fork(fx(function* () {
+          events.push('queued child')
+          return 'child'
+        }))
+      })))
+
+      events.push('scope exited')
+      return yield* wait(task)
+    }).pipe(
+      withCoopConcurrency({ concurrency: 1 }),
+      runPromise
+    )
+
+    assert.equal(result, 'child')
+    assert.deepEqual(events, ['scope exited', 'blocker start', 'blocker done', 'queued child'])
   })
 
   it('keeps forkEach caller-owned across normal scope exit', async () => {

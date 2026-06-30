@@ -70,6 +70,19 @@ describe('currentScope', () => {
     )
   })
 
+  it('rejects escaped scope boundaries for closed lexical handles', () => {
+    let escaped: Fx<unknown, unknown> | undefined
+
+    withScope(scope => fx(function* () {
+      escaped = andFinally(ok(undefined)).pipe(withScope(scope))
+    })).pipe(run)
+
+    assert.throws(
+      () => escaped![Symbol.iterator]().next(),
+      /used after its scope exited/
+    )
+  })
+
   it('allocates lexical lifetime handles per execution', () => {
     const handles: AnyLifetimeScope[] = []
     const program = withScope({ label: 'repeatable' }, scope => fx(function* () {

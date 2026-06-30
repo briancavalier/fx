@@ -294,8 +294,9 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
 
   *[Symbol.iterator](): Iterator<unknown, A> {
     const { scope } = this
-    const controller = this.controller ?? new ScopeController(scope)
     const root = this.root
+    if (root) assertScopeOpen(scope)
+    const controller = this.controller ?? new ScopeController(scope)
     const activeScope = root && scope.diagnostic !== false ? scopeDiagnostic(scope) : undefined
     const withMaybeActiveScope = <E, A>(fx: Fx<E, A>): Fx<E, A> =>
       activeScope === undefined ? fx : withActiveScope(activeScope, fx)

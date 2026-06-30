@@ -57,6 +57,15 @@ describe('Abort', () => {
   })
 
   describe('restartOnAbort', () => {
+    it('requires an explicit control scope handle', () => {
+      const typecheck = (): void => {
+        // @ts-expect-error restartOnAbort requires an explicit control scope handle.
+        const invalid = restartOnAbort({ restarts: 1 })
+        void invalid
+      }
+      void typecheck
+    })
+
     it('restarts a scoped computation after abort and returns success', () => {
       let attempts = 0
 

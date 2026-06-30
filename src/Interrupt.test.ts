@@ -169,7 +169,7 @@ describe('Interrupt masking', () => {
   })
 
   it('preserves handled effects', () => {
-    class Current extends Effect('test/Interrupt/Current')<void, string> { }
+    class Current extends Effect('test/Interrupt/Current')<[], string> { }
 
     const result = run(fx(function* () {
       return yield* uninterruptible(new Current())
@@ -179,7 +179,7 @@ describe('Interrupt masking', () => {
   })
 
   it('control abort inside uninterruptible drains mask cleanup', () => {
-    class Stop extends Effect('test/Interrupt/ControlStop')<void, string> { }
+    class Stop extends Effect('test/Interrupt/ControlStop')<[], string> { }
     const events = [] as string[]
 
     const result = run(uninterruptible(fx(function* () {
@@ -198,8 +198,8 @@ describe('Interrupt masking', () => {
   })
 
   it('handler closed by control abort drains mask cleanup', () => {
-    class Current extends Effect('test/Interrupt/HandlerCurrent')<void, string> { }
-    class Stop extends Effect('test/Interrupt/HandlerStop')<void, string> { }
+    class Current extends Effect('test/Interrupt/HandlerCurrent')<[], string> { }
+    class Stop extends Effect('test/Interrupt/HandlerStop')<[], string> { }
     const events = [] as string[]
 
     const result = run(uninterruptible(fx(function* () {
@@ -333,7 +333,7 @@ describe('Interrupt masking', () => {
   })
 
   it('finalizing runs cleanup after failure', () => {
-    class Cleanup extends Effect('test/Interrupt/finalizing/Cleanup')<string, void> { }
+    class Cleanup extends Effect('test/Interrupt/finalizing/Cleanup')<[string], void> { }
     const failure = new Error('failed')
     const released = [] as string[]
 
@@ -405,7 +405,7 @@ describe('Interrupt masking', () => {
   })
 
   it('finalizing cleanup effects are handled by handlers around the lexical region', () => {
-    class Request extends Effect('test/Interrupt/finalizing/Request')<string, void> { }
+    class Request extends Effect('test/Interrupt/finalizing/Request')<[string], void> { }
     const handled = [] as string[]
 
     fx(function* () {
@@ -421,7 +421,7 @@ describe('Interrupt masking', () => {
   })
 
   it('finalizing cleanup is not handled by handlers inside the protected program', () => {
-    class Request<A> extends Effect('test/Interrupt/finalizing/InnerRequest')<string, A> { }
+    class Request<A> extends Effect('test/Interrupt/finalizing/InnerRequest')<[string], A> { }
     const handled = [] as string[]
 
     const result = new Request<string>('program').pipe(

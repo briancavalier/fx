@@ -168,7 +168,7 @@ describe('Fork', () => {
     })
 
     it('runs forked tasks with handlers outside the fork handler', async () => {
-      class CurrentValue extends Effect('test/Fork/CurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/Fork/CurrentValue')<[], string> { }
 
       const f = fx(function* () {
         const t = yield* fork(new CurrentValue())
@@ -185,7 +185,7 @@ describe('Fork', () => {
     })
 
     it('runs forked tasks with handlers between fork and the fork handler', async () => {
-      class CurrentValue extends Effect('test/Fork/LocalCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/Fork/LocalCurrentValue')<[], string> { }
 
       const f = fx(function* () {
         const t = yield* fork(new CurrentValue())
@@ -321,7 +321,7 @@ describe('Fork', () => {
     })
 
     it('continues ready children while another child waits on async work', async () => {
-      class Step extends Effect('test/Fork/AllAsyncQueue')<string, void> { }
+      class Step extends Effect('test/Fork/AllAsyncQueue')<[string], void> { }
       const events = [] as string[]
       let releaseSlow!: () => void
       const slow = assertPromise<string>(() => new Promise(resolve => {
@@ -444,7 +444,7 @@ describe('Fork', () => {
     })
 
     it('runs children with handlers between all and withUnboundedConcurrency', async () => {
-      class CurrentValue extends Effect('test/Fork/AllCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/Fork/AllCurrentValue')<[], string> { }
 
       const result = await all([new CurrentValue()]).pipe(
         handle(CurrentValue, () => ok('handled')),
@@ -709,7 +709,7 @@ describe('Fork', () => {
     })
 
     it('runs mapped children with handlers between mapAll and withUnboundedConcurrency', async () => {
-      class CurrentValue extends Effect('test/Fork/MapAllCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/Fork/MapAllCurrentValue')<[], string> { }
 
       const result = await mapAll([1], () => new CurrentValue()).pipe(
         handle(CurrentValue, () => ok('handled')),
@@ -802,7 +802,7 @@ describe('Fork', () => {
     })
 
     it('interleaves ready children according to the yield budget', async () => {
-      class Step extends Effect('test/Fork/CooperativeAllStep')<string, void> { }
+      class Step extends Effect('test/Fork/CooperativeAllStep')<[string], void> { }
       const events = [] as string[]
       const child = (label: string) => fx(function* () {
         yield* new Step(`${label}1`)
@@ -823,7 +823,7 @@ describe('Fork', () => {
     })
 
     it('continues ready children while another child waits on async work', async () => {
-      class Step extends Effect('test/Fork/CooperativeAllAsyncQueue')<string, void> { }
+      class Step extends Effect('test/Fork/CooperativeAllAsyncQueue')<[string], void> { }
       const events = [] as string[]
       let releaseSlow!: () => void
       const slow = assertPromise<string>(() => new Promise(resolve => {
@@ -849,7 +849,7 @@ describe('Fork', () => {
     })
 
     it('runs children with handlers between all and withCoopConcurrency', async () => {
-      class CurrentValue extends Effect('test/Fork/CooperativeAllCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/Fork/CooperativeAllCurrentValue')<[], string> { }
 
       const result = await all([new CurrentValue()]).pipe(
         handle(CurrentValue, () => ok('handled')),
@@ -861,7 +861,7 @@ describe('Fork', () => {
     })
 
     it('runs mapped children with handlers between mapAll and withCoopConcurrency', async () => {
-      class CurrentValue extends Effect('test/Fork/CooperativeMapAllCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/Fork/CooperativeMapAllCurrentValue')<[], string> { }
 
       const result = await mapAll([1], () => new CurrentValue()).pipe(
         handle(CurrentValue, () => ok('handled')),
@@ -1071,7 +1071,7 @@ describe('Fork', () => {
 
     it('runs cleanup fork children with handlers outside withCoopConcurrency', async () => {
       const TestScope = scope('test/Fork/CooperativeCleanupForkOuterHandlerScope')
-      class CurrentValue extends Effect('test/Fork/CooperativeCleanupForkCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/Fork/CooperativeCleanupForkCurrentValue')<[], string> { }
       const events = [] as string[]
 
       const slow = fx(function* () {
@@ -1182,7 +1182,7 @@ describe('Fork', () => {
     })
 
     it('runs explicit forks with handlers between fork and withCoopConcurrency', async () => {
-      class CurrentValue extends Effect('test/Fork/CooperativeForkCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/Fork/CooperativeForkCurrentValue')<[], string> { }
 
       const result = await fx(function* () {
         const task = yield* fork(new CurrentValue())
@@ -1197,7 +1197,7 @@ describe('Fork', () => {
     })
 
     it('runs explicit forks with handlers outside withCoopConcurrency', async () => {
-      class CurrentValue extends Effect('test/Fork/CooperativeForkOuterCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/Fork/CooperativeForkOuterCurrentValue')<[], string> { }
 
       const result = await fx(function* () {
         const task = yield* fork(new CurrentValue())
@@ -1656,7 +1656,7 @@ describe('Fork', () => {
     })
 
     it('continues ready children while another child waits on async work', async () => {
-      class Step extends Effect('test/Fork/CooperativeStructuredAsyncQueue')<string, void> { }
+      class Step extends Effect('test/Fork/CooperativeStructuredAsyncQueue')<[string], void> { }
       const events = [] as string[]
       let releaseSlow!: () => void
       const slow = assertPromise<string>(() => new Promise(resolve => {
@@ -1682,7 +1682,7 @@ describe('Fork', () => {
     })
 
     it('runs handlers between structured effects and withCoopConcurrency', async () => {
-      class CurrentValue extends Effect('test/Fork/CooperativeStructuredCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/Fork/CooperativeStructuredCurrentValue')<[], string> { }
 
       const result = await all([
         race([new CurrentValue()])
@@ -1696,7 +1696,7 @@ describe('Fork', () => {
     })
 
     it('runs handlers between firstSuccess and withCoopConcurrency', async () => {
-      class CurrentValue extends Effect('test/Fork/CooperativeTaggedRaceCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/Fork/CooperativeTaggedRaceCurrentValue')<[], string> { }
 
       const result = await firstSuccess([new CurrentValue()]).pipe(
         handle(CurrentValue, () => ok('handled')),
@@ -1949,7 +1949,7 @@ describe('Fork', () => {
     })
 
     it('runs children with handlers between race and scheduler', async () => {
-      class CurrentValue extends Effect('test/Fork/RaceCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/Fork/RaceCurrentValue')<[], string> { }
 
       const result = await race([new CurrentValue()]).pipe(
         handle(CurrentValue, () => ok('handled')),
@@ -2082,7 +2082,7 @@ describe('Fork', () => {
     })
 
     it('runs children with handlers between firstSuccess and scheduler', async () => {
-      class CurrentValue extends Effect('test/Fork/FirstSuccessCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/Fork/FirstSuccessCurrentValue')<[], string> { }
 
       const result = await firstSuccess([new CurrentValue()]).pipe(
         handle(CurrentValue, () => ok('handled')),
@@ -2194,7 +2194,7 @@ describe('Scope-owned fork lifetime', () => {
 
   it('runs forkIn current-scope children through handlers captured at the registration site', async () => {
     const TestScope = scope('test/ForkIn/current-scope-captured-handler')
-    class CurrentValue extends Effect('test/ForkIn/CurrentScopeCapturedHandler')<void, string> { }
+    class CurrentValue extends Effect('test/ForkIn/CurrentScopeCapturedHandler')<[], string> { }
 
     const result = await fx(function* () {
       const task = yield* fx(function* () {
@@ -2905,7 +2905,7 @@ describe('Task interruption finalization', () => {
 
   it('runs interrupted finalizers through outer handlers', async () => {
     const TestScope = scope('test/Fork/InterruptedOuterHandler')
-    class Release extends Effect('test/Fork/InterruptedOuterHandler/Release')<void, void> { }
+    class Release extends Effect('test/Fork/InterruptedOuterHandler/Release')<[], void> { }
     const released = [] as string[]
 
     const task = taskOrThrow(await fx(function* () {
@@ -2930,7 +2930,7 @@ describe('Task interruption finalization', () => {
 
   it('runs interrupted finalizers through captured handlers', async () => {
     const TestScope = scope('test/Fork/InterruptedCapturedHandler')
-    class Release extends Effect('test/Fork/InterruptedCapturedHandler/Release')<void, void> { }
+    class Release extends Effect('test/Fork/InterruptedCapturedHandler/Release')<[], void> { }
     const released = [] as string[]
 
     const task = taskOrThrow(await fx(function* () {

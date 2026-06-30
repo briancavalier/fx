@@ -7,7 +7,7 @@ import type { ForkScheduling } from './concurrent/effects.js'
 
 export class ScopedFork<
   const Scope extends AnyScope = AnyScope
-> extends ScopedEffect('fx/Scope/ScopedFork')<Scope, ScopedForkContext, Task<unknown, unknown>> { }
+> extends ScopedEffect('fx/Scope/ScopedFork')<Scope, [ScopedForkContext], Task<unknown, unknown>> { }
 
 export interface ScopedForkContext extends TraceOrigin {
   readonly fx: Fx<unknown, unknown>

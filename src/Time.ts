@@ -7,7 +7,7 @@ import { Clock, RealClock } from './internal/time.js'
 
 export { VirtualClock } from './internal/time.js'
 
-export class Now extends Effect('fx/Time/Now')<void, number> { }
+export class Now extends Effect('fx/Time/Now')<[], number> { }
 
 /**
  * Get the current system time as integer milliseconds since the unix epoch.
@@ -16,7 +16,7 @@ export class Now extends Effect('fx/Time/Now')<void, number> { }
  */
 export const now = new Now()
 
-export class Monotonic extends Effect('fx/Time/Monotonic')<void, number> { }
+export class Monotonic extends Effect('fx/Time/Monotonic')<[], number> { }
 
 /**
  * Get the elapsed time in *decimal* milliseconds with fractional microseconds
@@ -25,7 +25,7 @@ export class Monotonic extends Effect('fx/Time/Monotonic')<void, number> { }
  */
 export const monotonic = new Monotonic()
 
-export class Sleep extends Effect('fx/Time/Sleep')<number, void> { }
+export class Sleep extends Effect('fx/Time/Sleep')<[number], void> { }
 
 export type Time = Now | Monotonic | Sleep
 

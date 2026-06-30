@@ -90,7 +90,7 @@ describe('returnExit', () => {
   })
 
   it('lets outer handlers interpret cleanup effects', () => {
-    class Cleanup extends Effect('test/returnExit/Cleanup')<string, void> { }
+    class Cleanup extends Effect('test/returnExit/Cleanup')<[string], void> { }
     const handled: string[] = []
 
     const exit = ok('body').pipe(
@@ -215,10 +215,10 @@ describe('returnExit', () => {
   })
 
   it('closes the wrapped iterator when interrupted on a forwarded effect', () => {
-    class Wait extends Effect('test/returnExit/Wait')<void, void> { }
+    class Wait extends Effect('test/returnExit/Wait')<[], void> { }
     const events: string[] = []
     const iterator = fx(function* () {
-      yield* new Wait(undefined)
+      yield* new Wait()
     }).pipe(
       finalizing(fx(function* () {
         events.push('cleanup')

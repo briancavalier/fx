@@ -10,7 +10,7 @@ import { fx, ok, run, runPromise, runTask } from '../src/Fx.js'
 import { control, handle } from '../src/Handler.js'
 import { captureHandlers, closeHandlerCapture, mapCapturedHandlers, withHandlerContext } from '../src/HandlerCapture.js'
 import { uninterruptible } from '../src/Interrupt.js'
-import { scope, withScope } from '../src/Scope.js'
+import { inScope, scope } from '../src/Scope.js'
 import { wait } from '../src/Task.js'
 import { setTraceCapturePolicy } from '../src/Trace.js'
 import { Handler as InternalHandler } from '../src/internal/Handler.js'
@@ -71,7 +71,7 @@ const blocked = assertPromise<void>(() => new Promise(() => { }))
 const blockedWithFinalizer = fx(function* () {
   yield* andFinallyIn(InterruptScope, ok(undefined))
   return yield* blocked
-}).pipe(withScope(InterruptScope))
+}).pipe(inScope(InterruptScope))
 
 const handlerContextDepths = [0, 1, 4, 8, 16] as const
 const captureFanouts = [1, 4, 16, 64] as const
@@ -174,7 +174,7 @@ const cases: readonly BenchmarkCase[] = [
   ),
   ...handlerContextDepths.map(depth =>
     benchmark(`scope finalizer registration depth ${depth}`, 'scope', CaptureIterations, 500, () => {
-      finalizerProgram(depth).pipe(withScope(ScopeFinalizer), run)
+      finalizerProgram(depth).pipe(inScope(ScopeFinalizer), run)
     })
   ),
   ...handlerContextDepths.map(depth =>
@@ -360,7 +360,7 @@ function directHandlerStack(depth: number) {
 
 function applyScopes(f: Fx<unknown, unknown>, depth: number) {
   let current = f as Fx<any, any>
-  for (let i = 0; i < depth; i++) current = current.pipe(withScope(scope(`benchmark/runtime-loops/Scope/${i}`)))
+  for (let i = 0; i < depth; i++) current = current.pipe(inScope(scope(`benchmark/runtime-loops/Scope/${i}`)))
   return current as Fx<any, any>
 }
 

@@ -11,11 +11,12 @@ type User = {
   readonly name: string
 }
 
-class FindUser extends Effect("app/User/Find")<string, User | undefined> {}
+class FindUser extends Effect("app/User/Find")<[string], User | undefined> {}
 ```
 
-The first type parameter is the request argument. The second is the answer that
-`yield*` receives.
+The first type parameter is the tuple of constructor arguments. The second is
+the answer that `yield*` receives. One constructor argument is stored directly in
+`effect.arg`; multiple arguments are stored as a readonly tuple.
 
 ```ts
 const user = yield* FindUser.of("user-1")

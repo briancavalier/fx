@@ -10,7 +10,7 @@ import { Trace, appendTrace, attachTrace, captureTrace } from './Trace.js'
  * A retry effect. Programs yield {@link Retry} values to request that a
  * computation be retried when it fails.
  */
-export class Retry<const E, const A> extends Effect('fx/Retry')<RetryContext<E, A>, Fx<unknown, A>> { }
+export class Retry<const E, const A> extends Effect('fx/Retry')<[RetryContext<E, A>], Fx<unknown, A>> { }
 
 /**
  * Request that an Fx be retried when it fails.

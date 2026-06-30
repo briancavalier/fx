@@ -8,7 +8,7 @@ import { Pipeable, pipeThis } from './internal/pipe.js'
 
 export interface EffectType {
   readonly _fxEffectId: unknown
-  new(...args: readonly any[]): any
+  new(...args: any[]): any
 }
 
 export const EffectTypeId = Symbol('fx/Effect')
@@ -31,7 +31,7 @@ export interface EffectInstance<Id, A, R> extends AnyEffect, Pipeable {
 
 export interface EffectClass<Id> extends EffectType {
   readonly _fxEffectId: Id
-  new<A, R = unknown>(arg: A): EffectInstance<Id, A, R>
+  new<Args extends EffectArgs = [], R = unknown>(...args: Args): EffectInstance<Id, EffectArg<Args>, R>
   of<E extends EffectType>(this: E, ...args: ConstructorParameters<E>): InstanceType<E>
   is<E extends EffectType>(this: E, x: unknown): x is InstanceType<E>
 }
@@ -42,10 +42,10 @@ export interface ScopedEffectInstance<Id, Scope extends AnyScope, A, R> extends 
 
 export interface ScopedEffectClass<Id> extends EffectType {
   readonly _fxEffectId: Id
-  new<const Scope extends AnyScope, A = void, R = unknown>(
+  new<const Scope extends AnyScope, Args extends EffectArgs = [], R = unknown>(
     scope: Scope,
-    arg: A
-  ): ScopedEffectInstance<Id, Scope, A, R>
+    ...args: Args
+  ): ScopedEffectInstance<Id, Scope, EffectArg<Args>, R>
   of<E extends EffectType>(this: E, ...args: ConstructorParameters<E>): InstanceType<E>
   is<E extends EffectType>(this: E, x: unknown): x is InstanceType<E>
 }
@@ -58,24 +58,31 @@ export interface EffectOrigin {
  * Define an effect type with a stable string identity.
  *
  * Extend the returned class to describe one kind of request. The first type
- * parameter is the request argument stored in `arg`; the second is the answer
- * type received by `yield*`.
+ * parameter is the tuple of constructor arguments; the second is the answer
+ * type received by `yield*`. Zero arguments store `void` in `arg`, one
+ * argument stores that value, and multiple arguments store a readonly tuple.
  *
  * @example
  * ```ts
- * class FindUser extends Effect('app/User/Find')<string, User | undefined> { }
+ * class FindUser extends Effect('app/User/Find')<[string], User | undefined> { }
  *
  * const user = yield* FindUser.of('user-1')
  * ```
  */
-export const Effect = <const T extends string>(id: T): EffectClass<T> => class <A, R = unknown> implements EffectInstance<T, A, R> {
+export const Effect = <const T extends string>(id: T): EffectClass<T> => class <
+  Args extends EffectArgs = [],
+  R = unknown
+> implements EffectInstance<T, EffectArg<Args>, R> {
   public readonly _fxTypeId: typeof EffectTypeId = EffectTypeId;
   public readonly _fxEffectId = id;
   public static readonly _fxEffectId = id;
+  public readonly arg: EffectArg<Args>
   public readonly R!: R
   public readonly pipe = pipeThis as Pipeable['pipe']
 
-  constructor(public readonly arg: A) { }
+  constructor(...args: Args) {
+    this.arg = effectArg(args)
+  }
 
   static is<E extends EffectType>(this: E, x: unknown): x is InstanceType<E> {
     return !!x && (x as any)._fxEffectId === this._fxEffectId
@@ -102,19 +109,19 @@ export const Effect = <const T extends string>(id: T): EffectClass<T> => class <
  * @example
  * ```ts
  * class Stop<const S extends Scope>
- *   extends ScopedEffect('app/Stop')<Scope, void, never> { }
+ *   extends ScopedEffect('app/Stop')<Scope, [], never> { }
  *
  * const stop = <const S extends Scope>(scope: S) =>
- *   new Stop(scope, undefined)
+ *   new Stop(scope)
  * ```
  */
 export const ScopedEffect = <const T extends string>(id: T) => class <
   const Scope extends AnyScope,
-  A = void,
+  Args extends EffectArgs = [],
   R = unknown
-> extends Effect(id)<A, R> implements ScopedEffectInstance<T, Scope, A, R> {
-  constructor(public readonly scope: Scope, arg: A) {
-    super(arg)
+> extends Effect(id)<Args, R> implements ScopedEffectInstance<T, Scope, EffectArg<Args>, R> {
+  constructor(public readonly scope: Scope, ...args: Args) {
+    super(...args)
   }
 } as ScopedEffectClass<T>
 
@@ -158,3 +165,13 @@ export function originOf(effect: unknown): Breadcrumb | undefined
 export function originOf(effect: unknown): Breadcrumb | undefined {
   return traceOriginOf(effect)?.origin
 }
+
+type EffectArgs = readonly unknown[]
+
+type EffectArg<Args extends EffectArgs> =
+  Args extends readonly [] ? void :
+  Args extends readonly [infer A] ? A :
+  Readonly<Args>
+
+const effectArg = <Args extends EffectArgs>(args: Args): EffectArg<Args> =>
+  (args.length === 0 ? undefined : args.length === 1 ? args[0] : args) as EffectArg<Args>

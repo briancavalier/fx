@@ -56,20 +56,20 @@ export type BookmarkError =
 /**
  * Request bookmark persistence without choosing a storage backend.
  */
-export class FindBookmarkById extends Effect('example/Bookmarks/FindBookmarkById')<BookmarkId, Bookmark | undefined> { }
-export class FindBookmarkByUrl extends Effect('example/Bookmarks/FindBookmarkByUrl')<string, Bookmark | undefined> { }
-export class ListBookmarks extends Effect('example/Bookmarks/ListBookmarks')<BookmarkQuery, readonly Bookmark[]> { }
-export class SaveBookmark extends Effect('example/Bookmarks/SaveBookmark')<Bookmark, Bookmark> { }
+export class FindBookmarkById extends Effect('example/Bookmarks/FindBookmarkById')<[BookmarkId], Bookmark | undefined> { }
+export class FindBookmarkByUrl extends Effect('example/Bookmarks/FindBookmarkByUrl')<[string], Bookmark | undefined> { }
+export class ListBookmarks extends Effect('example/Bookmarks/ListBookmarks')<[BookmarkQuery], readonly Bookmark[]> { }
+export class SaveBookmark extends Effect('example/Bookmarks/SaveBookmark')<[Bookmark], Bookmark> { }
 
 /**
  * Request page metadata for a bookmark URL.
  */
-export class FetchPageMetadata extends Effect('example/Bookmarks/FetchPageMetadata')<string, MetadataResult> { }
+export class FetchPageMetadata extends Effect('example/Bookmarks/FetchPageMetadata')<[string], MetadataResult> { }
 
 /**
  * Request a new bookmark id.
  */
-export class NextBookmarkId extends Effect('example/Bookmarks/NextBookmarkId')<void, BookmarkId> { }
+export class NextBookmarkId extends Effect('example/Bookmarks/NextBookmarkId')<[], BookmarkId> { }
 
 export type BookmarkStore =
   | FindBookmarkById

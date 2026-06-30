@@ -10,9 +10,9 @@ import { abort, orReturn, scope, withScope, type Control } from '@briancavalier/
 
 export type GuessingGame = Print | Read | GenerateSecret
 
-export class Print extends Effect('examples/basic/guessing-game/Print')<string, void> { }
+export class Print extends Effect('examples/basic/guessing-game/Print')<[string], void> { }
 
-export class Read extends Effect('examples/basic/guessing-game/Read')<string, string> { }
+export class Read extends Effect('examples/basic/guessing-game/Read')<[string], string> { }
 
 const ParseInteger = scope<Control>()('examples/basic/guessing-game/ParseInteger')
 
@@ -21,7 +21,7 @@ export const toInteger = (s: string) => {
   return Number.isInteger(i) ? ok(i) : abort(ParseInteger)
 }
 
-export class GenerateSecret extends Effect('examples/basic/guessing-game/GenerateSecret')<number, number> { }
+export class GenerateSecret extends Effect('examples/basic/guessing-game/GenerateSecret')<[number], number> { }
 
 // #endregion
 

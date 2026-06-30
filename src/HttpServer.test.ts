@@ -37,8 +37,8 @@ const HttpServerEvents = scope<Yielding<ServerEvent>>()('test/HttpServer/events'
 describe('HttpServer', () => {
   describe('route AST', () => {
     it('merges route effect types', () => {
-      class E1 extends Effect('test/HttpServer/E1')<void, string> { }
-      class E2 extends Effect('test/HttpServer/E2')<void, number> { }
+      class E1 extends Effect('test/HttpServer/E1')<[], string> { }
+      class E2 extends Effect('test/HttpServer/E2')<[], number> { }
 
       const r1 = route('GET', '/one', new E1().pipe(responseText))
       const r2 = route('GET', '/two', new E2().pipe(responseText))
@@ -66,7 +66,7 @@ describe('HttpServer', () => {
     })
 
     it('represents route transforms lazily and applies them when routes compile', async () => {
-      class CurrentValue extends Effect('test/HttpServer/TransformCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/HttpServer/TransformCurrentValue')<[], string> { }
 
       const app = route('GET', '/current', fx(function* () {
         return text(yield* new CurrentValue())
@@ -137,7 +137,7 @@ describe('HttpServer', () => {
     })
 
     it('keeps route effects visible until the server program handles them', () => {
-      class CurrentValue extends Effect('test/HttpServer/ServeCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/HttpServer/ServeCurrentValue')<[], string> { }
 
       const app = route('GET', '/current', fx(function* () {
         return text(yield* new CurrentValue())
@@ -175,7 +175,7 @@ describe('HttpServer', () => {
         readonly id: string
       }
 
-      class Authenticate extends Effect('test/HttpServer/Authenticate')<ServerRequest, User> { }
+      class Authenticate extends Effect('test/HttpServer/Authenticate')<[ServerRequest], User> { }
 
       let authRuns = 0
       const withUser = provideFrom(fx(function* ({ request }: RouteContext) {
@@ -436,7 +436,7 @@ describe('HttpServer', () => {
     })
 
     it('runs route handlers with handlers outside nodeHttp', async () => {
-      class CurrentValue extends Effect('test/HttpServer/CurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/HttpServer/CurrentValue')<[], string> { }
 
       const app = route('GET', '/current', fx(function* () {
         return text(yield* new CurrentValue())
@@ -455,7 +455,7 @@ describe('HttpServer', () => {
     })
 
     it('runs route handlers with handlers before nodeHttp', async () => {
-      class CurrentValue extends Effect('test/HttpServer/InnerCurrentValue')<void, string> { }
+      class CurrentValue extends Effect('test/HttpServer/InnerCurrentValue')<[], string> { }
 
       const app = route('GET', '/current', fx(function* () {
         return text(yield* new CurrentValue())

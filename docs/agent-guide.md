@@ -11,7 +11,7 @@ Programs describe operations with `yield*`; handlers interpret those operations.
 ```ts
 import { Effect, fx, handle, ok, run } from "@briancavalier/fx"
 
-class AskName extends Effect("app/AskName")<void, string> {}
+class AskName extends Effect("app/AskName")<[], string> {}
 
 const greet = fx(function* () {
   return `Hello, ${yield* AskName.of()}`
@@ -57,7 +57,7 @@ Use `Effect(...)` classes for ordinary requests. Each effect class has an `of`
 constructor for building the request.
 
 ```ts
-class SaveUser extends Effect("app/User/Save")<User, User> {}
+class SaveUser extends Effect("app/User/Save")<[User], User> {}
 ```
 
 Avoid service containers, dependency graphs, and wrappers that only rename an

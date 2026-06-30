@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { Effect, finalizing, fx, ScopedEffect, type Fx } from '@briancavalier/fx'
+import { Effect, effects, finalizing, fx, ScopedEffect, type Fx } from '@briancavalier/fx'
 import * as fxApi from '@briancavalier/fx'
 import * as concurrentApi from '@briancavalier/fx/concurrent'
 import * as scopeApi from '@briancavalier/fx/scope'
@@ -144,6 +144,42 @@ describe('package import inference', () => {
 
     assert.equal(effectIsAny, false)
     assert.equal(effectIsScopedAsk, true)
+    void runnable
+  })
+
+  it('preserves effect namespace inference through package declarations', () => {
+    const UserEffects = effects('test/package-import-inference/User')<{
+      readonly find: (id: string) => { readonly id: string } | undefined
+      readonly save: (user: { readonly id: string }, overwrite: boolean) => { readonly id: string }
+      readonly current: () => { readonly id: string }
+    }>()
+
+    const program = fx(function* () {
+      const user = yield* UserEffects.find('user-1')
+      const saved = yield* UserEffects.save(user ?? { id: 'missing' }, true)
+      const current = yield* UserEffects.current()
+
+      const maybeUser: { readonly id: string } | undefined = user
+      const savedUser: { readonly id: string } = saved
+      const currentUser: { readonly id: string } = current
+
+      return `${maybeUser?.id ?? savedUser.id}:${currentUser.id}`
+    })
+
+    type ProgramEffect = EffectOf<typeof program>
+
+    const effectIsAny: IsAny<ProgramEffect> = false
+    const effectIncludesFind: ReturnType<typeof UserEffects.find> extends ProgramEffect ? true : false = true
+    const effectIncludesSave: ReturnType<typeof UserEffects.save> extends ProgramEffect ? true : false = true
+    const effectIncludesCurrent: ReturnType<typeof UserEffects.current> extends ProgramEffect ? true : false = true
+
+    // @ts-expect-error Namespace effects remain visible until handlers remove them.
+    const runnable: Fx<never, string> = program
+
+    assert.equal(effectIsAny, false)
+    assert.equal(effectIncludesFind, true)
+    assert.equal(effectIncludesSave, true)
+    assert.equal(effectIncludesCurrent, true)
     void runnable
   })
 })

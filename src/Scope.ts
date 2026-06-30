@@ -206,7 +206,14 @@ export function withScope<const E, const A>(
   const f = typeof optionsOrBody === 'function' ? optionsOrBody : body!
   return fx(function* () {
     const scope = createLifetimeScope(options)
-    return yield* new ScopeBoundary(f(scope as unknown as LifetimeScope<never>), scope, undefined, true)
+    let bodyFx: Fx<E, A>
+    try {
+      bodyFx = f(scope as unknown as LifetimeScope<never>)
+    } catch (error) {
+      closeScope(scope)
+      throw error
+    }
+    return yield* new ScopeBoundary(bodyFx, scope, undefined, true)
   }) as Fx<ScopeEffects<E, AnyLifetimeScope>, A | ReturnValue<E, AnyLifetimeScope>>
 }
 
@@ -225,7 +232,14 @@ export function withControlScope<const E, const A>(
   const f = typeof optionsOrBody === 'function' ? optionsOrBody : body!
   return fx(function* () {
     const scope = createControlScope(options)
-    return yield* new ScopeBoundary(f(scope as unknown as ControlScope<never>), scope, undefined, true)
+    let bodyFx: Fx<E, A>
+    try {
+      bodyFx = f(scope as unknown as ControlScope<never>)
+    } catch (error) {
+      closeScope(scope)
+      throw error
+    }
+    return yield* new ScopeBoundary(bodyFx, scope, undefined, true)
   }) as Fx<ScopeEffects<E, AnyControlScope>, A | ReturnValue<E, AnyControlScope>>
 }
 

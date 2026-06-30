@@ -83,6 +83,40 @@ describe('currentScope', () => {
     )
   })
 
+  it('closes lexical lifetime handles when body construction throws', () => {
+    let leaked: AnyLifetimeScope | undefined
+
+    assert.throws(
+      () => withScope(scope => {
+        leaked = scope
+        throw new Error('construction failed')
+      })[Symbol.iterator]().next(),
+      /construction failed/
+    )
+
+    assert.throws(
+      () => andFinallyIn(leaked!, ok(undefined)),
+      /used after its scope exited/
+    )
+  })
+
+  it('closes lexical control handles when body construction throws', () => {
+    let leaked: AnyControlScope | undefined
+
+    assert.throws(
+      () => withControlScope(scope => {
+        leaked = scope
+        throw new Error('construction failed')
+      })[Symbol.iterator]().next(),
+      /construction failed/
+    )
+
+    assert.throws(
+      () => abort(leaked!),
+      /used after its scope exited/
+    )
+  })
+
   it('allocates lexical lifetime handles per execution', () => {
     const handles: AnyLifetimeScope[] = []
     const program = withScope({ label: 'repeatable' }, scope => fx(function* () {

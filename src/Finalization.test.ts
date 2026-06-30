@@ -8,7 +8,7 @@ import { andFinallyIn, managed, usingIn, usingManagedIn, type Finally, type Mana
 import type { Interrupt } from './Interrupt.js'
 import { key } from './Key.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope, inScope, type Control, type Exit } from './Scope.js'
+import { scope, inScope, withScope, type AnyLifetimeScope, type Control, type Exit } from './Scope.js'
 import { collectFrom, YieldFrom, yieldFrom, type Yielding } from './YieldFrom.js'
 
 describe('Finalization', () => {
@@ -230,6 +230,24 @@ describe('Finalization', () => {
     assert.deepEqual(released, ['resource'])
   })
 
+  it('usingIn rejects closed scope handles before initialization', () => {
+    let leaked: AnyLifetimeScope | undefined
+    let acquired = false
+
+    run(withScope(scope => fx(function* () {
+      leaked = scope
+    })))
+
+    assert.throws(
+      () => drainSync(usingIn(leaked!, fx(function* () {
+        acquired = true
+        return 'resource'
+      }), () => ok(undefined))),
+      /used after its scope exited/
+    )
+    assert.equal(acquired, false)
+  })
+
   it('usingIn does not register cleanup when initialization fails', () => {
     const released = [] as string[]
     const initFailure = new Error('init failed')
@@ -365,6 +383,24 @@ describe('Finalization', () => {
     assert.deepEqual(released, ['resource'])
   })
 
+  it('usingManagedIn rejects closed scope handles before initialization', () => {
+    let leaked: AnyLifetimeScope | undefined
+    let acquired = false
+
+    run(withScope(scope => fx(function* () {
+      leaked = scope
+    })))
+
+    assert.throws(
+      () => drainSync(usingManagedIn(leaked!, fx(function* () {
+        acquired = true
+        return managed('resource', () => ok(undefined))
+      }))),
+      /used after its scope exited/
+    )
+    assert.equal(acquired, false)
+  })
+
   it('usingManagedIn does not register cleanup when initialization fails', () => {
     const released = [] as string[]
     const initFailure = new Error('init failed')
@@ -480,3 +516,8 @@ const record = (released: string[], label: string, failure?: unknown) => fx(func
   released.push(label)
   if (failure !== undefined) yield* fail(failure)
 })
+
+const drainSync = (f: Fx<unknown, unknown>): void => {
+  const iterator = f[Symbol.iterator]()
+  for (let result = iterator.next(); !result.done; result = iterator.next()) { }
+}

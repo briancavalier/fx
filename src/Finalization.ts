@@ -67,6 +67,7 @@ export const usingIn = <const Scope extends AnyLifetimeScope, const IE, const FE
   initially: Fx<IE, R>,
   finally_: (r: R, exit: Exit) => Fx<FE, void>
 ): Fx<IE | Finally<Scope, FE> | Interrupt, R> => uninterruptible(fx(function* () {
+  assertScopeOpen(scope)
   const r = yield* initially
   yield* andFinallyIn(scope, exit => finally_(r, exit))
   return r
@@ -94,6 +95,7 @@ export const usingManagedIn = <const Scope extends AnyLifetimeScope, const IE, c
   scope: Scope,
   initially: Fx<IE, Managed<A, FE>>
 ): Fx<IE | Finally<Scope, FE> | Interrupt, A> => uninterruptible(fx(function* () {
+  assertScopeOpen(scope)
   const m = yield* initially
   yield* andFinallyIn(scope, m.finalizer)
   return m.value

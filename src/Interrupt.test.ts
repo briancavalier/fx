@@ -121,6 +121,7 @@ describe('Typed interruption', () => {
 
   it('leaves the interrupt visible after scope cleanup', () => {
     const f = interruptFrom(TestScope).pipe(inScope(TestScope))
+    const _: typeof f extends Fx<InterruptFrom<typeof TestScope>, never> ? true : false = true
     const next = f[Symbol.iterator]().next()
 
     assert.equal(InterruptFrom.is(next.value), true)

@@ -25,8 +25,11 @@ export const orReturn = <const Scope extends AnyControlScope, const R>(
   f: Fx<E, A>
 ): Fx<Exclude<E, Abort<Scope>>, A | R> =>
     f.pipe(
-      control(Abort, (_, abort) =>
-        (sameScope(abort.scope, scope) ? ok(value) : abort) as Fx<Exclude<E, Abort<Scope>>, A | R>)
+      control(Abort, (_, abort) => {
+        if (!sameScope(abort.scope, scope)) return abort as Fx<Exclude<E, Abort<Scope>>, A | R>
+        assertScopeOpen(abort.scope)
+        return ok(value) as Fx<Exclude<E, Abort<Scope>>, A | R>
+      })
     ) as Fx<Exclude<E, Abort<Scope>>, A | R>
 
 export interface RestartOnAbortOptions {
@@ -69,6 +72,7 @@ export const restartOnAbortIn = <const Scope extends AnyControlScope>(
       control(Abort, (_, abort) => {
         if (!sameScope(abort.scope, scope)) return abort
 
+        assertScopeOpen(abort.scope)
         aborted = abort as Abort<Scope>
         return ok(Restart)
       })

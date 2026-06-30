@@ -255,7 +255,7 @@ export type ScopeEffects<E, Scope extends AnyLifetimeScope> =
   HandleScopeEffect<E, Scope> | ScopedForkEffects<E, Scope> | CleanupEffects<E, Scope> | CleanupFailure<E, Scope>
 
 type HandleScopeEffect<E, Scope extends AnyLifetimeScope> =
-  Exclude<E, Finally<Scope, any> | ReturnFrom<ControlScopeOf<Scope>, any> | ScopedFork<Scope> | InterruptFrom<Scope, any>>
+  Exclude<E, Finally<Scope, any> | ReturnFrom<ControlScopeOf<Scope>, any> | ScopedFork<Scope>>
 
 type ScopedForkEffects<E, Scope extends AnyLifetimeScope> =
   Extract<E, ScopedFork<Scope>> extends never ? never : Fork | Async | Fail<unknown>

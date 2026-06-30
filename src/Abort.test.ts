@@ -7,7 +7,7 @@ import { fail, Fail, returnFail } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope, withControlScope, inScope, type Control } from './Scope.js'
+import { scope, withControlScope, inScope, type AnyControlScope, type Control } from './Scope.js'
 
 describe('Abort', () => {
   const TestScope = scope<Control>()('test/Abort')
@@ -53,6 +53,21 @@ describe('Abort', () => {
       }).pipe(inScope(TestScope), orReturn(TestScope, 'aborted'))
 
       assert.equal(Abort.is(f[Symbol.iterator]().next().value), true)
+    })
+
+    it('rejects cached aborts for closed lexical control handles', () => {
+      let leaked: AnyControlScope | undefined
+      let cached: Fx<Abort<AnyControlScope>, never> | undefined
+
+      run(withControlScope(scope => fx(function* () {
+        leaked = scope
+        cached = abort(scope)
+      })))
+
+      assert.throws(
+        () => cached!.pipe(orReturn(leaked!, 'aborted'), run),
+        /used after its scope exited/
+      )
     })
   })
 
@@ -181,6 +196,21 @@ describe('Abort', () => {
       assert.equal(Abort.is(next.value), true)
       assert.equal((next.value as Abort<typeof OtherScope>).scope, OtherScope)
       assert.equal(attempts, 1)
+    })
+
+    it('rejects cached aborts for closed lexical control handles before restarting', () => {
+      let leaked: AnyControlScope | undefined
+      let cached: Fx<Abort<AnyControlScope>, never> | undefined
+
+      run(withControlScope(scope => fx(function* () {
+        leaked = scope
+        cached = abort(scope)
+      })))
+
+      assert.throws(
+        () => cached!.pipe(restartOnAbort(leaked!, { restarts: 1 }), orReturn(leaked!, 'exhausted'), run),
+        /used after its scope exited/
+      )
     })
 
     it('stops restarting when cleanup fails after abort', () => {

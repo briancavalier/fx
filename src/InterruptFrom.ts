@@ -40,10 +40,11 @@ export const recoverInterrupt = <const Scope extends AnyLifetimeScope, const Han
   f: Fx<E, A>
 ): Fx<RecoverInterrupt<E, Scope, HandlerEffects>, A | R> =>
     f.pipe(
-      control(InterruptFrom, (_, interrupt): Fx<HandlerEffects | InterruptFrom<AnyLifetimeScope, unknown>, R> =>
-        (sameScope(interrupt.scope, scope)
-          ? handler(interrupt.arg)
-          : interrupt as Fx<InterruptFrom<AnyLifetimeScope, unknown>, never>) as Fx<HandlerEffects | InterruptFrom<AnyLifetimeScope, unknown>, R>)
+      control(InterruptFrom, (_, interrupt): Fx<HandlerEffects | InterruptFrom<AnyLifetimeScope, unknown>, R> => {
+        if (!sameScope(interrupt.scope, scope)) return interrupt as Fx<InterruptFrom<AnyLifetimeScope, unknown>, never>
+        assertScopeOpen(interrupt.scope)
+        return handler(interrupt.arg) as Fx<HandlerEffects | InterruptFrom<AnyLifetimeScope, unknown>, R>
+      })
     ) as Fx<RecoverInterrupt<E, Scope, HandlerEffects>, A | R>
 
 type RecoverInterrupt<E, Scope extends AnyLifetimeScope, HandlerEffects> =

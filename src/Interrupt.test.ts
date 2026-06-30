@@ -9,7 +9,7 @@ import { bracket, finalizing, fx, ok, run, runPromise, runTask, type Fx } from '
 import { control, handle } from './Handler.js'
 import { InterruptFrom, interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible, uninterruptibleMask, type Interrupt, type RestoreInterrupt } from './Interrupt.js'
-import { scope, inScope, type Exit } from './Scope.js'
+import { scope, withScope, inScope, type AnyLifetimeScope, type Exit } from './Scope.js'
 
 describe('Typed interruption', () => {
   const TestScope = scope('test/InterruptFrom')
@@ -52,6 +52,29 @@ describe('Typed interruption', () => {
 
     const _: Fx<never, 'interrupted'> = recovered
     void _
+  })
+
+  it('rejects cached interruptions for closed lexical handles before recovering', () => {
+    let leaked: AnyLifetimeScope | undefined
+    let cached: Fx<InterruptFrom<AnyLifetimeScope, 'reason'>, never> | undefined
+    let recovered = false
+
+    run(withScope(scope => fx(function* () {
+      leaked = scope
+      cached = interruptFrom(scope, 'reason' as const)
+    })))
+
+    assert.throws(
+      () => cached!.pipe(
+        recoverInterrupt(leaked!, () => fx(function* () {
+          recovered = true
+          return 'interrupted'
+        })),
+        run
+      ),
+      /used after its scope exited/
+    )
+    assert.equal(recovered, false)
   })
 
   it('rejects incompatible recovery reason annotations', () => {

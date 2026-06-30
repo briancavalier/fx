@@ -6,6 +6,25 @@ import { scope } from './Scope.js'
 import { captureTrace, setTraceCapturePolicy } from './Trace.js'
 
 describe('Effect', () => {
+  describe('of', () => {
+    it('constructs an instance of the effect class', () => {
+      class T extends Effect('T/of')<string, number> { }
+      const effect = T.of('test')
+
+      assert.ok(effect instanceof T)
+      assert.ok(T.is(effect))
+      assert.equal(effect.arg, 'test')
+    })
+
+    it('supports void-argument effects without an argument', () => {
+      class T extends Effect('T/of/void')<void, string> { }
+      const effect = T.of()
+
+      assert.ok(effect instanceof T)
+      assert.equal(effect.arg, undefined)
+    })
+  })
+
   describe('is', () => {
     it('given instance of the same effect, returns true', () => {
       class T extends Effect('T')<void, void> { }

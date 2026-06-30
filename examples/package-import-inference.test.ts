@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { Effect, effects, finalizing, fx, ScopedEffect, type Fx } from '@briancavalier/fx'
+import { Effect, finalizing, fx, ScopedEffect, type Fx } from '@briancavalier/fx'
 import * as fxApi from '@briancavalier/fx'
 import * as concurrentApi from '@briancavalier/fx/concurrent'
 import * as scopeApi from '@briancavalier/fx/scope'
@@ -114,7 +114,7 @@ describe('package import inference', () => {
     class AskName extends Effect('test/package-import-inference/AskName')<string, string> { }
 
     const program = fx(function* () {
-      return yield* new AskName('name')
+      return yield* AskName.of('name')
     })
 
     const effectIsAny: IsAny<EffectOf<typeof program>> = false
@@ -126,6 +126,33 @@ describe('package import inference', () => {
     assert.equal(effectIsAny, false)
     assert.equal(effectIsAskName, true)
     void runnable
+  })
+
+  it('preserves Effect.of constructor argument types through package declarations', () => {
+    class AskName extends Effect('test/package-import-inference/AskNameOf')<string, string> { }
+    class AskNumber extends Effect('test/package-import-inference/AskNumberOf')<number, number> { }
+    class AskCurrent extends Effect('test/package-import-inference/AskCurrentOf')<void, string> { }
+
+    const name = AskName.of('name')
+    const count = AskNumber.of(1)
+    const current = AskCurrent.of()
+
+    // @ts-expect-error AskName.of requires a string.
+    AskName.of(1)
+
+    // @ts-expect-error AskNumber.of requires a number.
+    AskNumber.of('count')
+
+    // @ts-expect-error AskCurrent.of does not accept an argument.
+    AskCurrent.of('current')
+
+    const nameIsAskName: typeof name extends AskName ? true : false = true
+    const countIsAskNumber: typeof count extends AskNumber ? true : false = true
+    const currentIsAskCurrent: typeof current extends AskCurrent ? true : false = true
+
+    assert.equal(nameIsAskName, true)
+    assert.equal(countIsAskNumber, true)
+    assert.equal(currentIsAskCurrent, true)
   })
 
   it('preserves ScopedEffect instance types through package declarations', () => {
@@ -144,42 +171,6 @@ describe('package import inference', () => {
 
     assert.equal(effectIsAny, false)
     assert.equal(effectIsScopedAsk, true)
-    void runnable
-  })
-
-  it('preserves effect namespace inference through package declarations', () => {
-    const UserEffects = effects('test/package-import-inference/User')<{
-      readonly find: (id: string) => { readonly id: string } | undefined
-      readonly save: (user: { readonly id: string }, overwrite: boolean) => { readonly id: string }
-      readonly current: () => { readonly id: string }
-    }>()
-
-    const program = fx(function* () {
-      const user = yield* UserEffects.find('user-1')
-      const saved = yield* UserEffects.save(user ?? { id: 'missing' }, true)
-      const current = yield* UserEffects.current()
-
-      const maybeUser: { readonly id: string } | undefined = user
-      const savedUser: { readonly id: string } = saved
-      const currentUser: { readonly id: string } = current
-
-      return `${maybeUser?.id ?? savedUser.id}:${currentUser.id}`
-    })
-
-    type ProgramEffect = EffectOf<typeof program>
-
-    const effectIsAny: IsAny<ProgramEffect> = false
-    const effectIncludesFind: ReturnType<typeof UserEffects.find> extends ProgramEffect ? true : false = true
-    const effectIncludesSave: ReturnType<typeof UserEffects.save> extends ProgramEffect ? true : false = true
-    const effectIncludesCurrent: ReturnType<typeof UserEffects.current> extends ProgramEffect ? true : false = true
-
-    // @ts-expect-error Namespace effects remain visible until handlers remove them.
-    const runnable: Fx<never, string> = program
-
-    assert.equal(effectIsAny, false)
-    assert.equal(effectIncludesFind, true)
-    assert.equal(effectIncludesSave, true)
-    assert.equal(effectIncludesCurrent, true)
     void runnable
   })
 })

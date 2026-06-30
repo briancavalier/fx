@@ -12,15 +12,13 @@ type User = {
 }
 
 class FindUser extends Effect("app/User/Find")<string, User | undefined> {}
-
-const findUser = (id: string) => new FindUser(id)
 ```
 
 The first type parameter is the request argument. The second is the answer that
 `yield*` receives.
 
 ```ts
-const user = yield* findUser("user-1")
+const user = yield* FindUser.of("user-1")
 ```
 
 Handler pipeline:
@@ -32,5 +30,5 @@ program.pipe(
 )
 ```
 
-Common mistake: creating a service object or wrapper class when one effect class
-and a small constructor function are enough.
+Use a named helper only when construction does more than build the request, such
+as adapting arguments, adding defaults, or flattening a higher-order effect.

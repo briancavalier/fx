@@ -9,18 +9,18 @@ import { assertPromise, assertSync, bracket, fx, Fx, handle, ok, provide, runPro
 
 import { int, defaultRandom } from '@briancavalier/fx/random'
 
-import { GuessingGame, main } from './main.js'
+import { GenerateSecret, Print, Read, main } from './main.js'
 
-const handlePrint = handle(GuessingGame.print, print => ok(console.log(print.arg)))
+const handlePrint = handle(Print, print => ok(console.log(print.arg)))
 
 const handleRead = <E, A>(f: Fx<E, A>) => bracket(
   assertSync(() => createInterface({ input: process.stdin, output: process.stdout })),
   readline => ok(readline.close()),
   readline => f.pipe(
-    handle(GuessingGame.read, read => assertPromise(signal => readline.question(read.arg, { signal })))
+    handle(Read, read => assertPromise(signal => readline.question(read.arg, { signal })))
   ))
 
-const handleGenerateSecret = handle(GuessingGame.generateSecret, max => fx(function* () {
+const handleGenerateSecret = handle(GenerateSecret, max => fx(function* () {
   return 1 + (yield* int(max.arg))
 }))
 

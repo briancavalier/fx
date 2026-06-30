@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 
 import { Fx, handle, map, ok, provide, run } from '@briancavalier/fx'
 
-import { GenerateSecret, Print, Read, checkAnswer, main } from './main.js'
+import { GuessingGame, checkAnswer, main } from './main.js'
 
 // -------------------------------------------------------------------
 // #region Handlers
@@ -13,16 +13,16 @@ import { GenerateSecret, Print, Read, checkAnswer, main } from './main.js'
 const handlePrint = <E, A>(f: Fx<E, A>) => {
   const printed = [] as string[]
   return f.pipe(
-    handle(Print, print => ok(void printed.push(print.arg))),
+    handle(GuessingGame.print, print => ok(void printed.push(print.arg))),
     map(_ => printed)
   )
 }
 
 const handleRead = ([...inputs]: readonly string[]) =>
-  handle(Read, _ => ok(inputs.shift()!))
+  handle(GuessingGame.read, _ => ok(inputs.shift()!))
 
 const handleGenerateSecret = ([...values]: readonly number[]) =>
-  handle(GenerateSecret, max => ok(Math.min(max.arg, values.shift()!)))
+  handle(GuessingGame.generateSecret, max => ok(Math.min(max.arg, values.shift()!)))
 
 // #endregion
 // -------------------------------------------------------------------

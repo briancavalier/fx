@@ -2,7 +2,7 @@ import { at } from './Breadcrumb.js'
 import { ScopedEffect, withOrigin } from './Effect.js'
 import { Fx, fx, ok } from './Fx.js'
 import { control } from './Handler.js'
-import { assertScopeOpen, withScope, type AnyControlScope, type ReturnValue, type ScopeEffects } from './Scope.js'
+import { assertScopeOpen, inScope, type AnyControlScope, type ReturnValue, type ScopeEffects } from './Scope.js'
 import { sameScope } from './internal/scopeIdentity.js'
 
 /**
@@ -65,7 +65,7 @@ export const restartOnAbortIn = <const Scope extends AnyControlScope>(
     let restarts = 0
     let aborted: Abort<Scope> | undefined
     const attempt = f.pipe(
-      withScope(scope),
+      inScope(scope),
       control(Abort, (_, abort) => {
         if (!sameScope(abort.scope, scope)) return abort
 

@@ -6,7 +6,6 @@ import { forkIn } from './Concurrent.js'
 import { Get, provideFrom } from './Env.js'
 import { Effect } from './Effect.js'
 import { Fail, assert as assertNoFail, fail } from './Fail.js'
-import { andFinally } from './Finalization.js'
 import { ok, fx, run, runPromise, runTask, type Fx } from './Fx.js'
 import { handle } from './Handler.js'
 import {
@@ -28,8 +27,9 @@ import {
 } from './HttpServer.js'
 import { NodeHttpError, nodeHttp, type NodeHttpServerFactory } from './HttpServerNode.js'
 import { HandlerCapture } from './HandlerCapture.js'
+import { ScopedFork } from './internal/scopedFork.js'
 import type { Interrupt } from './Interrupt.js'
-import { currentScope } from './Scope.js'
+import { scope } from './Scope.js'
 import { YieldFrom, yieldFrom, type Yielding } from './YieldFrom.js'
 import { key } from './Key.js'
 
@@ -536,28 +536,6 @@ describe('HttpServer', () => {
       })
     })
 
-    it('runs current-scope finalizers when the response closes before finishing', async () => {
-      const exits: string[] = []
-      const app = route('GET', '/slow', fx(function* () {
-        yield* andFinally(exit => ok(void exits.push(exit.type)))
-        yield* waitForInterrupt()
-        return text('late')
-      }))
-
-      const runnable = serve(app, { port: 0, host: '127.0.0.1' }).pipe(
-        nodeHttp()
-      )
-      const _: Fx<Async | Interrupt | HandlerCapture<string> | Fail<NodeHttpError>, void> = runnable
-      void _
-
-      await withServer(createServer => serve(app, { port: 0, host: '127.0.0.1' }).pipe(
-        nodeHttp({ createServer })
-      ), async port => {
-        await httpAbortGet(port, '/slow')
-        await eventually(() => exits.includes('interrupted'))
-      })
-    })
-
     it('does not treat normal response close after finish as a failed request', async () => {
       const app = route('GET', '/health', ok(text('ok')))
       const events: ServerEvent[] = []
@@ -604,16 +582,17 @@ describe('HttpServer', () => {
       })
     })
 
-    it('does not expose request-owned current-scope forks from server program types', () => {
+    it('keeps explicit route scoped forks visible until their owner is handled', () => {
+      const RouteScope = scope('test/HttpServer/route-fork')
       const app = route('GET', '/fork', fx(function* () {
-        yield* forkIn(currentScope, ok('child'))
+        yield* forkIn(RouteScope, ok('child'))
         return text('ok')
       }))
 
       const runnable = serve(app, { port: 0, host: '127.0.0.1' }).pipe(
         nodeHttp()
       )
-      const _: Fx<Async | Interrupt | HandlerCapture<string> | Fail<NodeHttpError>, void> = runnable
+      const _: Fx<Async | Interrupt | HandlerCapture<string> | Fail<NodeHttpError> | ScopedFork<typeof RouteScope>, void> = runnable
       void _
     })
 

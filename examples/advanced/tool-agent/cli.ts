@@ -3,7 +3,7 @@ import { consoleLog, defaultConsole, fx, handleKeyed, provide, returnAll, runPro
 
 import { w3cFetch } from '@briancavalier/fx/http-client'
 import { withConsoleLog } from '@briancavalier/fx/log'
-import { withScope } from '@briancavalier/fx/scope'
+import { inScope, withScope } from '@briancavalier/fx/scope'
 import { YieldFrom } from '@briancavalier/fx/yield'
 import { defaultTime } from '@briancavalier/fx/time'
 
@@ -23,25 +23,25 @@ const logAgentEvents = handleKeyed(YieldFrom<typeof AgentEvents>, AgentEvents, e
 
 const main = fx(function* ({ openAIApiKey }: OpenAIModelContext) {
   const result = openAIApiKey === undefined
-    ? yield* withScope({ label: 'agent session' }, agentSessionScope => runAgent(agentSessionScope, task).pipe(
+    ? yield* withScope({ label: 'agent session' }, agentSessionScope => inScope(agentSessionScope, runAgent(agentSessionScope, task).pipe(
       withToolSandbox(defaultToolSandboxPolicy),
       fixture.handleTools,
       withFakeModel(),
       withConsoleLog,
       defaultTime,
       withBoundedConcurrency(4)
-    )).pipe(
+    ))).pipe(
       logAgentEvents,
       returnAll
     )
-    : yield* withScope({ label: 'agent session' }, agentSessionScope => runAgent(agentSessionScope, task).pipe(
+    : yield* withScope({ label: 'agent session' }, agentSessionScope => inScope(agentSessionScope, runAgent(agentSessionScope, task).pipe(
       withToolSandbox(defaultToolSandboxPolicy),
       fixture.handleTools,
       withOpenAIModel,
       withConsoleLog,
       defaultTime,
       withBoundedConcurrency(4),
-    )).pipe(
+    ))).pipe(
       logAgentEvents,
       w3cFetch(),
       returnAll

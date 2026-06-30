@@ -1,12 +1,9 @@
 export { Abort, abort, orReturn, restartOnAbort, restartOnAbortIn, type RestartOnAbortOptions } from '../Abort.js'
 export {
   Finally,
-  andFinally,
   andFinallyIn,
   managed,
-  using,
   usingIn,
-  usingManaged,
   usingManagedIn,
   type Finalizer,
   type Managed
@@ -14,8 +11,9 @@ export {
 export { InterruptFrom, interruptFrom, recoverInterrupt } from '../InterruptFrom.js'
 export { ReturnFrom, returnFrom } from '../ReturnFrom.js'
 export {
-  currentScope,
+  inScope,
   sameScope,
+  scope,
   scopeId,
   scopeLabel,
   withControlScope,
@@ -26,7 +24,6 @@ export {
   type AnyScope,
   type Control,
   type ControlScope,
-  type CurrentLifetimeScope,
   type Exit,
   type Failure,
   type Interrupted,

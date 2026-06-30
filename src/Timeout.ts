@@ -6,7 +6,7 @@ import { Finally, andFinallyIn } from './Finalization.js'
 import { Fx, flatMap, fx, map, ok } from './Fx.js'
 import type { HandlerCapture } from './HandlerCapture.js'
 import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
-import { assertScopeOpen, scopeLabel, withScope, type AnyLifetimeScope, type Exit } from './Scope.js'
+import { assertScopeOpen, inScope, scopeLabel, withScope, type AnyLifetimeScope, type Exit } from './Scope.js'
 import { wait } from './Task.js'
 import { Sleep, sleep } from './Time.js'
 import type { TraceOrigin } from './Trace.js'
@@ -33,13 +33,13 @@ export function timeout<const Options extends AnyTimeoutOptions>(
   const trace = captureTrace(origin, undefined, { kind: 'timeout' })
 
   return <const E, const A>(f: Fx<E, A>): Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<AnyLifetimeScope, TimeoutReasonOf<Options>>, A> =>
-    (withScope(scopeOptions, timeoutScope => fx(function* () {
+    (withScope(scopeOptions, timeoutScope => inScope(timeoutScope, fx(function* () {
       const task = yield* forkIn(timeoutScope, attempt(f), { origin, trace })
 
       yield* timeoutInWithTrace(timeoutScope, options, { origin, trace })
 
       return yield* wait(task)
-    })) as Fx<E | Fork | Sleep | Async | Fail<unknown>, AttemptResult<ErrorsOf<E>, A>>).pipe(
+    })) as Fx<unknown, unknown>) as Fx<E | Fork | Sleep | Async | Fail<unknown>, AttemptResult<ErrorsOf<E>, A>>).pipe(
       flatMap(unwrapAttempt)
     ) as Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<AnyLifetimeScope, TimeoutReasonOf<Options>>, A>
 }

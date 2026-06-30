@@ -1,10 +1,10 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { withBoundedConcurrency } from '@briancavalier/fx/concurrent'
-import { type Async, type Fx, type HandlerCapture, type Interrupt, returnAll, runPromise } from '@briancavalier/fx'
+import { fx, type Async, type Fx, type HandlerCapture, type Interrupt, returnAll, runPromise } from '@briancavalier/fx'
 
 import { collect } from '@briancavalier/fx/log'
-import { withScope, type Finally, type LifetimeScope } from '@briancavalier/fx/scope'
+import { inScope, withScope, type Finally, type LifetimeScope } from '@briancavalier/fx/scope'
 import { withClock, VirtualClock } from '@briancavalier/fx/time'
 
 import {
@@ -109,8 +109,8 @@ describe('incident collector example', () => {
 
   it('keeps domain effects visible until handlers remove them', () => {
     const fixture = createIncidentCollectorFixture()
-    const handled = withScope(bundleScope =>
-      withScope(collectorScope => {
+    const handled = (withScope(bundleScope => inScope(bundleScope,
+      withScope(collectorScope => inScope(collectorScope, fx(function* () {
         const program = collectIncidentSnapshot(bundleScope, collectorScope, {
           incidentId: 'INC-types',
           services: ['api']
@@ -119,16 +119,16 @@ describe('incident collector example', () => {
         const unhandled: Fx<never, SnapshotSummary> = program
         void unhandled
 
-        return program.pipe(
+        return yield* program.pipe(
           fixture.handle,
           withClock(new VirtualClock(0)),
           withBoundedConcurrency(6)
         )
-      })
-    ).pipe(
+      })) as Fx<unknown, unknown>)
+    )).pipe(
       collect,
       returnAll
-    )
+    ) as Fx<Async | HandlerCapture<string> | Interrupt, unknown>)
 
     const runnable: Fx<Async | HandlerCapture<string> | Interrupt, unknown> = handled
     void runnable
@@ -139,7 +139,7 @@ describe('incident collector example', () => {
       const handled = collectIncidentSnapshot(BundleScopeForTest, CollectorScopeForTest, {
         incidentId: 'INC-types',
         services: ['api']
-      }).pipe(withScope(CollectorScopeForTest))
+      }).pipe(inScope(CollectorScopeForTest))
 
       const bundleFinalizerVisible: Extract<EffectOf<typeof handled>, Finally<typeof BundleScopeForTest>> extends never ? false : true = true
       assert.equal(bundleFinalizerVisible, true)
@@ -153,18 +153,19 @@ const runSnapshot = async (
   fixture: ReturnType<typeof createIncidentCollectorFixture>,
   clock = new VirtualClock(Date.parse('2026-05-17T00:00:00.000Z'))
 ): Promise<SnapshotSummary | IncidentCollectorError | AggregateError | Error> => {
-  const running = withScope({ label: 'bundle' }, bundleScope =>
-    withScope({ label: 'collector' }, collectorScope => collectIncidentSnapshot(bundleScope, collectorScope, {
+  const running = (withScope({ label: 'bundle' }, bundleScope => inScope(bundleScope,
+    withScope({ label: 'collector' }, collectorScope => inScope(collectorScope, collectIncidentSnapshot(bundleScope, collectorScope, {
       incidentId: 'INC-1',
       services: ['api', 'worker', 'billing']
     }).pipe(
       fixture.handle,
       withClock(clock),
       withBoundedConcurrency(6)
-    ))
-  ).pipe(
+    )) as Fx<unknown, unknown>)
+  )).pipe(
     collect,
-    returnAll,
+    returnAll
+  ) as Fx<Async | HandlerCapture<string> | Interrupt, unknown>).pipe(
     runPromise
   )
 

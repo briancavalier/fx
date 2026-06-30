@@ -1,7 +1,7 @@
 import { assert as assertNoFail, consoleLog, defaultConsole, fx, runPromise } from '@briancavalier/fx'
 import { race, withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 
-import { withScope, usingIn, type AnyLifetimeScope } from '@briancavalier/fx/scope'
+import { inScope, withScope, usingIn, type AnyLifetimeScope } from '@briancavalier/fx/scope'
 
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 
@@ -54,7 +54,7 @@ const main = <const S extends AnyLifetimeScope>(requestScope: S) => fx(function*
   yield* consoleLog('result:', result)
 })
 
-await withScope({ label: 'interrupt-safe finalization' }, requestScope => main(requestScope)).pipe(
+await withScope({ label: 'interrupt-safe finalization' }, requestScope => inScope(requestScope, main(requestScope))).pipe(
   defaultTime,
   withUnboundedConcurrency,
   defaultConsole,

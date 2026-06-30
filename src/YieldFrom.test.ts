@@ -7,7 +7,7 @@ import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { handle, handleKeyed } from './Handler.js'
 import { key } from './Key.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope, withScope, type Control } from './Scope.js'
+import { scope, inScope, type Control } from './Scope.js'
 import { next as nextSink, Sink } from './Sink.js'
 import type { Receiving } from './Sink.js'
 import {
@@ -159,7 +159,7 @@ describe('YieldFrom', () => {
       return 'late'
     }).pipe(
       handleKeyed(YieldFrom<typeof ItemScope>, ItemScope, () => returnFrom(ReturnScope, 'early')),
-      withScope(ReturnScope),
+      inScope(ReturnScope),
       run
     )
 
@@ -174,7 +174,7 @@ describe('YieldFrom', () => {
       return 'late'
     }).pipe(
       handleKeyed(YieldFrom<typeof ItemScope>, ItemScope, () => abort(AbortScope)),
-      withScope(AbortScope),
+      inScope(AbortScope),
       orReturn(AbortScope, 'aborted'),
       run
     )

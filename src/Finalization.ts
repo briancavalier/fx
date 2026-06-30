@@ -2,7 +2,7 @@ import { ScopedEffect } from './Effect.js'
 import { Fx, fx } from './Fx.js'
 import { uninterruptible } from './Interrupt.js'
 import type { Interrupt } from './Interrupt.js'
-import { assertScopeOpen, currentScope, type AnyLifetimeScope, type Exit } from './Scope.js'
+import { assertScopeOpen, type AnyLifetimeScope, type Exit } from './Scope.js'
 
 // ----------------------------------------------------------------------
 // Guaranteed finalization effects within a scope
@@ -22,30 +22,11 @@ export type Finalizer<E = unknown> = (exit: Exit) => Fx<E, void>
 /**
  * Request that a cleanup operation be run when the scope exits.
  *
- * A `withScope(...)` handler interprets `Finally` requests for its matching scope
+ * A `inScope(...)` handler interprets `Finally` requests for its matching scope
  * and runs registered finalizers when that scope succeeds, fails, returns,
  * aborts, or is interrupted.
  */
 export class Finally<const Scope extends AnyLifetimeScope, E = never> extends ScopedEffect('fx/Finally')<Scope, Finalizer<E>, void> { }
-
-/**
- * Register a cleanup operation to run when the current scope exits.
- *
- * Use this when the finalizer does not need to inspect the scope exit.
- */
-export function andFinally<E>(f: Fx<E, void>): Fx<Finally<typeof currentScope, E>, void>
-/**
- * Register a cleanup operation that receives the current scope's exit.
- *
- * Use this when cleanup behavior depends on whether the scope succeeded,
- * failed, returned, aborted, or was interrupted.
- */
-export function andFinally<E>(f: (exit: Exit) => Fx<E, void>): Fx<Finally<typeof currentScope, E>, void>
-export function andFinally<E>(
-  f: Fx<E, void> | ((exit: Exit) => Fx<E, void>)
-): Fx<Finally<typeof currentScope, E>, void> {
-  return new Finally(currentScope, typeof f === 'function' ? f : () => f)
-}
 
 /**
  * Register a cleanup operation to run when the named scope exits.
@@ -75,18 +56,6 @@ export function andFinallyIn<const Scope extends AnyLifetimeScope, E>(
 }
 
 /**
- * Run an initial operation, register cleanup for its result, and return it.
- *
- * Acquisition and finalizer registration happen in an uninterruptible region so
- * an acquired resource is not left without cleanup.
- */
-export const using = <const IE, const FE, const R>(
-  initially: Fx<IE, R>,
-  finally_: (r: R, exit: Exit) => Fx<FE, void>
-): Fx<IE | Finally<typeof currentScope, FE> | Interrupt, R> =>
-    usingIn(currentScope, initially, finally_)
-
-/**
  * Run an initial operation, register cleanup for its result in a named scope,
  * and return it.
  *
@@ -113,18 +82,6 @@ export const managed = <const A, const E>(
   value,
   finalizer
 })
-
-/**
- * Run an initial operation that returns a managed value, register its cleanup,
- * and return its value.
- *
- * Use this when acquisition naturally returns the value and its finalizer
- * together.
- */
-export const usingManaged = <const IE, const FE, const A>(
-  initially: Fx<IE, Managed<A, FE>>
-): Fx<IE | Finally<typeof currentScope, FE> | Interrupt, A> =>
-    usingManagedIn(currentScope, initially)
 
 /**
  * Run an initial operation that returns a managed value, register its cleanup in

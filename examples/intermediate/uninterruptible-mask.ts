@@ -1,7 +1,7 @@
 import { assert as assertNoFail, consoleLog, control, defaultConsole, fx, runPromise, uninterruptibleMask } from '@briancavalier/fx'
 import { withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 
-import { andFinallyIn, InterruptFrom, withScope, type AnyLifetimeScope } from '@briancavalier/fx/scope'
+import { andFinallyIn, InterruptFrom, inScope, withScope, type AnyLifetimeScope } from '@briancavalier/fx/scope'
 
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 import { timeout } from '@briancavalier/fx/timeout'
@@ -44,9 +44,9 @@ const slow = <const S extends AnyLifetimeScope>(exampleScope: S) => uninterrupti
 }))
 
 const main = fx(function* () {
-  const result = yield* withScope({ label: 'uninterruptible mask example' }, exampleScope => slow(exampleScope).pipe(
+  const result = yield* withScope({ label: 'uninterruptible mask example' }, exampleScope => inScope(exampleScope, slow(exampleScope).pipe(
     timeout({ ms: 50 })
-  ))
+  )))
   yield* consoleLog('result:', result)
 })
 

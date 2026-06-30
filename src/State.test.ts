@@ -3,11 +3,11 @@ import { describe, it } from 'node:test'
 
 import { fork, forkIn, withUnboundedConcurrency } from './Concurrent.js'
 import { Fail, catchAll, catchIf, fail, returnFail, runCatch } from './Fail.js'
-import { andFinally, andFinallyIn } from './Finalization.js'
+import { andFinallyIn } from './Finalization.js'
 import { finalizing, fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { key } from './Key.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope, withScope, type Control } from './Scope.js'
+import { scope, inScope, type Control } from './Scope.js'
 import {
   GetState,
   getState,
@@ -136,7 +136,7 @@ describe('State', () => {
       }))
 
       return yield* getState(CounterState)
-    }).pipe(withScope(CleanupScope), withState(CounterState, 1), returnFail, run)
+    }).pipe(inScope(CleanupScope), withState(CounterState, 1), returnFail, run)
 
     assert.equal(program, 2)
     assert.equal(finalizerState, 2)
@@ -148,8 +148,8 @@ describe('State', () => {
       yield* andFinallyIn(CleanupScope, modifyState(CounterState, count => [count + 1, undefined]))
       return 'done'
     })
-    const wrongOrder = program.pipe(withState(CounterState, 1), withScope(CleanupScope))
-    const rightOrder = program.pipe(withScope(CleanupScope), withState(CounterState, 1))
+    const wrongOrder = program.pipe(withState(CounterState, 1), inScope(CleanupScope))
+    const rightOrder = program.pipe(inScope(CleanupScope), withState(CounterState, 1))
 
     type WrongEffects = typeof wrongOrder extends Fx<infer E, 'done'> ? E : never
     type RightEffects = typeof rightOrder extends Fx<infer E, 'done'> ? E : never
@@ -398,7 +398,7 @@ describe('State', () => {
 
         return [recovered, yield* getState(CounterState)] as const
       }).pipe(
-        withScope(ForkScope),
+        inScope(ForkScope),
         withState(CounterState, 0),
         withUnboundedConcurrency
       )
@@ -483,7 +483,7 @@ describe('State', () => {
         }).pipe(
           finalizing(fail(cleanupFailure)),
           transactionalState(CounterState),
-          withScope(ForkScope),
+          inScope(ForkScope),
           returnFail
         )
 
@@ -504,7 +504,7 @@ describe('State', () => {
         }).pipe(
           finalizing(returnFrom(ForkScope, 'cleanup')),
           transactionalState(CounterState),
-          withScope(ForkScope),
+          inScope(ForkScope),
           returnFail
         )
 
@@ -514,12 +514,12 @@ describe('State', () => {
       assert.deepEqual(result, ['cleanup', 1])
     })
 
-    it('does not become the nearest current scope', () => {
+    it('does not install a lifetime boundary', () => {
       const events: string[] = []
 
       const result = fx(function* () {
         yield* fx(function* () {
-          yield* andFinally(fx(function* () {
+          yield* andFinallyIn(ForkScope, fx(function* () {
             events.push('transaction finalizer')
           }))
           yield* modifyState(CounterState, count => [count + 1, undefined])
@@ -528,7 +528,7 @@ describe('State', () => {
         events.push('after transaction')
         return yield* getState(CounterState)
       }).pipe(
-        withScope(ForkScope),
+        inScope(ForkScope),
         withState(CounterState, 0),
         returnFail,
         run

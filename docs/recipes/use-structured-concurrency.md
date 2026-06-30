@@ -45,13 +45,13 @@ Use `forkIn(scope, fx)` when child lifetime should belong to a lexical scope, bu
 scheduling should still be chosen by the nearest concurrency handler.
 
 ```ts
-const request = withScope({ label: "request" }, scope => fx(function* () {
+const request = withScope({ label: "request" }, scope => inScope(scope, fx(function* () {
   yield* forkIn(scope, refreshCache)
   return yield* loadDashboard
-}))
+})))
 ```
 
-`forkIn` introduces a scoped fork effect. `withScope(...)` handles that
+`forkIn` introduces a scoped fork effect. `inScope(...)` handles that
 lifetime boundary and re-yields an ordinary `Fork` scheduling request. A fork
 scheduler must be outside the scope to handle that request:
 
@@ -68,9 +68,9 @@ unhandled, so normal typed execution should reject it:
 
 ```ts
 withScope({ label: "request" }, scope =>
-  fx(function* () {
+  inScope(scope, fx(function* () {
     yield* forkIn(scope, refreshCache)
-  }).pipe(withUnboundedConcurrency)
+  }).pipe(withUnboundedConcurrency))
 ).pipe(runPromise)
 ```
 

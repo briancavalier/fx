@@ -7,7 +7,7 @@ import { fail, Fail, returnFail } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope, withControlScope, withScope, type Control } from './Scope.js'
+import { scope, withControlScope, inScope, type Control } from './Scope.js'
 
 describe('Abort', () => {
   const TestScope = scope<Control>()('test/Abort')
@@ -19,27 +19,27 @@ describe('Abort', () => {
       const result = fx(function* () {
         yield* abort(SecondScope)
         return 'done'
-      }).pipe(withScope(FirstScope), orReturn(FirstScope, 'aborted'), run)
+      }).pipe(inScope(FirstScope), orReturn(FirstScope, 'aborted'), run)
 
       assert.equal(result, 'aborted')
     })
 
     it('given matching Abort with fallback, returns alternative', () => {
       const r = Math.random()
-      const a = abort(TestScope).pipe(withScope(TestScope), orReturn(TestScope, r), run)
+      const a = abort(TestScope).pipe(inScope(TestScope), orReturn(TestScope, r), run)
 
       assert.equal(a, r)
     })
 
     it('given success, returns original value', () => {
       const r = Math.random()
-      const a = ok(r).pipe(withScope(TestScope), orReturn(TestScope, r + 1), run)
+      const a = ok(r).pipe(inScope(TestScope), orReturn(TestScope, r + 1), run)
 
       assert.equal(a, r)
     })
 
     it('leaves matching Abort unhandled when fallback is omitted', () => {
-      const f = abort(TestScope).pipe(withScope(TestScope))
+      const f = abort(TestScope).pipe(inScope(TestScope))
       const _: typeof f extends import('./Fx.js').Fx<Abort<typeof TestScope>, never> ? true : false = true
 
       assert.equal(Abort.is(f[Symbol.iterator]().next().value), true)
@@ -50,7 +50,7 @@ describe('Abort', () => {
       const f = fx(function* () {
         yield* abort(OtherScope)
         return 'done'
-      }).pipe(withScope(TestScope), orReturn(TestScope, 'aborted'))
+      }).pipe(inScope(TestScope), orReturn(TestScope, 'aborted'))
 
       assert.equal(Abort.is(f[Symbol.iterator]().next().value), true)
     })

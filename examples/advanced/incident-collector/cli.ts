@@ -1,8 +1,8 @@
-import { consoleError, consoleLog, defaultConsole, fx, returnAll, runPromise } from '@briancavalier/fx'
+import { consoleError, consoleLog, defaultConsole, fx, returnAll, runPromise, type Async, type Fx, type HandlerCapture, type Interrupt } from '@briancavalier/fx'
 import { withCoopConcurrency } from '@briancavalier/fx/concurrent'
 
 import { withConsoleLog } from '@briancavalier/fx/log'
-import { withScope } from '@briancavalier/fx/scope'
+import { inScope, withScope } from '@briancavalier/fx/scope'
 import { defaultTime } from '@briancavalier/fx/time'
 import {
   collectIncidentSnapshot,
@@ -15,8 +15,8 @@ const runSnapshot = (label: string, failDeploy: boolean) => fx(function* () {
     primaryRuntimeFails: true
   })
 
-  const result = yield* withScope({ label: 'bundle' }, bundleScope =>
-    withScope({ label: 'collector' }, collectorScope => collectIncidentSnapshot(bundleScope, collectorScope, {
+  const result = yield* (withScope({ label: 'bundle' }, bundleScope => inScope(bundleScope, fx(function* () {
+    return yield* withScope({ label: 'collector' }, collectorScope => inScope(collectorScope, collectIncidentSnapshot(bundleScope, collectorScope, {
       incidentId: failDeploy ? 'INC-2026-05-17-B' : 'INC-2026-05-17-A',
       services: ['api', 'worker', 'billing']
     }).pipe(
@@ -26,12 +26,12 @@ const runSnapshot = (label: string, failDeploy: boolean) => fx(function* () {
       // withBoundedConcurrency(6),
       // cooperative scheduling:
       withCoopConcurrency({ concurrency: 6, yieldBudget: 64 })
-    ))
-  ).pipe(
+    )) as Fx<unknown, unknown>)
+  }))).pipe(
     withConsoleLog,
     defaultTime,
     returnAll
-  )
+  ) as Fx<Async | HandlerCapture<string> | Interrupt, unknown>)
 
   yield* consoleLog(`\n${label}`)
   yield* consoleLog(JSON.stringify({ result: printableResult(result), state: fixture.state() }, null, 2))
@@ -51,7 +51,7 @@ await fx(function* () {
 }).pipe(
   defaultConsole,
   runPromise
-).catch(async error => {
+).catch(async (error: unknown) => {
   await consoleError(error).pipe(defaultConsole, runPromise)
   process.exitCode = 1
 })

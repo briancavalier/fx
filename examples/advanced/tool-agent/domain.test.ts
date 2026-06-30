@@ -1,10 +1,10 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { withBoundedConcurrency } from '@briancavalier/fx/concurrent'
-import { type Async, type Fx, type HandlerCapture, type Interrupt, returnAll, runPromise } from '@briancavalier/fx'
+import { fx, type Async, type Fx, type HandlerCapture, type Interrupt, returnAll, runPromise } from '@briancavalier/fx'
 
 import { collect } from '@briancavalier/fx/log'
-import { withScope } from '@briancavalier/fx/scope'
+import { inScope, withScope } from '@briancavalier/fx/scope'
 import { collectFrom } from '@briancavalier/fx/yield'
 import { withClock, VirtualClock } from '@briancavalier/fx/time'
 
@@ -129,13 +129,13 @@ describe('tool agent example', () => {
 
   it('keeps domain effects visible until handlers remove them', () => {
     const fixture = createToolAgentFixture()
-    const handled = withScope(agentSessionScope => {
+    const handled = withScope(agentSessionScope => inScope(agentSessionScope, fx(function* () {
       const program = runAgent(agentSessionScope, 'type visibility')
       // @ts-expect-error the raw agent program still requires tool agent effects.
       const unhandled: Fx<never, AgentAnswer> = program
       void unhandled
 
-      return program.pipe(
+      return yield* program.pipe(
         withToolSandbox(defaultToolSandboxPolicy),
         fixture.handleTools,
         withFakeModel(),
@@ -143,7 +143,7 @@ describe('tool agent example', () => {
         collect,
         withBoundedConcurrency(4)
       )
-    }).pipe(
+    }))).pipe(
       returnAll,
       collectFrom(AgentEvents)
     )
@@ -159,14 +159,14 @@ const runToolAgent = async (
   clock = new VirtualClock(Date.parse('2026-05-18T00:00:00.000Z')),
   policy: ToolSandboxPolicy = defaultToolSandboxPolicy
 ): Promise<RunResult> => {
-  const running = withScope({ label: 'agent session' }, agentSessionScope => runAgent(agentSessionScope, 'Review the package health and recommend next steps').pipe(
+  const running = withScope({ label: 'agent session' }, agentSessionScope => inScope(agentSessionScope, runAgent(agentSessionScope, 'Review the package health and recommend next steps').pipe(
     withToolSandbox(policy),
     fixture.handleTools,
     withFakeModel(modelOptions),
     withClock(clock),
     collect,
     withBoundedConcurrency(4)
-  )).pipe(
+  ))).pipe(
     returnAll,
     collectFrom(AgentEvents),
     runPromise

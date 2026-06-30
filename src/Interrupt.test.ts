@@ -9,7 +9,7 @@ import { bracket, finalizing, fx, ok, run, runPromise, runTask, type Fx } from '
 import { control, handle } from './Handler.js'
 import { InterruptFrom, interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible, uninterruptibleMask, type Interrupt, type RestoreInterrupt } from './Interrupt.js'
-import { scope, withScope, type Exit } from './Scope.js'
+import { scope, inScope, type Exit } from './Scope.js'
 
 describe('Typed interruption', () => {
   const TestScope = scope('test/InterruptFrom')
@@ -25,7 +25,7 @@ describe('Typed interruption', () => {
       }))
       yield* interruptFrom(TestScope, reason)
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       recoverInterrupt(TestScope, r => {
         recoveredReason = r
         return ok('interrupted')
@@ -42,7 +42,7 @@ describe('Typed interruption', () => {
   it('types recovery reasons as unknown', () => {
     const reason = { type: 'test-interrupt' } as const
     const recovered = interruptFrom(TestScope, reason).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       recoverInterrupt(TestScope, r => {
         const _: unknown = r
         void _
@@ -56,7 +56,7 @@ describe('Typed interruption', () => {
 
   it('rejects incompatible recovery reason annotations', () => {
     const recovered = interruptFrom(TestScope, 123).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       // @ts-expect-error recovery reasons are unknown until narrowed by the handler
       recoverInterrupt(TestScope, (r: string) => ok(r))
     )
@@ -71,7 +71,7 @@ describe('Typed interruption', () => {
       yield* interruptFrom(OtherScope, 'other')
       return 'done'
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       recoverInterrupt(TestScope, () => ok('interrupted'))
     )
 
@@ -88,7 +88,7 @@ describe('Typed interruption', () => {
       yield* andFinallyIn(TestScope, fail(cleanupFailure))
       yield* interruptFrom(TestScope)
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       recoverInterrupt(TestScope, () => ok('interrupted')),
       returnFail,
       run
@@ -109,7 +109,7 @@ describe('Typed interruption', () => {
       }))
       yield* interruptFrom(TestScope, reason)
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       returnFail,
       run
@@ -120,7 +120,7 @@ describe('Typed interruption', () => {
   })
 
   it('leaves the interrupt visible after scope cleanup', () => {
-    const f = interruptFrom(TestScope).pipe(withScope(TestScope))
+    const f = interruptFrom(TestScope).pipe(inScope(TestScope))
     const next = f[Symbol.iterator]().next()
 
     assert.equal(InterruptFrom.is(next.value), true)
@@ -132,7 +132,7 @@ describe('Typed interruption', () => {
     const f = fx(function* () {
       yield* interruptFrom(OtherScope)
       return 'done'
-    }).pipe(withScope(TestScope))
+    }).pipe(inScope(TestScope))
 
     const next = f[Symbol.iterator]().next()
 
@@ -147,7 +147,7 @@ describe('Typed interruption', () => {
       yield* andFinallyIn(TestScope, fail(cleanupFailure))
       yield* interruptFrom(TestScope)
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       returnFail,
       run
@@ -255,7 +255,7 @@ describe('Interrupt masking', () => {
         })
       )
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       returnFail,
       runTask
     )
@@ -281,7 +281,7 @@ describe('Interrupt masking', () => {
         }))
       )
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       returnFail,
       runTask
     )
@@ -579,7 +579,7 @@ describe('Interrupt masking', () => {
     })
 
     const result = race([ok('winner'), loser]).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise

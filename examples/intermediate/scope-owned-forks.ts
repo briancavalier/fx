@@ -23,12 +23,12 @@ const request = <const S extends AnyLifetimeScope>(requestScope: S) => fx(functi
   return 'accepted'
 })
 
-const result = await withScope({ label: 'request' }, requestScope => inScope(requestScope, request(requestScope).pipe(
+const result = await withScope({ label: 'request' }, requestScope => inScope(requestScope, request(requestScope)).pipe(
   recoverInterrupt(requestScope, reason => fx(function* () {
     yield* consoleLog(`request: interrupted by ${formatReason(reason)}`)
     return 'timed out' as const
   }))
-))).pipe(
+)).pipe(
   defaultTime,
   withBoundedConcurrency(2),
   defaultConsole,

@@ -4,9 +4,10 @@ import { abort, orReturn } from './Abort.js'
 import { withUnboundedConcurrency } from './Concurrent.js'
 import { Effect } from './Effect.js'
 import { fx, ok, run, runPromise, type Fx } from './Fx.js'
-import { handle, handleScoped } from './Handler.js'
+import { handle, handleKeyed } from './Handler.js'
+import { key } from './Key.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope, withScope, type Control } from './Scope.js'
+import { scope, inScope, type Control } from './Scope.js'
 import { next as nextSink, Sink } from './Sink.js'
 import type { Receiving } from './Sink.js'
 import {
@@ -27,13 +28,13 @@ import { dispose } from './internal/disposable.js'
 import type { Yielding } from './YieldFrom.js'
 
 describe('YieldFrom', () => {
-  const NumberScope = scope<Yielding<number>>()('test/YieldFrom/numbers')
-  const NumberSinkScope = scope<Receiving<number>>()('test/YieldFrom/number-sink')
-  const ItemScope = scope<Yielding<'item'>>()('test/YieldFrom/item')
-  const DecisionScope = scope<Yielding<string, boolean>>()('test/YieldFrom/decision')
+  const NumberScope = key<Yielding<number>>()('test/YieldFrom/numbers')
+  const NumberSinkScope = key<Receiving<number>>()('test/YieldFrom/number-sink')
+  const ItemScope = key<Yielding<'item'>>()('test/YieldFrom/item')
+  const DecisionScope = key<Yielding<string, boolean>>()('test/YieldFrom/decision')
 
   it('allows sink scopes independent of YieldFrom protocols', () => {
-    const SinkOnlyScope = scope<Receiving<number>>()('test/YieldFrom/sink-only')
+    const SinkOnlyScope = key<Receiving<number>>()('test/YieldFrom/sink-only')
     const f = fx(function* () {
       const value = yield* nextSink(SinkOnlyScope)
       return value + 1
@@ -43,7 +44,7 @@ describe('YieldFrom', () => {
     const next = f[Symbol.iterator]().next()
 
     assert.equal(Sink.is(next.value), true)
-    assert.equal((next.value as Sink<typeof SinkOnlyScope>).scope, SinkOnlyScope)
+    assert.equal((next.value as Sink<typeof SinkOnlyScope>).key, SinkOnlyScope)
     void _
   })
 
@@ -61,8 +62,8 @@ describe('YieldFrom', () => {
   })
 
   it('collects yields from a same-id scope token', () => {
-    const FirstScope = scope<Yielding<'item'>>()('test/YieldFrom/same-id')
-    const SecondScope = scope<Yielding<'item'>>()('test/YieldFrom/same-id')
+    const FirstScope = key<Yielding<'item'>>()('test/YieldFrom/same-id')
+    const SecondScope = key<Yielding<'item'>>()('test/YieldFrom/same-id')
     const result = fx(function* () {
       yield* yieldFrom(SecondScope, 'item')
       return 'done'
@@ -84,24 +85,24 @@ describe('YieldFrom', () => {
   })
 
   it('propagates yields from a different scope', () => {
-    const OtherScope = scope<Yielding<'other'>>()('test/YieldFrom/other')
+    const OtherScope = key<Yielding<'other'>>()('test/YieldFrom/other')
 
     const f = fx(function* () {
       yield* yieldFrom(OtherScope, 'other')
       return 'done'
-    }).pipe(handleScoped(YieldFrom<typeof NumberScope>, NumberScope, () => ok(undefined)))
+    }).pipe(handleKeyed(YieldFrom<typeof NumberScope>, NumberScope, () => ok(undefined)))
 
     const _: typeof f extends Fx<YieldFrom<typeof OtherScope>, string> ? true : false = true
     const next = f[Symbol.iterator]().next()
 
     assert.equal(YieldFrom.is(next.value), true)
     const effect = next.value as YieldFrom<typeof OtherScope>
-    assert.equal(effect.scope, OtherScope)
+    assert.equal(effect.key, OtherScope)
     assert.equal(effect.arg, 'other')
   })
 
   it('handles nested named yield scopes independently', () => {
-    const InnerScope = scope<Yielding<'inner'>>()('test/YieldFrom/inner')
+    const InnerScope = key<Yielding<'inner'>>()('test/YieldFrom/inner')
     const outer = [] as number[]
     const inner = [] as string[]
 
@@ -110,8 +111,8 @@ describe('YieldFrom', () => {
       yield* yieldFrom(InnerScope, 'inner')
       return 'done'
     }).pipe(
-      handleScoped(YieldFrom<typeof InnerScope>, InnerScope, effect => ok(void inner.push(effect.arg))),
-      handleScoped(YieldFrom<typeof NumberScope>, NumberScope, effect => ok(void outer.push(effect.arg))),
+      handleKeyed(YieldFrom<typeof InnerScope>, InnerScope, effect => ok(void inner.push(effect.arg))),
+      handleKeyed(YieldFrom<typeof NumberScope>, NumberScope, effect => ok(void outer.push(effect.arg))),
       run
     )
 
@@ -124,7 +125,7 @@ describe('YieldFrom', () => {
     const f = fx(function* () {
       yield* yieldFrom(ItemScope, 'item')
       return true
-    }).pipe(handleScoped(YieldFrom<typeof ItemScope>, ItemScope, () => ok(undefined)))
+    }).pipe(handleKeyed(YieldFrom<typeof ItemScope>, ItemScope, () => ok(undefined)))
 
     const _: typeof f extends Fx<never, boolean> ? true : false = true
 
@@ -136,7 +137,7 @@ describe('YieldFrom', () => {
       const accepted = yield* yieldFrom(DecisionScope, 'item')
       const _: boolean = accepted
       return accepted ? 'accepted' : 'rejected'
-    }).pipe(handleScoped(YieldFrom<typeof DecisionScope>, DecisionScope, effect => ok(effect.arg === 'item')))
+    }).pipe(handleKeyed(YieldFrom<typeof DecisionScope>, DecisionScope, effect => ok(effect.arg === 'item')))
 
     const _: typeof f extends Fx<never, 'accepted' | 'rejected'> ? true : false = true
 
@@ -157,8 +158,8 @@ describe('YieldFrom', () => {
       yield* yieldFrom(ItemScope, 'item')
       return 'late'
     }).pipe(
-      handleScoped(YieldFrom<typeof ItemScope>, ItemScope, () => returnFrom(ReturnScope, 'early')),
-      withScope(ReturnScope),
+      handleKeyed(YieldFrom<typeof ItemScope>, ItemScope, () => returnFrom(ReturnScope, 'early')),
+      inScope(ReturnScope),
       run
     )
 
@@ -172,8 +173,8 @@ describe('YieldFrom', () => {
       yield* yieldFrom(ItemScope, 'item')
       return 'late'
     }).pipe(
-      handleScoped(YieldFrom<typeof ItemScope>, ItemScope, () => abort(AbortScope)),
-      withScope(AbortScope),
+      handleKeyed(YieldFrom<typeof ItemScope>, ItemScope, () => abort(AbortScope)),
+      inScope(AbortScope),
       orReturn(AbortScope, 'aborted'),
       run
     )
@@ -347,8 +348,8 @@ describe('YieldFrom', () => {
     })
 
     it('leaves unrelated YieldFrom and Sink scopes visible', () => {
-      const OtherScope = scope<Yielding<'other'>>()('test/YieldFrom/other-to')
-      const OtherSinkScope = scope<Receiving<'other'>>()('test/YieldFrom/other-sink-to')
+      const OtherScope = key<Yielding<'other'>>()('test/YieldFrom/other-to')
+      const OtherSinkScope = key<Receiving<'other'>>()('test/YieldFrom/other-sink-to')
       const source = fx(function* () {
         yield* yieldFrom(OtherScope, 'other')
         return 'source'
@@ -449,7 +450,7 @@ describe('YieldFrom', () => {
     })
 
     it('rejects bidirectional YieldFrom scopes', () => {
-      const DecisionSinkScope = scope<Receiving<string>>()('test/YieldFrom/decision-sink')
+      const DecisionSinkScope = key<Receiving<string>>()('test/YieldFrom/decision-sink')
       const source = fx(function* () {
         yield* yieldFrom(DecisionScope, 'item')
       })
@@ -464,7 +465,7 @@ describe('YieldFrom', () => {
     })
 
     it('rejects sinks that cannot receive the yielded values', () => {
-      const StringSinkScope = scope<Receiving<string>>()('test/YieldFrom/string-sink')
+      const StringSinkScope = key<Receiving<string>>()('test/YieldFrom/string-sink')
       const source = fx(function* () {
         yield* yieldFrom(NumberScope, 1)
       })

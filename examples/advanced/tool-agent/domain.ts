@@ -1,13 +1,13 @@
 import { mapAll, type Fork } from '@briancavalier/fx/concurrent'
 import { Async, Effect, fail, type Fail, fx, type Fx, type Interrupt } from '@briancavalier/fx'
 
-import { scope, type Finally, type Managed, usingManagedIn, type YieldFrom, type Yielding } from '@briancavalier/fx/scope'
+import { type AnyLifetimeScope, type Finally, type Managed, usingManagedIn } from '@briancavalier/fx/scope'
+import { key, type YieldFrom, type Yielding } from '@briancavalier/fx/yield'
 import { info, type Log } from '@briancavalier/fx/log'
 
 import { type Time } from '@briancavalier/fx/time'
 
-export const AgentSessionScope = scope('examples/advanced/tool-agent/AgentSession')
-export const AgentEvents = scope<Yielding<AgentEvent>>()('examples/advanced/tool-agent/AgentEvents')
+export const AgentEvents = key<Yielding<AgentEvent>>()('examples/advanced/tool-agent/AgentEvents')
 
 export type ToolName =
   | 'readProjectSummary'
@@ -63,7 +63,7 @@ export type AgentError =
   | { readonly tag: 'ToolUnavailable'; readonly tool: ToolName; readonly reason: string }
   | { readonly tag: 'ModelError'; readonly reason: string; readonly cause?: unknown }
 
-export type ToolAgentEffects =
+export type ToolAgentEffects<SessionScope extends AnyLifetimeScope = AnyLifetimeScope> =
   | AskModel
   | RunTool
   | StartAgentSession
@@ -72,7 +72,7 @@ export type ToolAgentEffects =
   | Async
   | Fork
   | Interrupt
-  | Finally<typeof AgentSessionScope, YieldFrom<typeof AgentEvents>>
+  | Finally<SessionScope, YieldFrom<typeof AgentEvents>>
   | Fail<AgentError>
 
 /**
@@ -97,10 +97,11 @@ export const askModel = (request: ModelRequest) => new AskModel(request)
 export const runTool = (call: ToolCall) => new RunTool(call)
 export const startAgentSession = (task: string) => new StartAgentSession(task)
 
-export const runAgent = (
+export const runAgent = <const SessionScope extends AnyLifetimeScope>(
+  agentSessionScope: SessionScope,
   task: string
-): Fx<ToolAgentEffects, AgentAnswer> => fx(function* () {
-  const session = yield* usingManagedIn(AgentSessionScope, startAgentSession(task))
+): Fx<ToolAgentEffects<SessionScope>, AgentAnswer> => fx(function* () {
+  const session = yield* usingManagedIn(agentSessionScope, startAgentSession(task))
   yield* info('agent session started', { session: session.id, task })
 
   const plan = yield* askModel({ type: 'plan', task })

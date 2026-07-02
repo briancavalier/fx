@@ -11,7 +11,7 @@ import { type HandlerCapture } from './HandlerCapture.js'
 import { interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible } from './Interrupt.js'
 import { ReturnFrom, returnFrom } from './ReturnFrom.js'
-import { currentScope, scope, withScope, type Control, type Exit } from './Scope.js'
+import { scope, withScope, inScope, type Control, type Exit } from './Scope.js'
 import { Task, wait } from './Task.js'
 import { getTrace, snapshotError } from './Trace.js'
 
@@ -39,7 +39,7 @@ describe('Fork', () => {
       const first = firstSuccess([fail(new Error('nope')), ok('yes' as const)] as const)
       const scoped = fx(function* () {
         return yield* returnFrom(TestScope, 'early' as const)
-      }).pipe(withScope(TestScope))
+      }).pipe(inScope(TestScope))
 
       const checks = [
         false satisfies IsAny<EffectOf<typeof forked>>,
@@ -466,7 +466,7 @@ describe('Fork', () => {
         }))
         yield* fail(cause)
       })]).pipe(
-        withScope(TestScope),
+        inScope(TestScope),
         withUnboundedConcurrency,
         returnFail,
         runPromise
@@ -494,7 +494,7 @@ describe('Fork', () => {
       })
 
       const result = await all([slow, bad]).pipe(
-        withScope(TestScope),
+        inScope(TestScope),
         withUnboundedConcurrency,
         returnFail,
         runPromise
@@ -520,7 +520,7 @@ describe('Fork', () => {
       })
 
       const result = await all([slow, bad]).pipe(
-        withScope(TestScope),
+        inScope(TestScope),
         withUnboundedConcurrency,
         returnFail,
         runPromise
@@ -550,7 +550,7 @@ describe('Fork', () => {
       })
 
       const result = await all([slow(firstReleaseFailure), bad, slow(secondReleaseFailure)]).pipe(
-        withScope(TestScope),
+        inScope(TestScope),
         withUnboundedConcurrency,
         returnFail,
         runPromise
@@ -990,7 +990,7 @@ describe('Fork', () => {
 
       const result = await all([slow, bad]).pipe(
         withCoopConcurrency(),
-        withScope(TestScope),
+        inScope(TestScope),
         returnFail,
         runPromise
       )
@@ -1020,7 +1020,7 @@ describe('Fork', () => {
         assertPromise<string>(() => new Promise(resolve => setImmediate(() => resolve('winner'))))
       ]).pipe(
         withCoopConcurrency(),
-        withScope(TestScope),
+        inScope(TestScope),
         returnFail
       )
       // The runtime handles cleanup-yielded concurrency through captured handlers;
@@ -1055,7 +1055,7 @@ describe('Fork', () => {
         assertPromise<string>(() => new Promise(resolve => setImmediate(() => resolve('winner'))))
       ]).pipe(
         withCoopConcurrency(),
-        withScope(TestScope),
+        inScope(TestScope),
         returnFail
       )
       // The runtime handles cleanup-yielded concurrency through captured handlers;
@@ -1090,7 +1090,7 @@ describe('Fork', () => {
       ]).pipe(
         withCoopConcurrency(),
         handle(CurrentValue, () => ok('handled')),
-        withScope(TestScope),
+        inScope(TestScope),
         returnFail
       )
       // The runtime handles cleanup-yielded concurrency through captured handlers;
@@ -1302,7 +1302,7 @@ describe('Fork', () => {
           yield* awaitAbort()
         }))
       }).pipe(
-        withScope(TestScope),
+        inScope(TestScope),
         withCoopConcurrency(),
         returnFail,
         runPromise
@@ -1450,7 +1450,7 @@ describe('Fork', () => {
 
       const promise = all([masked, bad]).pipe(
         withCoopConcurrency(),
-        withScope(TestScope),
+        inScope(TestScope),
         returnFail,
         runPromise
       )
@@ -1823,7 +1823,7 @@ describe('Fork', () => {
 
       const promise = all([masked, bad]).pipe(
         withCoopConcurrency(),
-        withScope(TestScope),
+        inScope(TestScope),
         returnFail,
         runPromise
       )
@@ -1916,7 +1916,7 @@ describe('Fork', () => {
       })
 
       const result = await race([ok('winner'), slow]).pipe(
-        withScope(TestScope),
+        inScope(TestScope),
         withUnboundedConcurrency,
         returnFail,
         runPromise
@@ -1936,7 +1936,7 @@ describe('Fork', () => {
       })
 
       const result = await race([ok('winner'), slow]).pipe(
-        withScope(TestScope),
+        inScope(TestScope),
         withUnboundedConcurrency,
         returnFail,
         runPromise
@@ -2020,7 +2020,7 @@ describe('Fork', () => {
       })
 
       const result = await firstSuccess([ok('winner'), slow]).pipe(
-        withScope(TestScope),
+        inScope(TestScope),
         withUnboundedConcurrency,
         returnFail,
         runPromise
@@ -2114,7 +2114,7 @@ describe('Scope-owned fork lifetime', () => {
       yield* delayFx(0)
       yield* interruptFrom(TestScope, reason)
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       recoverInterrupt(TestScope, r => ok(r)),
       withUnboundedConcurrency,
       returnFail,
@@ -2148,7 +2148,7 @@ describe('Scope-owned fork lifetime', () => {
 
       return 'parent'
     }).pipe(
-      withScope(RaceScope),
+      inScope(RaceScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2176,12 +2176,12 @@ describe('Scope-owned fork lifetime', () => {
         }))
         yield* awaitAbort()
         events.push('inner after await')
-      }).pipe(withScope(InnerScope))
+      }).pipe(inScope(InnerScope))
 
       events.push('outer after inner')
       return 'parent'
     }).pipe(
-      withScope(OuterScope),
+      inScope(OuterScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2192,19 +2192,19 @@ describe('Scope-owned fork lifetime', () => {
     assert.deepEqual(events, ['inner cleanup'])
   })
 
-  it('runs forkIn current-scope children through handlers captured at the registration site', async () => {
-    const TestScope = scope('test/ForkIn/current-scope-captured-handler')
+  it('runs forkIn children through handlers captured at the registration site', async () => {
+    const TestScope = scope('test/ForkIn/captured-handler')
     class CurrentValue extends Effect('test/ForkIn/CurrentScopeCapturedHandler')<void, string> { }
 
     const result = await fx(function* () {
       const task = yield* fx(function* () {
-        return yield* forkIn(currentScope, new CurrentValue())
+        return yield* forkIn(TestScope, new CurrentValue())
       }).pipe(
         handle(CurrentValue, () => ok('local'))
       )
       return yield* wait(task)
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2214,7 +2214,7 @@ describe('Scope-owned fork lifetime', () => {
     assert.equal(result, 'local')
   })
 
-  it('runs forkIn named-scope children in the named owner rather than a nested current scope', async () => {
+  it('runs forkIn children in the explicit owner rather than a nested scope', async () => {
     const OuterScope = scope('test/ForkIn/named-outer-owner')
     const InnerScope = scope('test/ForkIn/named-inner-not-owner')
     const events = [] as string[]
@@ -2222,13 +2222,13 @@ describe('Scope-owned fork lifetime', () => {
     const result = await fx(function* () {
       const task = yield* fx(function* () {
         return yield* forkIn(OuterScope, fx(function* () {
-          yield* andFinallyIn(currentScope, fx(function* () {
+          yield* andFinallyIn(OuterScope, fx(function* () {
             events.push('child cleanup')
           }))
           yield* awaitAbort()
         }))
       }).pipe(
-        withScope(InnerScope)
+        inScope(InnerScope)
       )
 
       events.push('after inner')
@@ -2236,7 +2236,7 @@ describe('Scope-owned fork lifetime', () => {
       yield* assertPromise(() => task.interrupt('done'))
       return events
     }).pipe(
-      withScope(OuterScope),
+      inScope(OuterScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2266,7 +2266,7 @@ describe('Scope-owned fork lifetime', () => {
 
       return 'parent'
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       recoverInterrupt(TestScope, r => ok(r)),
       withUnboundedConcurrency,
       returnFail,
@@ -2298,7 +2298,7 @@ describe('Scope-owned fork lifetime', () => {
 
       return 'parent'
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2322,7 +2322,7 @@ describe('Scope-owned fork lifetime', () => {
       yield* awaitAbort()
       completed = true
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2351,7 +2351,7 @@ describe('Scope-owned fork lifetime', () => {
 
       return 'parent'
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2373,7 +2373,7 @@ describe('Scope-owned fork lifetime', () => {
         events.push('fork done')
       }))
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       runPromise
     )
@@ -2381,6 +2381,33 @@ describe('Scope-owned fork lifetime', () => {
     assert.deepEqual(events, [])
     await task.promise
     assert.deepEqual(events, ['fork done'])
+  })
+
+  it('runs queued caller-owned fork work after lexical scope exit', async () => {
+    const events = [] as string[]
+
+    const result = await fx(function* () {
+      const task = yield* withScope(scope => inScope(scope, fx(function* () {
+        yield* fork(fx(function* () {
+          events.push('blocker start')
+          yield* delayFx(10)
+          events.push('blocker done')
+        }))
+        return yield* fork(fx(function* () {
+          events.push('queued child')
+          return 'child'
+        }))
+      })))
+
+      events.push('scope exited')
+      return yield* wait(task)
+    }).pipe(
+      withCoopConcurrency({ concurrency: 1 }),
+      runPromise
+    )
+
+    assert.equal(result, 'child')
+    assert.deepEqual(events, ['scope exited', 'blocker start', 'blocker done', 'queued child'])
   })
 
   it('keeps forkEach caller-owned across normal scope exit', async () => {
@@ -2395,7 +2422,7 @@ describe('Scope-owned fork lifetime', () => {
         })
       ] as const)
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       runPromise
     )
@@ -2417,7 +2444,7 @@ describe('Scope-owned fork lifetime', () => {
       }))
       return 'parent done'
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2450,7 +2477,7 @@ describe('Scope-owned fork lifetime', () => {
         }))
         events.push('parent body done')
         return 'parent done'
-      }).pipe(withScope(TestScope)))
+      }).pipe(inScope(TestScope)))
 
       return yield* wait(task)
     }).pipe(
@@ -2480,7 +2507,7 @@ describe('Scope-owned fork lifetime', () => {
       yield* assertPromise(() => task.interrupt('manual'))
       return 'parent done'
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency
     )
     const result = await withTimeout(runPromise(program as never), 100)
@@ -2502,7 +2529,7 @@ describe('Scope-owned fork lifetime', () => {
       yield* assertPromise(() => interrupted.interrupt('manual'))
       return 'parent done'
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency
     )
     const result = await withTimeout(runPromise(program as never), 100)
@@ -2530,7 +2557,7 @@ describe('Scope-owned fork lifetime', () => {
       yield* delayFx(0)
       yield* interruptFrom(TestScope, reason)
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       recoverInterrupt(TestScope, r => ok(r)),
       withBoundedConcurrency(1),
       returnFail,
@@ -2550,7 +2577,7 @@ describe('Scope-owned fork lifetime', () => {
         return yield* returnFrom(TestScope, 'early' as const)
       }))
       return task
-    }).pipe(withScope(TestScope))
+    }).pipe(inScope(TestScope))
 
     false satisfies HasFail<EffectOf<typeof failedFork>>
     const failedTask: Fx<unknown, Task<never, Fail<'boom'>>> = failedFork
@@ -2573,7 +2600,7 @@ describe('Task interruption finalization', () => {
         yield* awaitAbort()
       }))
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2596,7 +2623,7 @@ describe('Task interruption finalization', () => {
         yield* awaitAbort()
       }))
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2620,7 +2647,7 @@ describe('Task interruption finalization', () => {
         yield* awaitAbort()
       }))
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2671,7 +2698,7 @@ describe('Task interruption finalization', () => {
         yield* awaitAbort()
       }))
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2698,7 +2725,7 @@ describe('Task interruption finalization', () => {
         )
       }))
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2723,7 +2750,7 @@ describe('Task interruption finalization', () => {
         }
       }))
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2756,7 +2783,7 @@ describe('Task interruption finalization', () => {
         )
       }))
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2777,7 +2804,7 @@ describe('Task interruption finalization', () => {
     })
 
     await assert.rejects(race([ok('winner'), slow]).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2805,7 +2832,7 @@ describe('Task interruption finalization', () => {
     })
 
     const result = await race([ok('winner'), slow]).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2830,7 +2857,7 @@ describe('Task interruption finalization', () => {
     )
 
     const result = await race([ok('winner'), slow]).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2865,7 +2892,7 @@ describe('Task interruption finalization', () => {
     })
 
     const result = await race([ok('winner'), slow]).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2889,7 +2916,7 @@ describe('Task interruption finalization', () => {
     })
 
     const result = await race([ok('winner'), slow]).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise
@@ -2914,7 +2941,7 @@ describe('Task interruption finalization', () => {
         yield* awaitAbort()
       }))
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       handle(Release, () => fx(function* () {
@@ -2939,7 +2966,7 @@ describe('Task interruption finalization', () => {
         yield* awaitAbort()
       }))
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       handle(Release, () => fx(function* () {
         released.push('task')
       })),

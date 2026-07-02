@@ -1,13 +1,10 @@
 import { all, firstSuccess, mapAll, type Fork } from '@briancavalier/fx/concurrent'
 import { Async, Effect, fail, type Fail, fx, type Fx, handle, type Interrupt, ok } from '@briancavalier/fx'
 
-import { managed, scope, usingIn, usingManagedIn, type Finally, type Managed } from '@briancavalier/fx/scope'
+import { managed, usingIn, usingManagedIn, type AnyLifetimeScope, type Finally, type Managed } from '@briancavalier/fx/scope'
 
 import { info, type Log } from '@briancavalier/fx/log'
 import { sleep, type Time } from '@briancavalier/fx/time'
-
-export const BundleScope = scope('examples/advanced/incident-collector/Bundle')
-export const CollectorScope = scope('examples/advanced/incident-collector/Collector')
 
 export type IncidentId = string
 export type ServiceName = 'api' | 'worker' | 'billing'
@@ -58,7 +55,10 @@ export type BundleEntry =
 export type IncidentCollectorError =
   { readonly tag: 'CollectorUnavailable'; readonly collector: CollectorName; readonly reason: string }
 
-export type IncidentCollectorEffects =
+export type IncidentCollectorEffects<
+  BundleScope extends AnyLifetimeScope = AnyLifetimeScope,
+  CollectorScope extends AnyLifetimeScope = AnyLifetimeScope
+> =
   | OpenBundle
   | StartCollector
   | WriteBundleEntry
@@ -70,8 +70,8 @@ export type IncidentCollectorEffects =
   | Async
   | Fork
   | Log
-  | Finally<typeof BundleScope>
-  | Finally<typeof CollectorScope, Log>
+  | Finally<BundleScope>
+  | Finally<CollectorScope, Log>
   | Interrupt
   | Fail<IncidentCollectorError>
 
@@ -121,17 +121,22 @@ export const fetchMetrics = (incidentId: IncidentId) => new FetchMetrics(inciden
 export const fetchDeployContext = (incidentId: IncidentId) => new FetchDeployContext(incidentId)
 export const fetchRuntimeStatus = (source: string) => new FetchRuntimeStatus(source)
 
-export const collectIncidentSnapshot = (
+export const collectIncidentSnapshot = <
+  const BundleScope extends AnyLifetimeScope,
+  const CollectorScope extends AnyLifetimeScope
+>(
+  bundleScope: BundleScope,
+  collectorScope: CollectorScope,
   request: SnapshotRequest
-): Fx<IncidentCollectorEffects | Interrupt, SnapshotSummary> => fx(function* () {
-  const bundle = yield* usingManagedIn(BundleScope, openBundle(request.incidentId))
+): Fx<IncidentCollectorEffects<BundleScope, CollectorScope> | Interrupt, SnapshotSummary> => fx(function* () {
+  const bundle = yield* usingManagedIn(bundleScope, openBundle(request.incidentId))
   yield* info('snapshot started', { incidentId: request.incidentId, bundle: bundle.id })
 
   const [logs, _metrics, deploy, runtime] = yield* all([
-    collectServiceLogs(bundle, request.services),
-    collectMetrics(bundle, request.incidentId),
-    collectDeploy(bundle, request.incidentId),
-    collectRuntime(bundle)
+    collectServiceLogs(collectorScope, bundle, request.services),
+    collectMetrics(collectorScope, bundle, request.incidentId),
+    collectDeploy(collectorScope, bundle, request.incidentId),
+    collectRuntime(collectorScope, bundle)
   ])
 
   const entries = [
@@ -255,7 +260,7 @@ export const createIncidentCollectorFixture = (options: FixtureOptions = {}) => 
   }
 }
 
-const collectServiceLogs = (bundle: Bundle, services: readonly ServiceName[]) => withCollector('logs', fx(function* () {
+const collectServiceLogs = <const CollectorScope extends AnyLifetimeScope>(collectorScope: CollectorScope, bundle: Bundle, services: readonly ServiceName[]) => withCollector(collectorScope, 'logs', fx(function* () {
   const logs = yield* mapAll(services, service => collectOneServiceLog(bundle, service))
   return logs
 }))
@@ -270,7 +275,7 @@ const collectOneServiceLog = (bundle: Bundle, service: ServiceName) => fx(functi
   return log
 })
 
-const collectMetrics = (bundle: Bundle, incidentId: IncidentId) => withCollector('metrics', fx(function* () {
+const collectMetrics = <const CollectorScope extends AnyLifetimeScope>(collectorScope: CollectorScope, bundle: Bundle, incidentId: IncidentId) => withCollector(collectorScope, 'metrics', fx(function* () {
   const metrics = yield* fetchMetrics(incidentId)
   yield* writeBundleEntry(bundle, {
     type: 'metrics',
@@ -279,7 +284,7 @@ const collectMetrics = (bundle: Bundle, incidentId: IncidentId) => withCollector
   return metrics
 }))
 
-const collectDeploy = (bundle: Bundle, incidentId: IncidentId) => withCollector('deploy', fx(function* () {
+const collectDeploy = <const CollectorScope extends AnyLifetimeScope>(collectorScope: CollectorScope, bundle: Bundle, incidentId: IncidentId) => withCollector(collectorScope, 'deploy', fx(function* () {
   const deploy = yield* fetchDeployContext(incidentId)
   yield* writeBundleEntry(bundle, {
     type: 'deploy',
@@ -289,7 +294,7 @@ const collectDeploy = (bundle: Bundle, incidentId: IncidentId) => withCollector(
   return deploy
 }))
 
-const collectRuntime = (bundle: Bundle) => withCollector('runtime', fx(function* () {
+const collectRuntime = <const CollectorScope extends AnyLifetimeScope>(collectorScope: CollectorScope, bundle: Bundle) => withCollector(collectorScope, 'runtime', fx(function* () {
   const runtime = yield* firstSuccess([
     fetchRuntimeStatus('primary'),
     fetchRuntimeStatus('replica')
@@ -302,10 +307,10 @@ const collectRuntime = (bundle: Bundle) => withCollector('runtime', fx(function*
   return runtime
 }))
 
-const withCollector = <E, A>(collector: CollectorName, program: Fx<E, A>): Fx<E | StartCollector | Log | Finally<typeof CollectorScope, Log> | Interrupt, A> => fx(function* () {
-  const name = yield* usingManagedIn(CollectorScope, startCollector(collector))
+const withCollector = <const CollectorScope extends AnyLifetimeScope, E, A>(collectorScope: CollectorScope, collector: CollectorName, program: Fx<E, A>): Fx<E | StartCollector | Log | Finally<CollectorScope, Log> | Interrupt, A> => fx(function* () {
+  const name = yield* usingManagedIn(collectorScope, startCollector(collector))
   yield* usingIn(
-    CollectorScope,
+    collectorScope,
     ok(name),
     (name, exit) => info('collector finalized', { name, exit: exit.type })
   )

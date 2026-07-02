@@ -2,7 +2,7 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { fx, run } from './Fx.js'
 import { ReturnFrom, returnFrom } from './ReturnFrom.js'
-import { scope, withScope, type Control } from './Scope.js'
+import { scope, inScope, type Control } from './Scope.js'
 
 describe('ReturnFrom', () => {
   const TestScope = scope<Control>()('test/ReturnFrom')
@@ -12,7 +12,7 @@ describe('ReturnFrom', () => {
       yield* returnFrom(TestScope, 'early')
       return 'late'
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       run
     )
 
@@ -27,7 +27,7 @@ describe('ReturnFrom', () => {
       ran = true
       return 'late'
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       run
     )
 
@@ -40,12 +40,12 @@ describe('ReturnFrom', () => {
     const f = fx(function* () {
       yield* returnFrom(OtherScope, 'other')
       return 'late'
-    }).pipe(withScope(TestScope))
+    }).pipe(inScope(TestScope))
 
     const next = f[Symbol.iterator]().next()
 
     assert.equal(ReturnFrom.is(next.value), true)
-    const effect = next.value as ReturnFrom<typeof OtherScope, 'other'>
+    const effect = next.value as unknown as ReturnFrom<typeof OtherScope, 'other'>
     assert.equal(effect.scope, OtherScope)
     assert.equal(effect.arg, 'other')
   })
@@ -57,9 +57,9 @@ describe('ReturnFrom', () => {
       return yield* fx(function* () {
         yield* returnFrom(TestScope, 'inner')
         return 'late'
-      }).pipe(withScope(OtherScope))
+      }).pipe(inScope(OtherScope))
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       run
     )
 

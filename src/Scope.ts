@@ -23,7 +23,7 @@ import type { Task } from './Task.js'
 
 export { sameScope, scopeId }
 
-export interface ScopeMetadata {
+export interface ScopeOptions {
   readonly label?: string
   readonly diagnostic?: boolean
 }
@@ -35,8 +35,7 @@ export interface Scope<Id extends PropertyKey = PropertyKey> extends ScopeIdenti
 
 declare const LifetimeTypeId: unique symbol
 declare const ControlTypeId: unique symbol
-declare const CurrentScopeTypeId: unique symbol
-const CurrentScopeId = Symbol('fx/Scope/current')
+declare const ScopeHandleTypeId: unique symbol
 
 export type Lifetime = {
   readonly [LifetimeTypeId]: true
@@ -46,31 +45,66 @@ export type Control = {
   readonly [ControlTypeId]: true
 }
 
-export type AnyScope = Scope<PropertyKey>
-export type LifetimeScope<Id extends PropertyKey = PropertyKey> = Scope<Id> & Lifetime
-export type ControlScope<Id extends PropertyKey = PropertyKey> = Scope<Id> & Lifetime & Control
-export type AnyLifetimeScope = LifetimeScope<PropertyKey>
-export type AnyControlScope = ControlScope<PropertyKey>
-export type CurrentLifetimeScope = LifetimeScope<typeof CurrentScopeId> & {
-  readonly [CurrentScopeTypeId]: true
+export type ScopeHandle<S = unknown> = {
+  readonly [ScopeHandleTypeId]?: (scope: S) => S
 }
 
-export function scope<Brand>(): <const Id extends PropertyKey>(id: Id, metadata?: ScopeMetadata) => Scope<Id> & Lifetime & Brand
-export function scope<const Id extends PropertyKey>(id: Id, metadata?: ScopeMetadata): Scope<Id> & Lifetime
-export function scope(id?: PropertyKey, metadata: ScopeMetadata = {}): any {
-  if (id === undefined) return scope
-  const token = { ...metadata }
+export type AnyScope = Scope<PropertyKey>
+export type LifetimeScope<S = unknown, Id extends PropertyKey = PropertyKey> = Scope<Id> & Lifetime & ScopeHandle<S>
+export type ControlScope<S = unknown, Id extends PropertyKey = PropertyKey> = Scope<Id> & Lifetime & Control & ScopeHandle<S>
+export type AnyLifetimeScope = LifetimeScope<any, PropertyKey>
+export type AnyControlScope = ControlScope<any, PropertyKey>
+
+const closedScopes = new WeakSet<object>()
+const closeableScopes = new WeakSet<object>()
+
+const createScope = <Brand>(
+  metadata: ScopeOptions = {},
+  id: PropertyKey = Symbol(metadata.label ?? 'fx/Scope'),
+  closeable = true
+): Scope<PropertyKey> & Lifetime & ScopeHandle<unknown> & Brand => {
+  const token = metadata.diagnostic === undefined
+    ? { label: metadata.label ?? String(id) }
+    : { label: metadata.label ?? String(id), diagnostic: metadata.diagnostic }
   Object.defineProperty(token, ScopeTypeId, {
     value: id,
     enumerable: false,
     writable: false,
     configurable: false
   })
-  return token
+  if (closeable) closeableScopes.add(token)
+  return token as Scope<PropertyKey> & Lifetime & ScopeHandle<unknown> & Brand
 }
 
-export const scopeLabel = (scope: AnyScope): string =>
-  scope.label ?? String(scopeId(scope))
+export const assertScopeOpen = (scope: AnyScope): void => {
+  if (closedScopes.has(scope)) {
+    throw new Error(`Scope handle ${scopeLabel(scope)} was used after its scope exited`)
+  }
+}
+
+const closeScope = (scope: AnyScope): void => {
+  if (closeableScopes.has(scope)) closedScopes.add(scope)
+}
+
+const createLifetimeScope = (metadata?: ScopeOptions): AnyLifetimeScope =>
+  createScope(metadata)
+
+const createControlScope = (metadata?: ScopeOptions): AnyControlScope =>
+  createScope<Control>(metadata)
+
+export function scope<Brand>(): <const Id extends PropertyKey>(id: Id, metadata?: ScopeOptions) => Scope<Id> & Lifetime & ScopeHandle<any> & Brand
+export function scope<const Id extends PropertyKey>(id: Id, metadata?: ScopeOptions): Scope<Id> & Lifetime & ScopeHandle<any>
+export function scope(id?: PropertyKey, metadata: ScopeOptions = {}): any {
+  if (id === undefined) return (id: PropertyKey, metadata?: ScopeOptions) => createScope(metadata, id, false)
+  return createScope(metadata, id, false)
+}
+
+export function scopeLabel(scope: AnyScope): string
+export function scopeLabel(scope: undefined): 'undefined'
+export function scopeLabel(scope: AnyScope | undefined): string {
+  if (scope === undefined) return 'undefined'
+  return scope.label ?? String(scopeId(scope))
+}
 
 const scopeDiagnostic = (scope: AnyScope): ActiveScopeDiagnostic => {
   return {
@@ -118,45 +152,116 @@ export interface Interrupted<Scope extends AnyScope> {
   readonly reason?: unknown
 }
 
-/**
- * Logical nearest lifetime scope token.
- *
- * A `withScope(...)` handler treats lifetime effects addressed to this token as
- * requests for that handler's own scope boundary. This token is not a captured
- * snapshot: saving it and using it inside a nested `withScope(...)` targets the
- * nested boundary.
- */
-export const currentScope: CurrentLifetimeScope = scope<{
-  readonly [CurrentScopeTypeId]: true
-}>()(CurrentScopeId, { diagnostic: false })
-
-export function withScope<const Scope extends AnyLifetimeScope>(
+export function inScope<const Scope extends AnyLifetimeScope, const E, const A>(
+  scope: Scope,
+  f: Fx<E, A>
+): Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>>
+export function inScope<const Scope extends AnyLifetimeScope>(
   scope: Scope
-): <const E, const A>(f: Fx<E, A>) => Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>> {
-  return <const E, const A>(f: Fx<E, A>) => {
-    // ScopeBoundary interprets effects dynamically; this assertion connects the
-    // runtime interpreter boundary to the public scoped-effect elimination type.
-    return new ScopeBoundary(f, scope) as Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>>
+): <const E, const A>(f: Fx<E, A>) => Fx<ScopeEffects<E, Scope>, A | ReturnValue<E, Scope>>
+export function inScope<const E, const A>(
+  f: Fx<E, A>
+): Fx<E, A>
+export function inScope<const E, const A>(
+  options: ScopeOptions,
+  f: Fx<E, A>
+): Fx<E, A>
+export function inScope<const E, const A>(
+  scopeOptionsOrFx: ScopeOptions | AnyLifetimeScope | Fx<E, A>,
+  maybeFx?: Fx<E, A>
+): any {
+  if (typeof scopeOptionsOrFx === 'object' && ScopeTypeId in scopeOptionsOrFx) {
+    const scope = scopeOptionsOrFx as AnyLifetimeScope
+    assertScopeOpen(scope)
+    if (maybeFx !== undefined) {
+      assertScopeOpen(scope)
+      return new ScopeBoundary(maybeFx, scope) as Fx<ScopeEffects<E, typeof scope>, A | ReturnValue<E, typeof scope>>
+    }
+    return <const E2, const A2>(f: Fx<E2, A2>) => {
+      assertScopeOpen(scope)
+      return new ScopeBoundary(f, scope) as Fx<ScopeEffects<E2, typeof scope>, A2 | ReturnValue<E2, typeof scope>>
+    }
   }
+
+  const options = maybeFx === undefined ? undefined : scopeOptionsOrFx as ScopeOptions
+  const f = maybeFx === undefined ? scopeOptionsOrFx as Fx<E, A> : maybeFx
+  return fx(function* () {
+    const scope = createLifetimeScope(options)
+    return yield* new ScopeBoundary(f, scope, undefined, true)
+  }) as Fx<E, A>
+}
+
+export function withScope<const E, const A>(
+  body: <S>(scope: LifetimeScope<S>) => Fx<E, A>
+): Fx<E, A>
+export function withScope<const E, const A>(
+  options: ScopeOptions,
+  body: <S>(scope: LifetimeScope<S>) => Fx<E, A>
+): Fx<E, A>
+export function withScope<const E, const A>(
+  optionsOrBody: ScopeOptions | (<S>(scope: LifetimeScope<S>) => Fx<E, A>),
+  body?: <S>(scope: LifetimeScope<S>) => Fx<E, A>
+): Fx<E, A> {
+  const options = typeof optionsOrBody === 'function' ? undefined : optionsOrBody
+  const f = typeof optionsOrBody === 'function' ? optionsOrBody : body!
+  return fx(function* () {
+    const scope = createLifetimeScope(options)
+    let bodyFx: Fx<E, A>
+    try {
+      bodyFx = f(scope as unknown as LifetimeScope<never>)
+    } catch (error) {
+      closeScope(scope)
+      throw error
+    }
+    try {
+      return yield* bodyFx
+    } finally {
+      closeScope(scope)
+    }
+  })
+}
+
+export function withControlScope<const E, const A>(
+  body: <S>(scope: ControlScope<S>) => Fx<E, A>
+): Fx<E, A>
+export function withControlScope<const E, const A>(
+  options: ScopeOptions,
+  body: <S>(scope: ControlScope<S>) => Fx<E, A>
+): Fx<E, A>
+export function withControlScope<const E, const A>(
+  optionsOrBody: ScopeOptions | (<S>(scope: ControlScope<S>) => Fx<E, A>),
+  body?: <S>(scope: ControlScope<S>) => Fx<E, A>
+): Fx<E, A> {
+  const options = typeof optionsOrBody === 'function' ? undefined : optionsOrBody
+  const f = typeof optionsOrBody === 'function' ? optionsOrBody : body!
+  return fx(function* () {
+    const scope = createControlScope(options)
+    let bodyFx: Fx<E, A>
+    try {
+      bodyFx = f(scope as unknown as ControlScope<never>)
+    } catch (error) {
+      closeScope(scope)
+      throw error
+    }
+    try {
+      return yield* bodyFx
+    } finally {
+      closeScope(scope)
+    }
+  })
 }
 
 export type ScopeEffects<E, Scope extends AnyLifetimeScope> =
   HandleScopeEffect<E, Scope> | ScopedForkEffects<E, Scope> | CleanupEffects<E, Scope> | CleanupFailure<E, Scope>
 
 type HandleScopeEffect<E, Scope extends AnyLifetimeScope> =
-  E extends Finally<HandledScope<Scope>, any> ? never
-  : E extends ReturnFrom<ControlScopeOf<Scope>, any> ? never
-  : E extends ScopedFork<HandledScope<Scope>> ? never
-  : E extends InterruptFrom<CurrentLifetimeScope, infer Reason> ? InterruptFrom<Scope, Reason>
-  : E
+  Exclude<E, Finally<Scope, any> | ReturnFrom<ControlScopeOf<Scope>, any> | ScopedFork<Scope>>
 
 type ScopedForkEffects<E, Scope extends AnyLifetimeScope> =
-  E extends ScopedFork<HandledScope<Scope>> ? Fork | Async | Fail<unknown> : never
+  Extract<E, ScopedFork<Scope>> extends never ? never : Fork | Async | Fail<unknown>
 
 type MatchingFinally<E, Scope extends AnyLifetimeScope> =
-  Extract<E, Finally<HandledScope<Scope>, any>>
-
-type HandledScope<Scope extends AnyLifetimeScope> = Scope | CurrentLifetimeScope
+  Extract<E, Finally<Scope, any>>
 
 type ControlScopeOf<Scope extends AnyLifetimeScope> =
   Scope extends AnyControlScope ? Scope : never
@@ -164,7 +269,7 @@ type ControlScopeOf<Scope extends AnyLifetimeScope> =
 type FinalizerEffects<E, Scope extends AnyLifetimeScope> =
   MatchingFinally<E, Scope> extends never
     ? never
-    : MatchingFinally<E, Scope> extends Finally<HandledScope<Scope>, infer FE> ? FE : never
+    : MatchingFinally<E, Scope> extends Finally<Scope, infer FE> ? FE : never
 
 type CleanupEffects<E, Scope extends AnyLifetimeScope> =
   Exclude<FinalizerEffects<E, Scope>, Fail<any>>
@@ -186,36 +291,40 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
   constructor(
     public readonly fx: Fx<E, A>,
     public readonly scope: Scope,
-    controller?: ScopeController<Scope>
+    controller?: ScopeController<Scope>,
+    private readonly closeOnExit = false,
+    private readonly checkOnEnter = true
   ) {
     this.controller = controller
     this.root = controller === undefined
   }
 
   wrap(fx: Fx<unknown, unknown>): Fx<unknown, unknown> {
-    return new ScopeBoundary(fx, this.scope)
+    // Captured handlers may replay after lexical exit; matching scoped effects still assert below.
+    return new ScopeBoundary(fx, this.scope, undefined, false, false)
   }
 
   wrapShared(fx: Fx<unknown, unknown>): Fx<unknown, unknown> {
     return this.controller === undefined
-      ? new ScopeBoundary(fx, this.scope)
-      : new ScopeBoundary(fx, this.scope, this.controller)
+      ? new ScopeBoundary(fx, this.scope, undefined, false, false)
+      : new ScopeBoundary(fx, this.scope, this.controller, false, false)
   }
 
   *[Symbol.iterator](): Iterator<unknown, A> {
     const { scope } = this
-    const controller = this.controller ?? new ScopeController(scope)
     const root = this.root
+    if (root && this.checkOnEnter) assertScopeOpen(scope)
+    const controller = this.controller ?? new ScopeController(scope)
     const activeScope = root && scope.diagnostic !== false ? scopeDiagnostic(scope) : undefined
     const withMaybeActiveScope = <E, A>(fx: Fx<E, A>): Fx<E, A> =>
       activeScope === undefined ? fx : withActiveScope(activeScope, fx)
     const scopedFx = root ? controller.withExitSource(this.fx) : this.fx
     const i = withMaybeActiveScope(scopedFx)[Symbol.iterator]()
     const captured: CapturedHandler = {
-      wrap: fx => new ScopeBoundary(fx, scope)
+      wrap: fx => new ScopeBoundary(fx, scope, undefined, false, false)
     }
     const capturedShared: CapturedHandler = {
-      wrap: fx => new ScopeBoundary(fx, scope, controller)
+      wrap: fx => new ScopeBoundary(fx, scope, controller, false, false)
     }
     let released = false
     const release = function* (exit: Exit<Scope>): Generator<unknown, ScopeRelease<Scope>> {
@@ -261,12 +370,12 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
 
       const effectScope = (effect as { readonly scope?: AnyScope }).scope
       const matchesScope = effectScope !== undefined && sameScope(effectScope, scope)
-      const matchesLifetimeScope = matchesScope || (effectScope !== undefined && sameScope(effectScope, currentScope))
+      if (matchesScope) assertScopeOpen(effectScope)
 
-      if (matchesLifetimeScope && Finally.is(effect)) {
+      if (matchesScope && Finally.is(effect)) {
         controller.addFinalizer(effect.arg)
         return continueWith(undefined)
-      } else if (matchesLifetimeScope && ScopedFork.is(effect)) {
+      } else if (matchesScope && ScopedFork.is(effect)) {
         const context = yield* new ScopedHandlerCapture(rootHandlerCaptureTarget)
         const task = yield* controller.fork({
           ...effect.arg,
@@ -287,14 +396,13 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
           return doneWith(undefined as A)
         }
         return doneWith(yield* finishRoot(exit, effect))
-      } else if (matchesLifetimeScope && InterruptFrom.is(effect)) {
+      } else if (matchesScope && InterruptFrom.is(effect)) {
         const exit = interruptedExit(scope, effect.arg)
-        const interrupt = matchesScope ? effect : new InterruptFrom(scope, effect.arg)
         if (!root) {
           controller.requestExit(exit)
           return doneWith(undefined as A)
         }
-        return doneWith(yield* finishRoot(exit, interrupt))
+        return doneWith(yield* finishRoot(exit, effect))
       } else if (Fail.is(effect)) {
         const exit = { type: 'failure', failure: effect } satisfies Exit
         if (!root) {
@@ -356,6 +464,7 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
         : yield* collectInterruptedChildCleanupFailures(completed, isInterpretingReturn(), i, step)
       const filteredCleanupFailures = cleanupFailures.flatMap(cleanupFailuresOf)
       if (filteredCleanupFailures.length > 0) yield* withMaybeActiveScope(failCleanup(filteredCleanupFailures))
+      if (root && this.closeOnExit) closeScope(scope)
     }
   }
 }

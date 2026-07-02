@@ -60,26 +60,27 @@ execution:
 - a request lifetime that may be interrupted
 - a resource lifetime that must be finalized
 - a timeout boundary where callers choose the interruption policy
-- a progress or event channel that receives yielded values
+- a typed progress or event channel that receives yielded values
 - a concurrent group that must clean up cancelled work
 - a parser or workflow step that may return early
 - state that should be local to one dynamic lifetime
 
-In `fx`, named scopes are the public handle for these dynamic ownership
-boundaries. A scope can delimit cleanup, interruption, early return, yielding,
-timeout, and scoped state without introducing service containers, global
-runtimes, or framework wiring.
+In `fx`, lexical scope handles delimit dynamic ownership boundaries for cleanup,
+interruption, early return, timeout, and resource lifetime without introducing
+service containers, global runtimes, or framework wiring. Typed keys identify
+independent slots and channels such as state and yielding.
 
 Ownership means the scope controls the lifetime and exit semantics of operations
-registered within it: cleanup runs when the scope exits, interruptions target
-the scope, and scoped state or yielding stays local to that boundary.
+registered within it: cleanup runs when the scope exits, and interruptions
+target the scope.
 
 ### Region-indexed capabilities
 
 Some operations only make sense inside a dynamic lifetime. `fx` models those as
-focused capabilities indexed by a scope or region: `andFinallyIn` for cleanup,
-`yieldFrom` for scoped events, `timeoutIn` for deadlines, interruption for
-cooperative cancellation, and scoped state for local mutation.
+focused capabilities indexed by a scope handle: `andFinallyIn` for cleanup,
+`timeoutIn` for deadlines, and interruption for cooperative cancellation. Other
+operations need independent typed slots or channels: `yieldFrom` for events and
+state keys for local mutation.
 
 This keeps public APIs specific while giving them one shared lifecycle model:
 the program names the region, and handlers decide what that region means.
@@ -193,7 +194,8 @@ their named subpaths.
 | Core programs, effects, handlers, failure, async, env, task, console, basic diagnostics | `@briancavalier/fx` |
 | Encoding and decoding external data with branded codec keys | `@briancavalier/fx/codec` |
 | Advanced trace capture, snapshots, and trace formatting options | `@briancavalier/fx/trace` |
-| Named scopes, abort, finalization, early return, scoped yielding | `@briancavalier/fx/scope` |
+| Scope handles, abort, finalization, and early return | `@briancavalier/fx/scope` |
+| Yielding channels and collection helpers | `@briancavalier/fx/yield` |
 | Sinks for receiving values | `@briancavalier/fx/sink` |
 | Scoped mutable state operations | `@briancavalier/fx/state` |
 | Structured concurrency | `@briancavalier/fx/concurrent` |
@@ -259,8 +261,8 @@ No container, no wiring graph—just a pipeline.
 - **Typed algebraic effects**
   Programs expose the operations they may perform as `Fx<E, A>`
 
-- **Named scopes**
-  Scopes delimit lifecycle, cleanup, interruption, early return, and yielding
+- **Lexical scope handles**
+  Scopes delimit lifecycle, cleanup, interruption, and early return
 
 - **Composable handlers**  
   Handlers remove effects and can introduce new ones
@@ -276,8 +278,8 @@ No container, no wiring graph—just a pipeline.
 - **Guaranteed finalization**
   Finalizers run when a scope succeeds, fails, returns, aborts, or is interrupted
 
-- **Scoped yielding**
-  Programs emit values to named channels with `yieldFrom`
+- **Typed yielding channels**
+  Programs emit values to keyed channels with `yieldFrom`
 
 - **External data boundaries**
   Encoding and decoding are effects, so reusable programs can declare external

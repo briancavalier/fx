@@ -6,6 +6,7 @@ import * as concurrentApi from '@briancavalier/fx/concurrent'
 import * as scopeApi from '@briancavalier/fx/scope'
 import * as stateApi from '@briancavalier/fx/state'
 import * as timeoutApi from '@briancavalier/fx/timeout'
+import * as yieldApi from '@briancavalier/fx/yield'
 import {
   RaceAllFailed,
   all,
@@ -83,6 +84,10 @@ describe('package import inference', () => {
     const noReturnExitScope: HasExport<typeof scopeApi, `return${'Exit'}`> = false
     const noResumeExitScope: HasExport<typeof scopeApi, `resume${'Exit'}`> = false
     const noTimeoutInScope: HasExport<typeof timeoutApi, `timeout${'In'}Scope`> = false
+    const noYieldFromScope: HasExport<typeof scopeApi, `yield${'From'}`> = false
+    const noYieldFromRequestScope: HasExport<typeof scopeApi, `Yield${'From'}`> = false
+    const hasYieldFrom: HasExport<typeof yieldApi, `yield${'From'}`> = true
+    const hasYieldFromRequest: HasExport<typeof yieldApi, `Yield${'From'}`> = true
     assert.equal(noConcurrentEffect, false)
     assert.equal(noConcurrentConstructor, false)
     assert.equal(noFirstSettled, false)
@@ -107,6 +112,10 @@ describe('package import inference', () => {
     assert.equal(noReturnExitScope, false)
     assert.equal(noResumeExitScope, false)
     assert.equal(noTimeoutInScope, false)
+    assert.equal(noYieldFromScope, false)
+    assert.equal(noYieldFromRequestScope, false)
+    assert.equal(hasYieldFrom, true)
+    assert.equal(hasYieldFromRequest, true)
   })
 
   it('preserves Effect instance types through package declarations', () => {

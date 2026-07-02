@@ -2,7 +2,10 @@ import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { at } from './Breadcrumb.js'
 import { Effect, EffectOriginTypeId, originOf, ScopedEffect, traceOriginOf, withOrigin, withTraceOrigin } from './Effect.js'
-import { scope } from './Scope.js'
+import { fx, ok, run, type Fx } from './Fx.js'
+import { handleScoped } from './Handler.js'
+import type { Interrupt } from './Interrupt.js'
+import { scope, withScope, type AnyScope } from './Scope.js'
 import { captureTrace, setTraceCapturePolicy } from './Trace.js'
 
 describe('Effect', () => {
@@ -44,6 +47,32 @@ describe('Effect', () => {
       const done = iterator.next('done')
       assert.equal(done.done, true)
       assert.equal(done.value, 'done')
+    })
+
+    it('rejects closed lexical handles when yielded', () => {
+      class T<const Scope extends AnyScope> extends ScopedEffect('T/ScopedClosed')<Scope, void, string> { }
+      let cached: Fx<unknown, unknown> | undefined
+
+      run(withScope(scope => fx(function* () {
+        cached = new T(scope, undefined)
+      })))
+
+      assert.throws(
+        () => run(cached! as Fx<Interrupt, unknown>),
+        /used after its scope exited/
+      )
+    })
+
+    it('handles open lexical handles through scoped handlers', () => {
+      class T<const Scope extends AnyScope> extends ScopedEffect('T/ScopedHandled')<Scope, string, string> { }
+
+      const result = run(withScope(scope => fx(function* () {
+        return yield* new T(scope, 'handled')
+      }).pipe(
+        handleScoped(T, scope, effect => ok(effect.arg))
+      )))
+
+      assert.equal(result, 'handled')
     })
   })
 

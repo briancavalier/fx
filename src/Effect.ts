@@ -6,6 +6,7 @@ import { captureTrace } from './Trace.js'
 import type { Trace, TraceOrigin } from './Trace.js'
 import { Once } from './internal/generator.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
+import { assertScopeOpen } from './internal/scopeLifetime.js'
 
 export interface EffectType {
   readonly _fxEffectId: unknown
@@ -125,6 +126,11 @@ export const ScopedEffect = <const T extends string>(id: T) => class <
 > extends Effect(id)<A, R> implements ScopedEffectInstance<T, Scope, A, R> {
   constructor(public readonly scope: Scope, arg: A) {
     super(arg)
+  }
+
+  [Symbol.iterator](): Iterator<this, R, any> {
+    assertScopeOpen(this.scope)
+    return super[Symbol.iterator]() as Iterator<this, R, any>
   }
 } as ScopedEffectClass<T>
 

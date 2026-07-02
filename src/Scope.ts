@@ -15,6 +15,7 @@ import { isInterpretingReturn, isInterruptedReturn } from './internal/iteratorCl
 import { Pipeable, pipeThis } from './internal/pipe.js'
 import { interruptionReason, RuntimeScopeExit, withActiveScope, withScopeExitSource, withoutScopeExitSources, type ActiveScopeDiagnostic } from './internal/runtimeContext.js'
 import { ScopeTypeId, sameScope, scopeId, type ScopeIdentity } from './internal/scopeIdentity.js'
+import { assertScopeOpen as assertOpenScope, closeScope, markScopeCloseable } from './internal/scopeLifetime.js'
 import { rootHandlerCaptureTarget, ScopedHandlerCapture } from './internal/scopedHandlerCapture.js'
 import { settledTaskQueue } from './internal/settledQueue.js'
 import { ScopedFork } from './internal/scopedFork.js'
@@ -55,9 +56,6 @@ export type ControlScope<S = unknown, Id extends PropertyKey = PropertyKey> = Sc
 export type AnyLifetimeScope = LifetimeScope<any, PropertyKey>
 export type AnyControlScope = ControlScope<any, PropertyKey>
 
-const closedScopes = new WeakSet<object>()
-const closeableScopes = new WeakSet<object>()
-
 const createScope = <Brand>(
   metadata: ScopeOptions = {},
   id: PropertyKey = Symbol(metadata.label ?? 'fx/Scope'),
@@ -72,19 +70,12 @@ const createScope = <Brand>(
     writable: false,
     configurable: false
   })
-  if (closeable) closeableScopes.add(token)
+  if (closeable) markScopeCloseable(token)
   return token as Scope<PropertyKey> & Lifetime & ScopeHandle<unknown> & Brand
 }
 
-export const assertScopeOpen = (scope: AnyScope): void => {
-  if (closedScopes.has(scope)) {
-    throw new Error(`Scope handle ${scopeLabel(scope)} was used after its scope exited`)
-  }
-}
-
-const closeScope = (scope: AnyScope): void => {
-  if (closeableScopes.has(scope)) closedScopes.add(scope)
-}
+export const assertScopeOpen = (scope: AnyScope): void =>
+  assertOpenScope(scope, scopeLabel(scope))
 
 const createLifetimeScope = (metadata?: ScopeOptions): AnyLifetimeScope =>
   createScope(metadata)

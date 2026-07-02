@@ -10,7 +10,7 @@ import {
   withBoundedConcurrency,
   withUnboundedConcurrency
 } from "@briancavalier/fx/concurrent"
-import { scope, withScope } from "@briancavalier/fx/scope"
+import { inScope, withScope } from "@briancavalier/fx/scope"
 
 const loadDashboard = fx(function* () {
   const [user, posts] = yield* all([

@@ -72,6 +72,7 @@ export type ToolAgentEffects<SessionScope extends AnyLifetimeScope = AnyLifetime
   | Async
   | Fork
   | Interrupt
+  | YieldFrom<typeof AgentEvents>
   | Finally<SessionScope, YieldFrom<typeof AgentEvents>>
   | Fail<AgentError>
 

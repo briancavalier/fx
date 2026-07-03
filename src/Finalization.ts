@@ -66,10 +66,15 @@ export const usingIn = <const Scope extends AnyLifetimeScope, const IE, const FE
   scope: Scope,
   initially: Fx<IE, R>,
   finally_: (r: R, exit: Exit) => Fx<FE, void>
-): Fx<IE | Finally<Scope, FE> | Interrupt, R> => uninterruptible(fx(function* () {
+): Fx<IE | FE | Finally<Scope, FE> | Interrupt, R> => uninterruptible(fx(function* () {
   assertScopeOpen(scope)
   const r = yield* initially
-  yield* andFinallyIn(scope, exit => finally_(r, exit))
+  try {
+    yield* andFinallyIn(scope, exit => finally_(r, exit))
+  } catch (error) {
+    yield* finally_(r, staleRegistrationExit(scope, error))
+    throw error
+  }
   return r
 }))
 
@@ -94,9 +99,23 @@ export const managed = <const A, const E>(
 export const usingManagedIn = <const Scope extends AnyLifetimeScope, const IE, const FE, const A>(
   scope: Scope,
   initially: Fx<IE, Managed<A, FE>>
-): Fx<IE | Finally<Scope, FE> | Interrupt, A> => uninterruptible(fx(function* () {
+): Fx<IE | FE | Finally<Scope, FE> | Interrupt, A> => uninterruptible(fx(function* () {
   assertScopeOpen(scope)
   const m = yield* initially
-  yield* andFinallyIn(scope, m.finalizer)
+  try {
+    yield* andFinallyIn(scope, m.finalizer)
+  } catch (error) {
+    yield* m.finalizer(staleRegistrationExit(scope, error))
+    throw error
+  }
   return m.value
 }))
+
+const staleRegistrationExit = <const Scope extends AnyLifetimeScope>(
+  scope: Scope,
+  reason: unknown
+): Exit<Scope> => ({
+    type: 'interrupted',
+    scope,
+    reason
+  })

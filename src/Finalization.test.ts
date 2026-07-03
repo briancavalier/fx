@@ -1,9 +1,11 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
+import { assertPromise } from './Async.js'
+import { fork, withUnboundedConcurrency } from './Concurrent.js'
 import { abort, Abort, orReturn } from './Abort.js'
 import { Fail, fail, returnFail } from './Fail.js'
-import { fx, ok, run, type Fx } from './Fx.js'
+import { fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { andFinallyIn, managed, usingIn, usingManagedIn, type Finally, type Managed } from './Finalization.js'
 import type { Interrupt } from './Interrupt.js'
 import { key } from './Key.js'
@@ -36,9 +38,9 @@ describe('Finalization', () => {
       () => yieldFrom(CleanupEvents, 'cleanup')
     )))
 
-    const _: typeof resource extends Fx<Finally<typeof TestScope, YieldFrom<typeof CleanupEvents>> | Interrupt, 'resource'> ? true : false = true
-    const __: typeof exitResource extends Fx<Finally<typeof TestScope, Fail<Error>> | Interrupt, 'resource'> ? true : false = true
-    const ___: typeof managedResource extends Fx<Finally<typeof TestScope, YieldFrom<typeof CleanupEvents>> | Interrupt, 'resource'> ? true : false = true
+    const _: typeof resource extends Fx<YieldFrom<typeof CleanupEvents> | Finally<typeof TestScope, YieldFrom<typeof CleanupEvents>> | Interrupt, 'resource'> ? true : false = true
+    const __: typeof exitResource extends Fx<Fail<Error> | Finally<typeof TestScope, Fail<Error>> | Interrupt, 'resource'> ? true : false = true
+    const ___: typeof managedResource extends Fx<YieldFrom<typeof CleanupEvents> | Finally<typeof TestScope, YieldFrom<typeof CleanupEvents>> | Interrupt, 'resource'> ? true : false = true
 
     assert.equal(typeof _, 'boolean')
     assert.equal(typeof __, 'boolean')
@@ -248,6 +250,34 @@ describe('Finalization', () => {
     assert.equal(acquired, false)
   })
 
+  it('usingIn releases resources acquired after lexical scope exit', async () => {
+    const released = [] as string[]
+    const exits = [] as Exit[]
+    let resolve!: (value: string) => void
+
+    const task = await withScope(scope => fx(function* () {
+      const task = yield* fork(usingIn(
+        scope,
+        assertPromise<string>(() => new Promise(r => {
+          resolve = r
+        })),
+        (resource, exit) => fx(function* () {
+          released.push(resource)
+          exits.push(exit)
+        })
+      ).pipe(inScope(scope)))
+      return yield* assertPromise(() => eventually(() => resolve !== undefined).then(() => task))
+    })).pipe(withUnboundedConcurrency).pipe(runPromise)
+
+    resolve('resource')
+
+    await assert.rejects(task.promise, hasStaleScopeCause)
+    assert.deepEqual(released, ['resource'])
+    assert.equal(exits.length, 1)
+    assert.equal(exits[0]?.type, 'interrupted')
+    assert.match(String(exits[0]?.reason), /used after its scope exited/)
+  })
+
   it('usingIn does not register cleanup when initialization fails', () => {
     const released = [] as string[]
     const initFailure = new Error('init failed')
@@ -401,6 +431,33 @@ describe('Finalization', () => {
     assert.equal(acquired, false)
   })
 
+  it('usingManagedIn releases resources acquired after lexical scope exit', async () => {
+    const released = [] as string[]
+    const exits = [] as Exit[]
+    let resolve!: (value: Managed<string>) => void
+
+    const task = await withScope(scope => fx(function* () {
+      const task = yield* fork(usingManagedIn(
+        scope,
+        assertPromise<Managed<string>>(() => new Promise(r => {
+          resolve = r
+        }))
+      ).pipe(inScope(scope)))
+      return yield* assertPromise(() => eventually(() => resolve !== undefined).then(() => task))
+    })).pipe(withUnboundedConcurrency).pipe(runPromise)
+
+    resolve(managed('resource', exit => fx(function* () {
+      released.push('resource')
+      exits.push(exit)
+    })))
+
+    await assert.rejects(task.promise, hasStaleScopeCause)
+    assert.deepEqual(released, ['resource'])
+    assert.equal(exits.length, 1)
+    assert.equal(exits[0]?.type, 'interrupted')
+    assert.match(String(exits[0]?.reason), /used after its scope exited/)
+  })
+
   it('usingManagedIn does not register cleanup when initialization fails', () => {
     const released = [] as string[]
     const initFailure = new Error('init failed')
@@ -521,3 +578,16 @@ const drainSync = (f: Fx<unknown, unknown>): void => {
   const iterator = f[Symbol.iterator]()
   for (let result = iterator.next(); !result.done; result = iterator.next()) { }
 }
+
+const eventually = async (predicate: () => boolean): Promise<void> => {
+  for (let i = 0; i < 100; ++i) {
+    if (predicate()) return
+    await new Promise(resolve => setTimeout(resolve, 1))
+  }
+  throw new Error('timed out waiting for condition')
+}
+
+const hasStaleScopeCause = (error: unknown): boolean =>
+  error instanceof Error
+  && error.cause instanceof Error
+  && /used after its scope exited/.test(error.cause.message)

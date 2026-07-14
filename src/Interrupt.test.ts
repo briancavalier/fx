@@ -9,7 +9,7 @@ import { bracket, finalizing, fx, ok, run, runPromise, runTask, type Fx } from '
 import { control, handle } from './Handler.js'
 import { InterruptFrom, interruptFrom, recoverInterrupt } from './InterruptFrom.js'
 import { uninterruptible, uninterruptibleMask, type Interrupt, type RestoreInterrupt } from './Interrupt.js'
-import { scope, withScope, type Exit } from './Scope.js'
+import { scope, withScope, inScope, type AnyLifetimeScope, type Exit } from './Scope.js'
 
 describe('Typed interruption', () => {
   const TestScope = scope('test/InterruptFrom')
@@ -25,7 +25,7 @@ describe('Typed interruption', () => {
       }))
       yield* interruptFrom(TestScope, reason)
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       recoverInterrupt(TestScope, r => {
         recoveredReason = r
         return ok('interrupted')
@@ -42,7 +42,7 @@ describe('Typed interruption', () => {
   it('types recovery reasons as unknown', () => {
     const reason = { type: 'test-interrupt' } as const
     const recovered = interruptFrom(TestScope, reason).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       recoverInterrupt(TestScope, r => {
         const _: unknown = r
         void _
@@ -54,9 +54,32 @@ describe('Typed interruption', () => {
     void _
   })
 
+  it('rejects cached interruptions for closed lexical handles before recovering', () => {
+    let leaked: AnyLifetimeScope | undefined
+    let cached: Fx<InterruptFrom<AnyLifetimeScope, 'reason'>, never> | undefined
+    let recovered = false
+
+    run(withScope(scope => fx(function* () {
+      leaked = scope
+      cached = interruptFrom(scope, 'reason' as const)
+    })))
+
+    assert.throws(
+      () => cached!.pipe(
+        recoverInterrupt(leaked!, () => fx(function* () {
+          recovered = true
+          return 'interrupted'
+        })),
+        run
+      ),
+      /used after its scope exited/
+    )
+    assert.equal(recovered, false)
+  })
+
   it('rejects incompatible recovery reason annotations', () => {
     const recovered = interruptFrom(TestScope, 123).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       // @ts-expect-error recovery reasons are unknown until narrowed by the handler
       recoverInterrupt(TestScope, (r: string) => ok(r))
     )
@@ -71,14 +94,14 @@ describe('Typed interruption', () => {
       yield* interruptFrom(OtherScope, 'other')
       return 'done'
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       recoverInterrupt(TestScope, () => ok('interrupted'))
     )
 
     const next = f[Symbol.iterator]().next()
 
     assert.equal(InterruptFrom.is(next.value), true)
-    assert.equal((next.value as InterruptFrom<typeof OtherScope, 'other'>).scope, OtherScope)
+    assert.equal((next.value as unknown as InterruptFrom<typeof OtherScope, 'other'>).scope, OtherScope)
   })
 
   it('surfaces cleanup failures before recovering an interruption', () => {
@@ -88,7 +111,7 @@ describe('Typed interruption', () => {
       yield* andFinallyIn(TestScope, fail(cleanupFailure))
       yield* interruptFrom(TestScope)
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       recoverInterrupt(TestScope, () => ok('interrupted')),
       returnFail,
       run
@@ -109,7 +132,7 @@ describe('Typed interruption', () => {
       }))
       yield* interruptFrom(TestScope, reason)
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       returnFail,
       run
@@ -120,7 +143,8 @@ describe('Typed interruption', () => {
   })
 
   it('leaves the interrupt visible after scope cleanup', () => {
-    const f = interruptFrom(TestScope).pipe(withScope(TestScope))
+    const f = interruptFrom(TestScope).pipe(inScope(TestScope))
+    const _: typeof f extends Fx<InterruptFrom<typeof TestScope>, never> ? true : false = true
     const next = f[Symbol.iterator]().next()
 
     assert.equal(InterruptFrom.is(next.value), true)
@@ -132,7 +156,7 @@ describe('Typed interruption', () => {
     const f = fx(function* () {
       yield* interruptFrom(OtherScope)
       return 'done'
-    }).pipe(withScope(TestScope))
+    }).pipe(inScope(TestScope))
 
     const next = f[Symbol.iterator]().next()
 
@@ -147,7 +171,7 @@ describe('Typed interruption', () => {
       yield* andFinallyIn(TestScope, fail(cleanupFailure))
       yield* interruptFrom(TestScope)
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       returnFail,
       run
@@ -255,7 +279,7 @@ describe('Interrupt masking', () => {
         })
       )
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       returnFail,
       runTask
     )
@@ -281,7 +305,7 @@ describe('Interrupt masking', () => {
         }))
       )
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       returnFail,
       runTask
     )
@@ -579,7 +603,7 @@ describe('Interrupt masking', () => {
     })
 
     const result = race([ok('winner'), loser]).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       withUnboundedConcurrency,
       returnFail,
       runPromise

@@ -4,7 +4,7 @@ import { Fail, fail } from './Fail.js'
 import { Fx, flatMap, fx } from './Fx.js'
 import { HandlerCapture, withCapturedHandlers } from './HandlerCapture.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope, withScope, type Control } from './Scope.js'
+import { assertScopeOpen, inScope, withControlScope, withScope } from './Scope.js'
 import { Task } from './Task.js'
 import type { TraceFrameKind, TraceOptions, TraceOrigin } from './Trace.js'
 import { Trace, captureTrace } from './Trace.js'
@@ -78,13 +78,13 @@ export const fork = <const E, const A>(
  * returned task's lifetime, while the nearest fork concurrency handler decides
  * when the task is allowed to start. Apply the matching {@link withScope}
  * inside an outer fork scheduler, for example
- * `program.pipe(withScope(scope), withUnboundedConcurrency)`.
+ * `program.pipe(inScope(scope), withUnboundedConcurrency)`.
  *
  * Advanced: `scheduling: 'unmetered'` is passed through to the fork scheduler
  * without changing scope ownership.
  *
  * The types follow normal effect elimination: `forkIn` introduces a
- * `ScopedFork<Scope>`, `withScope(scope)` handles it and may introduce `Fork`,
+ * `ScopedFork<Scope>`, `inScope(scope)` handles it and may introduce `Fork`,
  * and a fork scheduler handles `Fork` before execution.
  */
 export const forkIn = <const Scope extends AnyLifetimeScope, const E, const A>(
@@ -92,6 +92,7 @@ export const forkIn = <const Scope extends AnyLifetimeScope, const E, const A>(
   f: Fx<E, A>,
   options?: ForkOptions
 ): Fx<Exclude<E, Async | Fail<any>> | ScopedFork<Scope> | HandlerCapture<'fx/Concurrent/ForkIn'>, Task<A, ErrorsOf<E>>> => {
+  assertScopeOpen(scope)
   const trace = traceOrigin(options, 'fx/Concurrent/forkIn', forkIn, 'fork')
   return new ScopedFork(scope, { fx: f, ...trace, scheduling: options?.scheduling }) as Fx<ScopedFork<Scope>, Task<A, ErrorsOf<E>>>
 }
@@ -126,15 +127,14 @@ export const all = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   fxs: readonly [...Fxs],
   options?: TraceOptions
 ) => {
-  const concurrentScope = scope(Symbol('fx/Concurrent/all'), { diagnostic: false })
   const trace = traceOrigin(options, 'fx/Concurrent/all', all, 'all')
-  return fx(function* () {
+  return withScope({ diagnostic: false }, concurrentScope => inScope(concurrentScope, fx(function* () {
     const tasks = yield* forkEachScoped(concurrentScope, fxs, trace)
     const results = yield* waitAllTasks(tasks)
     return results as { readonly [K in keyof Fxs]: ResultOf<Fxs[K]> }
   // The internal scope is private, so its ReturnFrom branch is not observable
   // through the public all result type.
-  }).pipe(withScope(concurrentScope)) as Fx<StructuredEffects<Fxs>, { readonly [K in keyof Fxs]: ResultOf<Fxs[K]> }>
+  })) as Fx<unknown, unknown>) as Fx<StructuredEffects<Fxs>, { readonly [K in keyof Fxs]: ResultOf<Fxs[K]> }>
 }
 
 /**
@@ -155,9 +155,8 @@ export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   fxs: readonly [...Fxs],
   options?: TraceOptions
 ) => {
-  const concurrentScope = scope<Control>()(Symbol('fx/Concurrent/race'), { diagnostic: false })
   const trace = traceOrigin(options, 'fx/Concurrent/race', race, 'race')
-  return new RuntimeCloseBoundary(fx(function* () {
+  return new RuntimeCloseBoundary(withControlScope({ diagnostic: false }, concurrentScope => inScope(concurrentScope, fx(function* () {
     if (fxs.length === 0) return yield* never()
     const tasks = yield* forkEachScoped(concurrentScope, fxs, trace)
     const result = yield* waitFirstSettled(tasks)
@@ -166,7 +165,7 @@ export const race = <const Fxs extends readonly Fx<unknown, unknown>[]>(
     return yield* returnFrom(concurrentScope, result.value)
   // The internal scope is private, so its ReturnFrom branch is exactly the race
   // result value.
-  }).pipe(withScope(concurrentScope))) as Fx<StructuredEffects<Fxs>, ResultOf<Fxs[number]>>
+  })) as Fx<unknown, unknown>)) as Fx<StructuredEffects<Fxs>, ResultOf<Fxs[number]>>
 }
 
 /**
@@ -176,9 +175,8 @@ export const firstSuccess = <const Fxs extends readonly Fx<unknown, unknown>[]>(
   fxs: readonly [...Fxs],
   options?: TraceOptions
 ) => {
-  const concurrentScope = scope<Control>()(Symbol('fx/Concurrent/firstSuccess'), { diagnostic: false })
   const trace = traceOrigin(options, 'fx/Concurrent/firstSuccess', firstSuccess, 'race')
-  return new RuntimeCloseBoundary(fx(function* () {
+  return new RuntimeCloseBoundary(withControlScope({ diagnostic: false }, concurrentScope => inScope(concurrentScope, fx(function* () {
     if (fxs.length === 0) return yield* fail(new RaceAllFailed([]))
     const tasks = yield* forkEachScoped(concurrentScope, fxs, trace, 'task')
     const result = yield* waitFirstSuccess(tasks)
@@ -187,7 +185,7 @@ export const firstSuccess = <const Fxs extends readonly Fx<unknown, unknown>[]>(
     return yield* returnFrom(concurrentScope, result.value)
   // The internal scope is private, so its ReturnFrom branch is exactly the
   // first successful result value.
-  }).pipe(withScope(concurrentScope))) as Fx<FirstSuccessEffects<Fxs>, ResultOf<Fxs[number]>>
+  })) as Fx<unknown, unknown>)) as Fx<FirstSuccessEffects<Fxs>, ResultOf<Fxs[number]>>
 }
 
 const forkEachScoped = <const Scope extends AnyLifetimeScope, const Fxs extends readonly Fx<unknown, unknown>[]>(

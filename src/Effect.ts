@@ -1,10 +1,12 @@
 import type { Breadcrumb } from './Breadcrumb.js'
 import { Fx } from './Fx.js'
+import type { AnyKey } from './Key.js'
 import type { AnyScope } from './Scope.js'
 import { captureTrace } from './Trace.js'
 import type { Trace, TraceOrigin } from './Trace.js'
 import { Once } from './internal/generator.js'
 import { Pipeable, pipeThis } from './internal/pipe.js'
+import { assertScopeOpen } from './internal/scopeLifetime.js'
 
 export interface EffectType {
   readonly _fxEffectId: unknown
@@ -39,12 +41,25 @@ export interface ScopedEffectInstance<Id, Scope extends AnyScope, A, R> extends 
   readonly scope: Scope
 }
 
+export interface KeyedEffectInstance<Id, Key extends AnyKey, A, R> extends EffectInstance<Id, A, R> {
+  readonly key: Key
+}
+
 export interface ScopedEffectClass<Id> extends EffectType {
   readonly _fxEffectId: Id
   new<const Scope extends AnyScope, A = void, R = unknown>(
     scope: Scope,
     arg: A
   ): ScopedEffectInstance<Id, Scope, A, R>
+  is<E extends EffectType>(this: E, x: unknown): x is InstanceType<E>
+}
+
+export interface KeyedEffectClass<Id> extends EffectType {
+  readonly _fxEffectId: Id
+  new<const Key extends AnyKey, A = void, R = unknown>(
+    key: Key,
+    arg: A
+  ): KeyedEffectInstance<Id, Key, A, R>
   is<E extends EffectType>(this: E, x: unknown): x is InstanceType<E>
 }
 
@@ -112,7 +127,29 @@ export const ScopedEffect = <const T extends string>(id: T) => class <
   constructor(public readonly scope: Scope, arg: A) {
     super(arg)
   }
+
+  [Symbol.iterator](): Iterator<this, R, any> {
+    assertScopeOpen(this.scope)
+    return super[Symbol.iterator]() as Iterator<this, R, any>
+  }
 } as ScopedEffectClass<T>
+
+/**
+ * Define an effect type whose requests are associated with a typed key.
+ *
+ * Keyed effects let handlers interpret only requests for a matching stable
+ * protocol key. Use them for slots and channels such as State, YieldFrom, and
+ * Sink, not for lifetime or control regions.
+ */
+export const KeyedEffect = <const T extends string>(id: T) => class <
+  const Key extends AnyKey,
+  A = void,
+  R = unknown
+> extends Effect(id)<A, R> implements KeyedEffectInstance<T, Key, A, R> {
+  constructor(public readonly key: Key, arg: A) {
+    super(arg)
+  }
+} as KeyedEffectClass<T>
 
 export const isEffect = <E>(e: E): e is E & AnyEffect =>
   !!e && (e as any)._fxTypeId === EffectTypeId

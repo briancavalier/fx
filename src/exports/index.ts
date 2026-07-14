@@ -3,6 +3,7 @@ export {
   EffectOriginTypeId,
   EffectTypeId,
   isEffect,
+  KeyedEffect,
   originOf,
   ScopedEffect,
   traceOriginOf,
@@ -10,8 +11,19 @@ export {
   withTraceOrigin,
   type AnyEffect,
   type EffectOrigin,
-  type EffectType
+  type EffectType,
+  type KeyedEffectClass,
+  type KeyedEffectInstance
 } from '../Effect.js'
+export {
+  key,
+  keyId,
+  keyLabel,
+  sameKey,
+  type AnyKey,
+  type Key,
+  type KeyMetadata
+} from '../Key.js'
 export {
   andReturn,
   andThen,
@@ -34,9 +46,11 @@ export {
 export {
   control,
   handle,
+  handleKeyed,
   handleScoped,
   type Arg,
   type Handle,
+  type HandleKeyed,
   type HandleReturn,
   type HandleScoped
 } from '../Handler.js'

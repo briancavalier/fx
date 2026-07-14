@@ -13,6 +13,7 @@ import { Pipeable } from './internal/pipe.js'
 import { RunForkOptions, runFork } from './internal/runFork.js'
 import { ScopedHandlerCapture } from './internal/scopedHandlerCapture.js'
 import { TrySync } from './internal/sync.js'
+import type { RunBoundary } from './internal/typeDiagnostics.js'
 
 /**
  * A computation that returns a value of type `A` and may request effects `E`.
@@ -126,8 +127,11 @@ export const flatten = <const E1, const E2, const A>(x: Fx<E1, Fx<E2, A>>): Fx<E
  * Use `runTask` when the caller needs to dispose the running computation or wait
  * for cleanup. All non-runtime effects must be handled before calling it.
  */
-export const runTask = <const R>(f: Fx<Async | HandlerCapture<string> | Interrupt, R>, options: RunForkOptions = {}): Task<R, never> => {
-  return runFork(f.pipe(provideAll({})), {
+export const runTask = <const E, const R>(
+  f: Fx<E, R> & RunBoundary<E, Async | HandlerCapture<string> | Interrupt>,
+  options: RunForkOptions = {}
+): Task<R, never> => {
+  return runFork((f as Fx<Async | HandlerCapture<string> | Interrupt, R>).pipe(provideAll({})), {
     ...options,
     origin: options.origin ?? at('fx/runTask', runTask)
   })
@@ -139,8 +143,11 @@ export const runTask = <const R>(f: Fx<Async | HandlerCapture<string> | Interrup
  * This discards explicit cancellation. Use {@link runTask} when the caller needs
  * to cancel or wait for disposal.
  */
-export const runPromise = <const R>(f: Fx<Async | HandlerCapture<string> | Interrupt, R>, options: RunForkOptions = {}): Promise<R> => {
-  return runTask(f, {
+export const runPromise = <const E, const R>(
+  f: Fx<E, R> & RunBoundary<E, Async | HandlerCapture<string> | Interrupt>,
+  options: RunForkOptions = {}
+): Promise<R> => {
+  return runTask(f as Fx<Async | HandlerCapture<string> | Interrupt, R>, {
     ...options,
     origin: options.origin ?? at('fx/runPromise', runPromise)
   }).promise
@@ -153,8 +160,8 @@ export const runPromise = <const R>(f: Fx<Async | HandlerCapture<string> | Inter
  * {@link Interrupt}. Use {@link runPromise} or {@link runTask} for async
  * programs.
  */
-export const run = <const R>(f: Fx<Interrupt, R>): R =>
-  f.pipe(provideAll({}), f => {
+export const run = <const E, const R>(f: Fx<E, R> & RunBoundary<E, Interrupt>): R => {
+  return (f as Fx<Interrupt, R>).pipe(provideAll({}), f => {
     const i = f[Symbol.iterator]()
     const masks = new InterruptMaskState()
     let ir = i.next()
@@ -189,6 +196,7 @@ export const run = <const R>(f: Fx<Interrupt, R>): R =>
     if (!isEffect(ir.value)) masks.assertBalanced()
     return ir.value as R
   })
+}
 
 /**
  * Acquire a resource, use it, and release it even if use fails or is

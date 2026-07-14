@@ -4,8 +4,8 @@ export type InterruptMaskToken = object
 
 export const interruptMaskToken = (): InterruptMaskToken => ({})
 
-export class InterruptMaskBegin extends Effect('fx/internal/InterruptMaskBegin')<InterruptMaskToken, void> { }
-export class InterruptMaskEnd extends Effect('fx/internal/InterruptMaskEnd')<InterruptMaskToken, void> { }
+export class InterruptMaskBegin extends Effect('fx/internal/InterruptMaskBegin')<[InterruptMaskToken], void> { }
+export class InterruptMaskEnd extends Effect('fx/internal/InterruptMaskEnd')<[InterruptMaskToken], void> { }
 
 export class InterruptMaskState {
   private readonly masks = [] as InterruptMaskToken[]

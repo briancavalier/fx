@@ -15,12 +15,12 @@ export type MessageKind = 'ok' | 'error'
 
 export const BusyScope = 'example/Bookmarks/Presentation/Busy'
 
-export class Busy<A> extends Effect('example/Bookmarks/Presentation/Busy')<Fx<unknown, A>, A> { }
-export class ReadAddBookmarkInput extends Effect('example/Bookmarks/Presentation/ReadAddBookmarkInput')<void, AddBookmarkInput | undefined> { }
-export class ReadBookmarkQuery extends Effect('example/Bookmarks/Presentation/ReadBookmarkQuery')<void, BookmarkQuery> { }
-export class RenderBookmarks extends Effect('example/Bookmarks/Presentation/RenderBookmarks')<readonly Bookmark[], void> { }
-export class ShowMessage extends Effect('example/Bookmarks/Presentation/ShowMessage')<{ readonly kind: MessageKind; readonly message: string }, void> { }
-export class ResetAddForm extends Effect('example/Bookmarks/Presentation/ResetAddForm')<void, void> { }
+export class Busy<A> extends Effect('example/Bookmarks/Presentation/Busy')<[Fx<unknown, A>], A> { }
+export class ReadAddBookmarkInput extends Effect('example/Bookmarks/Presentation/ReadAddBookmarkInput')<[], AddBookmarkInput | undefined> { }
+export class ReadBookmarkQuery extends Effect('example/Bookmarks/Presentation/ReadBookmarkQuery')<[], BookmarkQuery> { }
+export class RenderBookmarks extends Effect('example/Bookmarks/Presentation/RenderBookmarks')<[readonly Bookmark[]], void> { }
+export class ShowMessage extends Effect('example/Bookmarks/Presentation/ShowMessage')<[{ readonly kind: MessageKind; readonly message: string }], void> { }
+export class ResetAddForm extends Effect('example/Bookmarks/Presentation/ResetAddForm')<[], void> { }
 
 export const busy = <E, A>(program: Fx<E, A>): Fx<Busy<A> | HandlerCapture<typeof BusyScope>, A> =>
   withCapturedHandlers(BusyScope, program).pipe(

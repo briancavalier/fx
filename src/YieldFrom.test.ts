@@ -365,7 +365,7 @@ describe('YieldFrom', () => {
     })
 
     it('does not advance source past unrelated effects after sink ends', () => {
-      class Other extends Effect('test/YieldFrom/to/source-unrelated')<void, void> { }
+      class Other extends Effect('test/YieldFrom/to/source-unrelated')<[], void> { }
       const source = fx(function* () {
         yield* new Other()
         return 'source'
@@ -386,7 +386,7 @@ describe('YieldFrom', () => {
     })
 
     it('does not advance sink past unrelated effects after source ends', () => {
-      class Other extends Effect('test/YieldFrom/to/sink-unrelated')<void, void> { }
+      class Other extends Effect('test/YieldFrom/to/sink-unrelated')<[], void> { }
       const source = ok('source')
       const sink = fx(function* () {
         yield* new Other()

@@ -9,7 +9,7 @@ export type ScopedHandlerCaptureTarget =
   | { readonly type: 'scope'; readonly scope: AnyScope }
 
 export class ScopedHandlerCapture extends Effect('fx/internal/ScopedHandlerCapture')<
-  ScopedHandlerCaptureTarget,
+  [ScopedHandlerCaptureTarget],
   readonly CapturedHandler[]
 > { }
 

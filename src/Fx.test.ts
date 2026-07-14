@@ -60,8 +60,8 @@ describe('Fx', () => {
     })
 
     it('given mapping function with effect, merges effects', () => {
-      class E1<A> extends Effect('E1')<A, A> { }
-      class E2<A> extends Effect('E2')<A, A> { }
+      class E1<A> extends Effect('E1')<[A], A> { }
+      class E2<A> extends Effect('E2')<[A], A> { }
 
       const r = new E1(1).pipe(
         flatMap(a => new E2(`${a}`)),
@@ -74,7 +74,7 @@ describe('Fx', () => {
     })
 
     it('handler callbacks receive the original effect instance', () => {
-      class Request extends Effect('Request')<number, number> {
+      class Request extends Effect('Request')<[number], number> {
         readonly metadata = 'request metadata'
       }
 
@@ -95,7 +95,7 @@ describe('Fx', () => {
     })
 
     it('control callbacks receive the original effect instance', () => {
-      class Request extends Effect('ControlledRequest')<number, number> {
+      class Request extends Effect('ControlledRequest')<[number], number> {
         readonly metadata = 'controlled metadata'
       }
 

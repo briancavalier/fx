@@ -12,7 +12,7 @@ export type Random = Int | Float | Split
  * The next 32-bit integer in [0, max)
  * Not cryptographically secure.
  */
-export class Int extends Effect('fx/Random/Int')<number, number> { }
+export class Int extends Effect('fx/Random/Int')<[number], number> { }
 
 /**
  * Get the next 32-bit integer in [0, max)
@@ -24,7 +24,7 @@ export const int = (max = 0xFFFFFFFF) => new Int(max)
  * The next float in range [0, 1)
  * Not cryptographically secure.
  */
-export class Float extends Effect('fx/Random/Float')<void, number> { }
+export class Float extends Effect('fx/Random/Float')<[], number> { }
 
 /**
  * Get the next float in range [0, 1)
@@ -35,7 +35,7 @@ export const float = new Float()
 /**
  * Split the random number generator into two independent generators.
  */
-export class Split extends Effect('fx/Random/Split')<Fx<unknown, unknown>, Fx<unknown, unknown>> { }
+export class Split extends Effect('fx/Random/Split')<[Fx<unknown, unknown>], Fx<unknown, unknown>> { }
 
 /**
  * Split the random number generator into two independent generators.

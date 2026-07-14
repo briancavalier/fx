@@ -3,7 +3,7 @@ import { Fx, fx, map as mapFx, ok, unit } from './Fx.js'
 import { handle } from './Handler.js'
 import { now } from './Time.js'
 
-export class Log extends Effect('fx/Log')<LogMessage, void> { }
+export class Log extends Effect('fx/Log')<[LogMessage], void> { }
 
 export const log = (m: LogMessage) => new Log(m)
 

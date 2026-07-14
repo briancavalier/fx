@@ -16,7 +16,7 @@ import { handle } from './Handler.js'
  *     flatMap(decodeJson)
  *   )
  */
-export class HttpRequest extends Effect('fx/HttpClient/HttpRequest')<Request, Response<number, ResponseBody>> { }
+export class HttpRequest extends Effect('fx/HttpClient/HttpRequest')<[Request], Response<number, ResponseBody>> { }
 
 /**
  * Construct an {@link HttpRequest} from a request description.

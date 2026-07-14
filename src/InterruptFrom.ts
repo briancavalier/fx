@@ -9,7 +9,7 @@ import { sameScope } from './internal/scopeIdentity.js'
  * Interrupt the named scope.
  */
 export class InterruptFrom<const Scope extends AnyScope, Reason = undefined>
-  extends ScopedEffect('fx/InterruptFrom')<Scope, Reason, never> { }
+  extends ScopedEffect('fx/InterruptFrom')<Scope, [Reason], never> { }
 
 export function interruptFrom<const Scope extends AnyLifetimeScope>(
   scope: Scope

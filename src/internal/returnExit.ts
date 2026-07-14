@@ -6,7 +6,7 @@ import { ReturnFrom } from '../ReturnFrom.js'
 import type { AnyControlScope, AnyScope } from '../Scope.js'
 import { exitRegion, type CapturedCleanupExit } from './exitRegion.js'
 
-type ExitEffect =
+export type ExitEffect =
   | Fail<any>
   | ReturnFrom<AnyControlScope, any>
   | Abort<AnyControlScope>
@@ -65,6 +65,31 @@ export const effectiveExit = <const A, const E extends ExitEffect>(
   }
   return current as EffectiveExit<A, E>
 }
+
+export const withCleanupExit = <const A, const E extends ExitEffect, const CE extends ExitEffect>(
+  primary: ResumableExit<A, E>,
+  cleanup: ResumableExit<void, CE>
+): ResumableExit<A, E | CE> => {
+  if (cleanup.type === 'success') return primary
+  if (primary.type === 'success') return cleanup
+  return mergeCleanupExit(primary, cleanup)
+}
+
+const mergeCleanupExit = <const E extends ExitEffect, const CE extends ExitEffect>(
+  primary: NonSuccessExit<E> | WithCleanupExit<E>,
+  cleanup: NonSuccessExit<CE> | WithCleanupExit<CE>
+): WithCleanupExit<E | CE> =>
+  primary.type === 'withCleanupExit'
+    ? {
+        type: 'withCleanupExit',
+        primary: primary.primary,
+        cleanup: mergeCleanupExit(primary.cleanup, cleanup)
+      } as WithCleanupExit<E | CE>
+    : {
+        type: 'withCleanupExit',
+        primary,
+        cleanup
+      } as WithCleanupExit<E | CE>
 
 export function resumeExit<const A>(
   exit: { readonly type: 'success', readonly value: A }

@@ -96,7 +96,7 @@
     "@types/node": "^26.1.1",
     "oxfmt": "^0.57.0",
     "oxlint": "^1.74.0",
-    "oxlint-tsgolint": "^0.24.0",
+    "oxlint-tsgolint": "^0.25.0",
     "tsx": "^4.23.0",
     "typescript": "^6.0.3"
   }

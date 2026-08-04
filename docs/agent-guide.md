@@ -11,12 +11,10 @@ Programs describe operations with `yield*`; handlers interpret those operations.
 ```ts
 import { Effect, fx, handle, ok, run } from "@briancavalier/fx"
 
-class AskName extends Effect("app/AskName")<void, string> {}
-
-const askName = new AskName()
+class AskName extends Effect("app/AskName")<[], string> {}
 
 const greet = fx(function* () {
-  return `Hello, ${yield* askName}`
+  return `Hello, ${yield* AskName.of()}`
 })
 
 const message = greet.pipe(
@@ -55,17 +53,16 @@ import. Use `log`, `info`, `warn`, `error`, and `withConsoleLog` from
 
 ## Define effects directly
 
-Use `Effect(...)` classes for ordinary requests. Add a small constructor value or
-function only when it improves call-site clarity.
+Use `Effect(...)` classes for ordinary requests. Each effect class has an `of`
+constructor for building the request.
 
 ```ts
-class SaveUser extends Effect("app/User/Save")<User, User> {}
-
-const saveUser = (user: User) => new SaveUser(user)
+class SaveUser extends Effect("app/User/Save")<[User], User> {}
 ```
 
 Avoid service containers, dependency graphs, and wrappers that only rename an
-existing effect. An effect should describe a request, not a hidden dependency.
+existing effect. Add a helper only when construction does more than build the
+request. An effect should describe a request, not a hidden dependency.
 
 ## Write business logic against effects
 
@@ -77,7 +74,7 @@ import { consoleLog, defaultConsole, fx, handle, runPromise } from "@briancavali
 
 const registerUser = (input: RegisterInput) => fx(function* () {
   const user = validateUser(input)
-  const saved = yield* saveUser(user)
+  const saved = yield* SaveUser.of(user)
   yield* consoleLog("user registered", { id: saved.id })
   return saved
 })

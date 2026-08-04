@@ -8,13 +8,11 @@ import { abort, orReturn, scope, withScope, type Control } from '@briancavalier/
 // -------------------------------------------------------------------
 // #region New effects the game will need
 
-export class Print extends Effect('Print')<string, void> { }
+export type GuessingGame = Print | Read | GenerateSecret
 
-const print = (s: string) => new Print(s)
+export class Print extends Effect('examples/basic/guessing-game/Print')<[string], void> { }
 
-export class Read extends Effect('Read')<string, string> { }
-
-const read = (prompt: string) => new Read(prompt)
+export class Read extends Effect('examples/basic/guessing-game/Read')<[string], string> { }
 
 const ParseInteger = scope<Control>()('examples/basic/guessing-game/ParseInteger')
 
@@ -23,9 +21,7 @@ export const toInteger = (s: string) => {
   return Number.isInteger(i) ? ok(i) : abort(ParseInteger)
 }
 
-export class GenerateSecret extends Effect('GetSecret')<number, number> { }
-
-const generateSecret = (max: number) => new GenerateSecret(max)
+export class GenerateSecret extends Effect('examples/basic/guessing-game/GenerateSecret')<[number], number> { }
 
 // #endregion
 
@@ -38,14 +34,14 @@ export const checkAnswer = (secret: number, guess: number): boolean =>
 
 // Main game loop. Play round after round until the user chooses to quit
 export const main = fx(function* ({ max }: { readonly max: number }) {
-  const name = yield* read(`What's your name? `)
-  yield* print(`Hello, ${name}. Welcome to the game!`)
+  const name = yield* Read.of(`What's your name? `)
+  yield* Print.of(`Hello, ${name}. Welcome to the game!`)
 
   do
     yield* play(name, max)
   while (yield* checkContinue(name))
 
-  yield* print(`Thanks for playing, ${name}.`)
+  yield* Print.of(`Thanks for playing, ${name}.`)
 })
 
 // Play one round of the game.  Generate a number and ask the user
@@ -53,28 +49,28 @@ export const main = fx(function* ({ max }: { readonly max: number }) {
 const play = (name: string, max: number) => fx(function* () {
   // It doesn't actually matter whether we generate the number before
   // or after the user guesses, but we'll do it here
-  const secret = yield* generateSecret(max)
+  const secret = yield* GenerateSecret.of(max)
 
-  const result = yield* read(`Dear ${name}, please guess a number from 1 to ${max}: `)
+  const result = yield* Read.of(`Dear ${name}, please guess a number from 1 to ${max}: `)
 
   const guess = yield* toInteger(result).pipe(withScope(ParseInteger), orReturn(ParseInteger, undefined))
   if (typeof guess !== 'number')
-    yield* print('You did not enter an integer!')
+    yield* Print.of('You did not enter an integer!')
   else if (checkAnswer(secret, guess))
-    yield* print(`You guessed right, ${name}!`)
+    yield* Print.of(`You guessed right, ${name}!`)
   else
-    yield* print(`You guessed wrong, ${name}! The number was: ${secret}`)
+    yield* Print.of(`You guessed wrong, ${name}! The number was: ${secret}`)
 })
 
 // Ask the user if they want to play again.
 // Note that we keep asking until the user gives an answer we recognize
 const checkContinue = (name: string) => fx(function* () {
   while (true) {
-    const answer = yield* read(`Do you want to continue, ${name}? (y/n) `)
+    const answer = yield* Read.of(`Do you want to continue, ${name}? (y/n) `)
     switch (answer.trim().toLowerCase()) {
       case 'y': return true
       case 'n': return false
-      default: yield* print('Please enter y or n.')
+      default: yield* Print.of('Please enter y or n.')
     }
   }
 })

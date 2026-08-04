@@ -77,18 +77,18 @@ export type Decoder<K extends AnyCodecKey, E = never> =
 /**
  * Request encoding a value with a branded codec key.
  */
-export class Encode<const K extends AnyCodecKey> extends Effect('fx/Codec/Encode')<{
+export class Encode<const K extends AnyCodecKey> extends Effect('fx/Codec/Encode')<[{
   readonly codec: K
   readonly value: CodecValue<K>
-}, CodecResult<CodecEncodeFailure<K>, CodecEncoded<K>>> { }
+}], CodecResult<CodecEncodeFailure<K>, CodecEncoded<K>>> { }
 
 /**
  * Request decoding an encoded value with a branded codec key.
  */
-export class Decode<const K extends AnyCodecKey> extends Effect('fx/Codec/Decode')<{
+export class Decode<const K extends AnyCodecKey> extends Effect('fx/Codec/Decode')<[{
   readonly codec: K
   readonly encoded: CodecEncoded<K>
-}, CodecResult<CodecDecodeFailure<K>, CodecValue<K>>> { }
+}], CodecResult<CodecDecodeFailure<K>, CodecValue<K>>> { }
 
 /**
  * Encode a value using the handler associated with the codec key.

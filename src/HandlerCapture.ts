@@ -8,7 +8,7 @@ export interface CapturedHandler {
   wrap(fx: Fx<unknown, unknown>): Fx<unknown, unknown>
 }
 
-export class HandlerCapture<const Name extends string> extends Effect('fx/HandlerCapture')<Name, readonly CapturedHandler[]> { }
+export class HandlerCapture<const Name extends string> extends Effect('fx/HandlerCapture')<[Name], readonly CapturedHandler[]> { }
 
 export const captureHandlers = <const Name extends string>(name: Name): HandlerCapture<Name> =>
   new HandlerCapture(name)

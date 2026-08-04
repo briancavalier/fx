@@ -197,7 +197,7 @@ describe('scoped', () => {
       // @ts-expect-error A lifetime-only current scope cannot abort.
       yield* abort(currentScope)
       // @ts-expect-error The Abort constructor also requires control scope authority.
-      yield* new Abort(currentScope, undefined)
+      yield* new Abort(currentScope)
       // @ts-expect-error A lifetime-only current scope does not create a yielding protocol.
       yield* yieldFrom(currentScope, 'event' as const)
       // @ts-expect-error A lifetime-only current scope does not create a state protocol.

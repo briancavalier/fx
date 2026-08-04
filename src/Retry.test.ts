@@ -226,7 +226,7 @@ describe('Retry', () => {
   })
 
   it('runs each attempt with the captured handler context', () => {
-    class CurrentPrefix extends Effect('test/CurrentPrefix')<void, string> { }
+    class CurrentPrefix extends Effect('test/CurrentPrefix')<[], string> { }
 
     let attempts = 0
 
@@ -270,7 +270,7 @@ describe('Retry', () => {
   })
 
   it('retries failures introduced by handlers between retry and defaultRetry', () => {
-    class NeedsHandler extends Effect('test/Retry/NeedsHandler')<void, string> { }
+    class NeedsHandler extends Effect('test/Retry/NeedsHandler')<[], string> { }
 
     const events: RetryEvent[] = []
     let attempts = 0
@@ -300,7 +300,7 @@ describe('Retry', () => {
   })
 
   it('does not retry failures introduced by handlers outside defaultRetry', () => {
-    class NeedsHandler extends Effect('test/Retry/OuterNeedsHandler')<void, string> { }
+    class NeedsHandler extends Effect('test/Retry/OuterNeedsHandler')<[], string> { }
 
     const events: RetryEvent[] = []
     let attempts = 0

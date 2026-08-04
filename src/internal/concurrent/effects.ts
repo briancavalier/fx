@@ -10,7 +10,7 @@ import type { TraceOrigin } from '../../Trace.js'
  * A `Fork` request returns a {@link Task} handle. The scheduling strategy is
  * supplied by handlers such as `withBoundedConcurrency` or `withUnboundedConcurrency`.
  */
-export class Fork extends Effect('fx/Concurrent/Fork')<ForkContext, Task<unknown, unknown>> { }
+export class Fork extends Effect('fx/Concurrent/Fork')<[ForkContext], Task<unknown, unknown>> { }
 
 export interface ForkContext extends TraceOrigin {
   readonly fx: Fx<unknown, unknown>

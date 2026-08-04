@@ -13,7 +13,7 @@ import { Trace, captureTrace } from './Trace.js'
  * callers can handle. Throw JavaScript exceptions only for hard crashes or
  * internal invariants.
  */
-export class Fail<const E> extends Effect('fx/Fail')<E, never> {
+export class Fail<const E> extends Effect('fx/Fail')<[E], never> {
   readonly origin: Breadcrumb
   readonly trace?: Trace
 
@@ -64,7 +64,7 @@ export interface CatchContext<E1, E extends ExtractFail<E1>, E2, A, B> {
  * recovery computation. Use {@link runCatch} to interpret it.
  */
 export class Catch<const E1, const E extends ExtractFail<E1>, const E2, const A, const B> extends Effect('fx/Fail/Catch')<
-  CatchContext<E1, E, E2, A, B>,
+  [CatchContext<E1, E, E2, A, B>],
   Fx<CatchEffects<E1, E, E2>, A | B>
 > { }
 

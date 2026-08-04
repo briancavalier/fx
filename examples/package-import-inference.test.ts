@@ -111,10 +111,10 @@ describe('package import inference', () => {
   })
 
   it('preserves Effect instance types through package declarations', () => {
-    class AskName extends Effect('test/package-import-inference/AskName')<string, string> { }
+    class AskName extends Effect('test/package-import-inference/AskName')<[string], string> { }
 
     const program = fx(function* () {
-      return yield* new AskName('name')
+      return yield* AskName.of('name')
     })
 
     const effectIsAny: IsAny<EffectOf<typeof program>> = false
@@ -128,9 +128,45 @@ describe('package import inference', () => {
     void runnable
   })
 
+  it('preserves Effect.of constructor argument types through package declarations', () => {
+    class AskName extends Effect('test/package-import-inference/AskNameOf')<[string], string> { }
+    class AskNumber extends Effect('test/package-import-inference/AskNumberOf')<[number], number> { }
+    class AskCurrent extends Effect('test/package-import-inference/AskCurrentOf')<[], string> { }
+    class AskPair extends Effect('test/package-import-inference/AskPairOf')<[string, number], boolean> { }
+
+    const name = AskName.of('name')
+    const count = AskNumber.of(1)
+    const current = AskCurrent.of()
+    const pair = AskPair.of('pair', 1)
+
+    // @ts-expect-error AskName.of requires a string.
+    AskName.of(1)
+
+    // @ts-expect-error AskNumber.of requires a number.
+    AskNumber.of('count')
+
+    // @ts-expect-error AskCurrent.of does not accept an argument.
+    AskCurrent.of('current')
+
+    // @ts-expect-error AskPair.of requires both arguments.
+    AskPair.of('pair')
+
+    const nameIsAskName: typeof name extends AskName ? true : false = true
+    const countIsAskNumber: typeof count extends AskNumber ? true : false = true
+    const currentIsAskCurrent: typeof current extends AskCurrent ? true : false = true
+    const pairIsAskPair: typeof pair extends AskPair ? true : false = true
+    const pairArg: readonly [string, number] = pair.arg
+
+    assert.equal(nameIsAskName, true)
+    assert.equal(countIsAskNumber, true)
+    assert.equal(currentIsAskCurrent, true)
+    assert.equal(pairIsAskPair, true)
+    void pairArg
+  })
+
   it('preserves ScopedEffect instance types through package declarations', () => {
     const Scope = scope('test/package-import-inference/ScopedAsk')
-    class ScopedAsk<const S extends AnyScope> extends ScopedEffect('test/package-import-inference/ScopedAsk')<S, string, string> { }
+    class ScopedAsk<const S extends AnyScope> extends ScopedEffect('test/package-import-inference/ScopedAsk')<S, [string], string> { }
 
     const program = fx(function* () {
       return yield* new ScopedAsk(Scope, 'name')

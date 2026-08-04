@@ -26,7 +26,7 @@ export type Finalizer<E = unknown> = (exit: Exit) => Fx<E, void>
  * and runs registered finalizers when that scope succeeds, fails, returns,
  * aborts, or is interrupted.
  */
-export class Finally<const Scope extends AnyLifetimeScope, E = never> extends ScopedEffect('fx/Finally')<Scope, Finalizer<E>, void> { }
+export class Finally<const Scope extends AnyLifetimeScope, E = never> extends ScopedEffect('fx/Finally')<Scope, [Finalizer<E>], void> { }
 
 /**
  * Register a cleanup operation to run when the current scope exits.

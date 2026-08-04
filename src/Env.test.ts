@@ -87,7 +87,7 @@ describe('Env', () => {
       readonly id: string
     }
 
-    class Authenticate extends Effect('test/Env/Authenticate')<Request, User> { }
+    class Authenticate extends Effect('test/Env/Authenticate')<[Request], User> { }
 
     const authenticate = (request: Request) =>
       new Authenticate(request)

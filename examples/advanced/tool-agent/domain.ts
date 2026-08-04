@@ -78,18 +78,18 @@ export type ToolAgentEffects =
 /**
  * Request a model response without choosing a local fake or remote provider.
  */
-export class AskModel extends Effect('example/ToolAgent/AskModel')<ModelRequest, ModelResponse> { }
+export class AskModel extends Effect('example/ToolAgent/AskModel')<[ModelRequest], ModelResponse> { }
 
 /**
  * Request that a named tool call be executed.
  */
-export class RunTool extends Effect('example/ToolAgent/RunTool')<ToolCall, ToolResult> { }
+export class RunTool extends Effect('example/ToolAgent/RunTool')<[ToolCall], ToolResult> { }
 
 /**
  * Request a managed agent session for observable setup and cleanup.
  */
 export class StartAgentSession extends Effect('example/ToolAgent/StartAgentSession')<
-  string,
+  [string],
   Managed<AgentSession, YieldFrom<typeof AgentEvents>>
 > { }
 

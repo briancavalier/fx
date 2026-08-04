@@ -43,7 +43,7 @@ describe('Fail', () => {
 
   describe('failFrom', () => {
     it('uses its fallback origin when the effect has no trace origin', async () => {
-      class TestEffect extends Effect('test/Effect')<void, void> { }
+      class TestEffect extends Effect('test/Effect')<[], void> { }
       const cause = new Error('failed')
       const origin = at('test/fail-from-fallback')
 
@@ -239,7 +239,7 @@ describe('Fail', () => {
     })
 
     it('runs body cleanup when an active catch region is closed', () => {
-      class Wait extends Effect('test/Fail/Catch/Wait')<void, void> { }
+      class Wait extends Effect('test/Fail/Catch/Wait')<[], void> { }
       const events: string[] = []
       const f = fx(function* () {
         const handled = yield* new Catch({
@@ -264,7 +264,7 @@ describe('Fail', () => {
     })
 
     it('lets ordinary handlers interpret body and recovery effects', () => {
-      class Ask extends Effect('test/Fail/Catch/Ask')<void, string> { }
+      class Ask extends Effect('test/Fail/Catch/Ask')<[], string> { }
 
       const actual = run(fx(function* () {
         const fromBody = yield* new Ask()
@@ -281,7 +281,7 @@ describe('Fail', () => {
     })
 
     it('does not need a captured Fail control handler for delayed catch regions', () => {
-      class Ask extends Effect('test/Fail/Catch/CapturedAsk')<void, string> { }
+      class Ask extends Effect('test/Fail/Catch/CapturedAsk')<[], string> { }
 
       const delayed = run(fx(function* () {
         const context = yield* captureHandlers('test/Fail/Catch')

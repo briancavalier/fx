@@ -32,7 +32,7 @@ export type YieldInput<Scope> =
  */
 export class YieldFrom<
   const Scope extends AnyScope & Yielding<unknown, unknown>
-> extends ScopedEffect('fx/YieldFrom')<Scope, YieldOutput<Scope>, YieldInput<Scope>> { }
+> extends ScopedEffect('fx/YieldFrom')<Scope, [YieldOutput<Scope>], YieldInput<Scope>> { }
 
 /**
  * Yield a value to the named scope.

@@ -1,11 +1,13 @@
 import * as assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { assertPromise } from './Async.js'
+import { Async, assertPromise } from './Async.js'
 import { Effect } from './Effect.js'
 import { provideAll } from './Env.js'
 import { Fail, returnFail } from './Fail.js'
-import { assertSync, flatMap, fx, ok, run, runPromise, runTask, trySync } from './Fx.js'
+import { assertSync, flatMap, fx, ok, run, runPromise, runTask, trySync, type Fx } from './Fx.js'
 import { control, handle } from './Handler.js'
+import { captureHandlers } from './HandlerCapture.js'
+import { uninterruptible } from './Interrupt.js'
 import { getTrace } from './Trace.js'
 
 describe('Fx', () => {
@@ -165,6 +167,54 @@ describe('Fx', () => {
       const r = trySync(() => { throw e }).pipe(returnFail, run)
       assert.ok(Fail.is(r))
       assert.equal(r.arg, e)
+    })
+  })
+
+  describe('run boundary types', () => {
+    it('accepts runtime effects and rejects unhandled effects', () => {
+      class Request extends Effect('test/Fx/runBoundaryTypes/Request')<void, string> { }
+
+      const request = new Request()
+      const handled = request.pipe(handle(Request, () => ok('handled')))
+
+      const sync: string = run(ok('sync'))
+      const interrupted: string = run(uninterruptible(ok('interrupted')))
+      const handledSync: string = run(handled)
+
+      assert.equal(sync, 'sync')
+      assert.equal(interrupted, 'interrupted')
+      assert.equal(handledSync, 'handled')
+
+      const typecheckOnly = false as boolean
+      if (typecheckOnly) {
+        const asyncOnly: Fx<Async, string> = assertPromise(() => Promise.resolve('async'))
+        const interruptOnly = uninterruptible(ok('interrupt'))
+        const captureOnly = captureHandlers('test/Fx/runBoundaryTypes/capture')
+
+        runPromise(asyncOnly)
+        runPromise(interruptOnly)
+        runPromise(captureOnly)
+        runTask(asyncOnly)
+        runTask(interruptOnly)
+        runTask(captureOnly)
+
+        const asyncRequest: Fx<Async | Request, string> = fx(function* () {
+          yield* assertPromise(() => Promise.resolve())
+          return yield* request
+        })
+
+        // @ts-expect-error Request remains visible in the diagnostic detail before run.
+        run(request)
+
+        // @ts-expect-error Request remains visible in the diagnostic detail before runPromise.
+        runPromise(asyncRequest)
+
+        // @ts-expect-error Request remains visible in the diagnostic detail before runPromise.
+        asyncRequest.pipe(runPromise)
+
+        // @ts-expect-error Request remains visible in the diagnostic detail before runTask.
+        runTask(asyncRequest)
+      }
     })
   })
 

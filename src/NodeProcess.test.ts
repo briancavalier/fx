@@ -4,7 +4,7 @@ import { Fail, assert as assertNoFail, returnFail } from './Fail.js'
 import { fx, runPromise, runTask } from './Fx.js'
 import { nodeProcess, NodeProcessError, type NodeProcessLike } from './NodeProcess.js'
 import { signal, type ProcessSignalName } from './Process.js'
-import { runNodeMain } from './NodeRuntime.js'
+import { runNodeMain, runNodePromise } from './NodeRuntime.js'
 
 describe('NodeProcess', () => {
   it('handles Signal with the requested signals', async () => {
@@ -110,6 +110,9 @@ describe('NodeProcess', () => {
 
       // @ts-expect-error Signal remains unhandled.
       runNodeMain(program)
+
+      // @ts-expect-error Signal remains unhandled.
+      runNodePromise(program)
 
       runNodeMain(program.pipe(
         nodeProcess({ process: fakeProcess() }),

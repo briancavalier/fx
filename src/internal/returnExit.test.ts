@@ -8,6 +8,7 @@ import { fail, Fail } from '../Fail.js'
 import { finalizing, fx, ok, run, runTask, type Fx } from '../Fx.js'
 import { handle } from '../Handler.js'
 import { interruptFrom } from '../InterruptFrom.js'
+import { key } from '../Key.js'
 import { ReturnFrom, returnFrom } from '../ReturnFrom.js'
 import { scope, type Control } from '../Scope.js'
 import { getState, modifyState, withState, type Stateful } from '../State.js'
@@ -16,7 +17,7 @@ import { returnExit, resumeExit } from './returnExit.js'
 
 describe('returnExit', () => {
   const ControlScope = scope<Control>()('test/returnExit/control')
-  const StateScope = scope<Stateful<number>>()('test/returnExit/state')
+  const StateScope = key<Stateful<number>>()('test/returnExit/state')
 
   it('returns and resumes successful exits', () => {
     const exit = ok('value').pipe(returnExit, run)

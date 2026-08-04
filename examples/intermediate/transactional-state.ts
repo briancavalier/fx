@@ -1,6 +1,5 @@
 import { catchAll, fail, fx, runCatch, runPromise } from '@briancavalier/fx'
-import { scope } from '@briancavalier/fx/scope'
-import { getState, modifyState, transactionalState, withState, type Stateful } from '@briancavalier/fx/state'
+import { getState, key, modifyState, transactionalState, withState, type Stateful } from '@briancavalier/fx/state'
 
 type Session = {
   readonly requests: number
@@ -8,7 +7,7 @@ type Session = {
   readonly status: string
 }
 
-const SessionState = scope<Stateful<Session>>()('example/TransactionalSession')
+const SessionState = key<Stateful<Session>>()('example/TransactionalSession')
 
 const initialSession: Session = {
   requests: 0,

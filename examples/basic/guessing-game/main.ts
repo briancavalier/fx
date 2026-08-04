@@ -1,5 +1,5 @@
 import { Effect, fx, ok } from '@briancavalier/fx'
-import { abort, orReturn, scope, withScope, type Control } from '@briancavalier/fx/scope'
+import { abort, orReturn, withControlScope, type AnyControlScope } from '@briancavalier/fx/scope'
 
 // -------------------------------------------------------------------
 // The number guessing game example from
@@ -16,11 +16,9 @@ export class Read extends Effect('Read')<string, string> { }
 
 const read = (prompt: string) => new Read(prompt)
 
-const ParseInteger = scope<Control>()('examples/basic/guessing-game/ParseInteger')
-
-export const toInteger = (s: string) => {
+export const toInteger = <const S extends AnyControlScope>(parseInteger: S, s: string) => {
   const i = Number.parseInt(s, 10)
-  return Number.isInteger(i) ? ok(i) : abort(ParseInteger)
+  return Number.isInteger(i) ? ok(i) : abort(parseInteger)
 }
 
 export class GenerateSecret extends Effect('GetSecret')<number, number> { }
@@ -57,7 +55,9 @@ const play = (name: string, max: number) => fx(function* () {
 
   const result = yield* read(`Dear ${name}, please guess a number from 1 to ${max}: `)
 
-  const guess = yield* toInteger(result).pipe(withScope(ParseInteger), orReturn(ParseInteger, undefined))
+  const guess = yield* withControlScope({ label: 'parse integer' }, parseInteger =>
+    toInteger(parseInteger, result).pipe(orReturn(parseInteger, undefined))
+  )
   if (typeof guess !== 'number')
     yield* print('You did not enter an integer!')
   else if (checkAnswer(secret, guess))

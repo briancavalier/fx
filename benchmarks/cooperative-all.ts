@@ -10,7 +10,7 @@ import { fail, returnFail } from '../src/Fail.js'
 import { andFinallyIn } from '../src/Finalization.js'
 import { fx, ok, runPromise } from '../src/Fx.js'
 import { handle } from '../src/Handler.js'
-import { scope, withScope } from '../src/Scope.js'
+import { inScope, scope } from '../src/Scope.js'
 import { wait } from '../src/Task.js'
 import type { Fx } from '../src/Fx.js'
 
@@ -126,23 +126,23 @@ const results = await runBenchmarks([
     await nestedFirstSuccess().pipe(withCoopConcurrency(), handleStep(), runPromise)
   }),
   benchmark('withUnboundedConcurrency cancel cleanup', 'cleanup', async () => {
-    await cleanupFailureProgram().pipe(withScope(CleanupScope), withUnboundedConcurrency, returnFail, runPromise)
+    await cleanupFailureProgram().pipe(inScope(CleanupScope), withUnboundedConcurrency, returnFail, runPromise)
   }),
   benchmark('withCoopConcurrency cancel cleanup', 'cleanup', async () => {
-    await cleanupFailureProgram().pipe(withCoopConcurrency(), withScope(CleanupScope), returnFail, runPromise)
+    await cleanupFailureProgram().pipe(withCoopConcurrency(), inScope(CleanupScope), returnFail, runPromise)
   })
 ])
 
 console.log(formatMarkdown(fairness, results))
 
 async function runSemanticChecks(): Promise<void> {
-  const defaultResult = await parityProgram().pipe(handleStep(), withScope(CleanupScope), withUnboundedConcurrency, returnFail, runPromise)
-  const cooperativeResult = await parityProgram().pipe(withCoopConcurrency({ yieldBudget: 1 }), handleStep(), withScope(CleanupScope), returnFail, runPromise)
+  const defaultResult = await parityProgram().pipe(handleStep(), inScope(CleanupScope), withUnboundedConcurrency, returnFail, runPromise)
+  const cooperativeResult = await parityProgram().pipe(withCoopConcurrency({ yieldBudget: 1 }), handleStep(), inScope(CleanupScope), returnFail, runPromise)
 
   assert.deepEqual(defaultResult, cooperativeResult)
 
-  const defaultFailure = await cleanupFailureProgram().pipe(withScope(CleanupScope), withUnboundedConcurrency, returnFail, runPromise)
-  const cooperativeFailure = await cleanupFailureProgram().pipe(withCoopConcurrency(), withScope(CleanupScope), returnFail, runPromise)
+  const defaultFailure = await cleanupFailureProgram().pipe(inScope(CleanupScope), withUnboundedConcurrency, returnFail, runPromise)
+  const cooperativeFailure = await cleanupFailureProgram().pipe(withCoopConcurrency(), inScope(CleanupScope), returnFail, runPromise)
 
   assert.equal(defaultFailure.constructor, cooperativeFailure.constructor)
   assert.ok('arg' in defaultFailure && 'arg' in cooperativeFailure)
@@ -315,7 +315,7 @@ function scopedJoinFanout(length: number) {
       yield* forkIn(JoinScope, assertPromise(() => Promise.resolve(i)))
     }
     return 'parent'
-  }).pipe(withScope(JoinScope))
+  }).pipe(inScope(JoinScope))
 }
 
 function nestedRace() {

@@ -7,7 +7,7 @@ import { fail, Fail, returnFail } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
 import { fx, ok, run, type Fx } from './Fx.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope, withScope, type Control } from './Scope.js'
+import { scope, withControlScope, inScope, type AnyControlScope, type Control } from './Scope.js'
 
 describe('Abort', () => {
   const TestScope = scope<Control>()('test/Abort')
@@ -19,27 +19,27 @@ describe('Abort', () => {
       const result = fx(function* () {
         yield* abort(SecondScope)
         return 'done'
-      }).pipe(withScope(FirstScope), orReturn(FirstScope, 'aborted'), run)
+      }).pipe(inScope(FirstScope), orReturn(FirstScope, 'aborted'), run)
 
       assert.equal(result, 'aborted')
     })
 
     it('given matching Abort with fallback, returns alternative', () => {
       const r = Math.random()
-      const a = abort(TestScope).pipe(withScope(TestScope), orReturn(TestScope, r), run)
+      const a = abort(TestScope).pipe(inScope(TestScope), orReturn(TestScope, r), run)
 
       assert.equal(a, r)
     })
 
     it('given success, returns original value', () => {
       const r = Math.random()
-      const a = ok(r).pipe(withScope(TestScope), orReturn(TestScope, r + 1), run)
+      const a = ok(r).pipe(inScope(TestScope), orReturn(TestScope, r + 1), run)
 
       assert.equal(a, r)
     })
 
     it('leaves matching Abort unhandled when fallback is omitted', () => {
-      const f = abort(TestScope).pipe(withScope(TestScope))
+      const f = abort(TestScope).pipe(inScope(TestScope))
       const _: typeof f extends import('./Fx.js').Fx<Abort<typeof TestScope>, never> ? true : false = true
 
       assert.equal(Abort.is(f[Symbol.iterator]().next().value), true)
@@ -50,13 +50,37 @@ describe('Abort', () => {
       const f = fx(function* () {
         yield* abort(OtherScope)
         return 'done'
-      }).pipe(withScope(TestScope), orReturn(TestScope, 'aborted'))
+      }).pipe(inScope(TestScope), orReturn(TestScope, 'aborted'))
 
       assert.equal(Abort.is(f[Symbol.iterator]().next().value), true)
+    })
+
+    it('rejects cached aborts for closed lexical control handles', () => {
+      let leaked: AnyControlScope | undefined
+      let cached: Fx<Abort<AnyControlScope>, never> | undefined
+
+      run(withControlScope(scope => fx(function* () {
+        leaked = scope
+        cached = abort(scope)
+      })))
+
+      assert.throws(
+        () => cached!.pipe(orReturn(leaked!, 'aborted'), run),
+        /used after its scope exited/
+      )
     })
   })
 
   describe('restartOnAbort', () => {
+    it('requires an explicit control scope handle', () => {
+      const typecheck = (): void => {
+        // @ts-expect-error restartOnAbort requires an explicit control scope handle.
+        const invalid = restartOnAbort({ restarts: 1 })
+        void invalid
+      }
+      void typecheck
+    })
+
     it('restarts a scoped computation after abort and returns success', () => {
       let attempts = 0
 
@@ -174,6 +198,21 @@ describe('Abort', () => {
       assert.equal(attempts, 1)
     })
 
+    it('rejects cached aborts for closed lexical control handles before restarting', () => {
+      let leaked: AnyControlScope | undefined
+      let cached: Fx<Abort<AnyControlScope>, never> | undefined
+
+      run(withControlScope(scope => fx(function* () {
+        leaked = scope
+        cached = abort(scope)
+      })))
+
+      assert.throws(
+        () => cached!.pipe(restartOnAbort(leaked!, { restarts: 1 }), orReturn(leaked!, 'exhausted'), run),
+        /used after its scope exited/
+      )
+    })
+
     it('stops restarting when cleanup fails after abort', () => {
       const cleanupFailure = new Error('cleanup failed')
       let attempts = 0
@@ -193,6 +232,30 @@ describe('Abort', () => {
       assert.ok(result.arg instanceof AggregateError)
       assert.deepEqual(result.arg.errors, [cleanupFailure])
       assert.equal(attempts, 1)
+    })
+
+    it('keeps lexical control handles open across restart attempt boundaries', () => {
+      let attempts = 0
+      const released = [] as string[]
+
+      const result = withControlScope({ label: 'restartable' }, controlScope => fx(function* () {
+        attempts += 1
+        const attempt = attempts
+        yield* andFinallyIn(controlScope, fx(function* () {
+          released.push(`release:${attempt}`)
+        }))
+
+        if (attempt === 1) yield* abort(controlScope)
+        return 'done'
+      }).pipe(
+        restartOnAbort(controlScope, { restarts: 1 }),
+        orReturn(controlScope, 'exhausted'),
+        returnFail
+      )).pipe(run)
+
+      assert.equal(result, 'done')
+      assert.equal(attempts, 2)
+      assert.deepEqual(released, ['release:1', 'release:2'])
     })
 
     it('preserves Abort typing until a downstream handler interprets exhaustion', () => {

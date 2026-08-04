@@ -1,13 +1,11 @@
 # Manage Resources and Finalizers
 
-Use this when acquiring a resource that must be released when a named scope
+Use this when acquiring a resource that must be released when a lexical scope
 exits.
 
 ```ts
 import { fx, runPromise } from "@briancavalier/fx"
-import { managed, scope, usingManagedIn, withScope } from "@briancavalier/fx/scope"
-
-const RequestScope = scope("app/Request")
+import { inScope, managed, usingManagedIn, withScope } from "@briancavalier/fx/scope"
 
 const openConnection = fx(function* () {
   return managed(
@@ -16,18 +14,16 @@ const openConnection = fx(function* () {
   )
 })
 
-const program = fx(function* () {
-  const connection = yield* usingManagedIn(RequestScope, openConnection)
+const program = withScope({ label: "app/Request" }, scope => inScope(scope, fx(function* () {
+  const connection = yield* usingManagedIn(scope, openConnection)
   return yield* query(connection)
-}).pipe(
-  withScope(RequestScope)
-)
+})))
 ```
 
-Use `usingIn` or `usingManagedIn` to acquire and register cleanup in a named
-scope in a small uninterruptible region. Use `using` or `usingManaged` for the
-current scope. `usingIn` finalizers receive the acquired value and the scope
-exit, and may ignore the exit when cleanup does not depend on it.
+Use `usingIn` or `usingManagedIn` to acquire and register cleanup in an explicit
+scope handle in a small uninterruptible region. `usingIn` finalizers receive
+the acquired value and the scope exit, and may ignore the exit when cleanup does
+not depend on it.
 
 Handler pipeline:
 

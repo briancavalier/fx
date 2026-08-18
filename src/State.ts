@@ -1,7 +1,7 @@
-import { ScopedEffect } from './Effect.js'
+import { KeyedEffect } from './Effect.js'
 import { Fx, flatMap, fx, ok } from './Fx.js'
-import { handleScoped, type HandleScoped } from './Handler.js'
-import { AnyScope } from './Scope.js'
+import { handleKeyed, type HandleKeyed } from './Handler.js'
+import { AnyKey } from './Key.js'
 import { effectiveExit, returnExit, resumeExit } from './internal/returnExit.js'
 
 declare const StatefulTypeId: unique symbol
@@ -16,64 +16,64 @@ export type StateOf<Scope> =
 /**
  * Read the current state from the named scope.
  */
-export class GetState<const Scope extends AnyScope & Stateful<unknown>>
-  extends ScopedEffect('fx/State/Get')<Scope, void, StateOf<Scope>> { }
+export class GetState<const Key extends AnyKey & Stateful<unknown>>
+  extends KeyedEffect('fx/State/Get')<Key, void, StateOf<Key>> { }
 
 /**
  * Replace the current state and return a computed result.
  */
-export class ModifyState<const Scope extends AnyScope & Stateful<unknown>, const B = unknown>
-  extends ScopedEffect('fx/State/Modify')<Scope, (state: StateOf<Scope>) => readonly [StateOf<Scope>, B], B> { }
+export class ModifyState<const Key extends AnyKey & Stateful<unknown>, const B = unknown>
+  extends KeyedEffect('fx/State/Modify')<Key, (state: StateOf<Key>) => readonly [StateOf<Key>, B], B> { }
 
-export type StateEffects<Scope extends AnyScope & Stateful<unknown>> =
-  | GetState<Scope>
-  | ModifyState<Scope>
+export type StateEffects<Key extends AnyKey & Stateful<unknown>> =
+  | GetState<Key>
+  | ModifyState<Key>
 
-export type ExcludeState<E, Scope extends AnyScope & Stateful<unknown>> =
-  HandleScoped<HandleScoped<E, GetState<Scope>, Scope>, ModifyState<Scope>, Scope>
+export type ExcludeState<E, Key extends AnyKey & Stateful<unknown>> =
+  HandleKeyed<HandleKeyed<E, GetState<Key>, Key>, ModifyState<Key>, Key>
 
-export const getState = <const Scope extends AnyScope & Stateful<unknown>>(scope: Scope): Fx<GetState<Scope>, StateOf<Scope>> =>
-  new GetState(scope, undefined)
+export const getState = <const Key extends AnyKey & Stateful<unknown>>(key: Key): Fx<GetState<Key>, StateOf<Key>> =>
+  new GetState(key, undefined)
 
-export const modifyState = <const Scope extends AnyScope & Stateful<unknown>, const B>(
-  scope: Scope,
-  f: (state: StateOf<Scope>) => readonly [StateOf<Scope>, B]
-): Fx<ModifyState<Scope, B>, B> =>
-  new ModifyState(scope, f)
+export const modifyState = <const Key extends AnyKey & Stateful<unknown>, const B>(
+  key: Key,
+  f: (state: StateOf<Key>) => readonly [StateOf<Key>, B]
+): Fx<ModifyState<Key, B>, B> =>
+  new ModifyState(key, f)
 
 /**
  * Handle state operations for the named scope with state local to one execution.
  */
-export const withState = <const Scope extends AnyScope & Stateful<unknown>>(
-  scope: Scope,
-  initial: StateOf<Scope>
+export const withState = <const Key extends AnyKey & Stateful<unknown>>(
+  key: Key,
+  initial: StateOf<Key>
 ) => <const E, const A>(
   f: Fx<E, A>
-): Fx<ExcludeState<E, Scope>, A> =>
+): Fx<ExcludeState<E, Key>, A> =>
     fx(function* () {
       let state = initial
 
       return yield* f.pipe(
-        handleScoped(GetState<Scope>, scope, () => ok(state)),
-        handleScoped(ModifyState<Scope>, scope, effect => {
+        handleKeyed(GetState<Key>, key, () => ok(state)),
+        handleKeyed(ModifyState<Key>, key, effect => {
           const [next, result] = effect.arg(state)
           state = next
           return ok(result)
         })
       )
-    }) as Fx<ExcludeState<E, Scope>, A>
+    }) as Fx<ExcludeState<E, Key>, A>
 
 /**
  * Handle state operations for the named scope, obtaining the initial state by
  * running an Fx once per execution.
  */
-export const withStateInit = <const Scope extends AnyScope & Stateful<unknown>, const IE>(
-  scope: Scope,
-  initially: Fx<IE, StateOf<Scope>>
+export const withStateInit = <const Key extends AnyKey & Stateful<unknown>, const IE>(
+  key: Key,
+  initially: Fx<IE, StateOf<Key>>
 ) => <const E, const A>(
   f: Fx<E, A>
 ) =>
-    initially.pipe(flatMap(s => f.pipe(withState(scope, s))))
+    initially.pipe(flatMap(s => f.pipe(withState(key, s))))
 
 /**
  * Run matching state operations transactionally for the named scope.
@@ -83,19 +83,19 @@ export const withStateInit = <const Scope extends AnyScope & Stateful<unknown>, 
  * it back to the durable state only if the region succeeds or returns from a
  * control scope.
  */
-export const transactionalState = <const Scope extends AnyScope & Stateful<unknown>>(
-  scope: Scope
+export const transactionalState = <const Key extends AnyKey & Stateful<unknown>>(
+  key: Key
 ) => <const E, const A>(
   body: Fx<E, A>
-): Fx<ExcludeState<E, Scope> | StateEffects<Scope>, A> =>
+): Fx<ExcludeState<E, Key> | StateEffects<Key>, A> =>
     fx(function* () {
-      let state = yield* getState(scope)
+      let state = yield* getState(key)
       let dirty = false
 
       const exit = yield* body.pipe(
         returnExit,
-        handleScoped(GetState<Scope>, scope, () => ok(state)),
-        handleScoped(ModifyState<Scope, unknown>, scope, effect => {
+        handleKeyed(GetState<Key>, key, () => ok(state)),
+        handleKeyed(ModifyState<Key, unknown>, key, effect => {
           const [next, result] = effect.arg(state)
           state = next
           dirty = true
@@ -105,8 +105,8 @@ export const transactionalState = <const Scope extends AnyScope & Stateful<unkno
 
       const effective = effectiveExit(exit)
       if (dirty && (effective.type === 'success' || effective.type === 'returnFrom')) {
-        yield* modifyState(scope, () => [state, undefined])
+        yield* modifyState(key, () => [state, undefined])
       }
 
       return yield* resumeExit(exit)
-    }) as Fx<ExcludeState<E, Scope> | StateEffects<Scope>, A>
+    }) as Fx<ExcludeState<E, Key> | StateEffects<Key>, A>

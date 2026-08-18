@@ -2,7 +2,7 @@ import { at } from './Breadcrumb.js'
 import { ScopedEffect, withOrigin } from './Effect.js'
 import { Fx, fx, ok } from './Fx.js'
 import { control } from './Handler.js'
-import { withScope, type AnyControlScope, type ReturnValue, type ScopeEffects } from './Scope.js'
+import { assertScopeOpen, inScope, type AnyControlScope, type ReturnValue, type ScopeEffects } from './Scope.js'
 import { sameScope } from './internal/scopeIdentity.js'
 
 /**
@@ -10,8 +10,10 @@ import { sameScope } from './internal/scopeIdentity.js'
  */
 export class Abort<const Scope extends AnyControlScope> extends ScopedEffect('fx/Abort')<Scope, void, never> { }
 
-export const abort = <const Scope extends AnyControlScope>(scope: Scope): Fx<Abort<Scope>, never> =>
-  withOrigin(new Abort(scope, undefined), at('fx/Abort/abort', abort))
+export const abort = <const Scope extends AnyControlScope>(scope: Scope): Fx<Abort<Scope>, never> => {
+  assertScopeOpen(scope)
+  return withOrigin(new Abort(scope, undefined), at('fx/Abort/abort', abort))
+}
 
 /**
  * Return a default value from an abort of the named scope.
@@ -23,8 +25,11 @@ export const orReturn = <const Scope extends AnyControlScope, const R>(
   f: Fx<E, A>
 ): Fx<Exclude<E, Abort<Scope>>, A | R> =>
     f.pipe(
-      control(Abort, (_, abort) =>
-        (sameScope(abort.scope, scope) ? ok(value) : abort) as Fx<Exclude<E, Abort<Scope>>, A | R>)
+      control(Abort, (_, abort) => {
+        if (!sameScope(abort.scope, scope)) return abort as Fx<Exclude<E, Abort<Scope>>, A | R>
+        assertScopeOpen(abort.scope)
+        return ok(value) as Fx<Exclude<E, Abort<Scope>>, A | R>
+      })
     ) as Fx<Exclude<E, Abort<Scope>>, A | R>
 
 export interface RestartOnAbortOptions {
@@ -39,7 +44,21 @@ const Restart = Symbol('fx/Abort/restartOnAbort')
 /**
  * Restart a scoped computation when it aborts the named scope.
  */
-export const restartOnAbort = <const Scope extends AnyControlScope>(
+export function restartOnAbort<const Scope extends AnyControlScope>(
+  scope: Scope,
+  options: RestartOnAbortOptions
+): <const E, const A>(f: Fx<E, A>) => Fx<ScopeEffects<E, Scope> | Abort<Scope>, A | ReturnValue<E, Scope>>
+export function restartOnAbort<const Scope extends AnyControlScope>(
+  scope: Scope,
+  options: RestartOnAbortOptions
+) {
+  return restartOnAbortIn(scope, options)
+}
+
+/**
+ * Restart a scoped computation when it aborts the supplied scope handle.
+ */
+export const restartOnAbortIn = <const Scope extends AnyControlScope>(
   scope: Scope,
   options: RestartOnAbortOptions
 ) => <const E, const A>(
@@ -49,10 +68,11 @@ export const restartOnAbort = <const Scope extends AnyControlScope>(
     let restarts = 0
     let aborted: Abort<Scope> | undefined
     const attempt = f.pipe(
-      withScope(scope),
+      inScope(scope),
       control(Abort, (_, abort) => {
         if (!sameScope(abort.scope, scope)) return abort
 
+        assertScopeOpen(abort.scope)
         aborted = abort as Abort<Scope>
         return ok(Restart)
       })

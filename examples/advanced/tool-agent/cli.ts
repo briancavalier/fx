@@ -1,14 +1,14 @@
 import { withBoundedConcurrency } from '@briancavalier/fx/concurrent'
-import { consoleLog, defaultConsole, fx, handleScoped, provide, returnAll, runPromise } from '@briancavalier/fx'
+import { consoleLog, defaultConsole, fx, handleKeyed, provide, returnAll, runPromise } from '@briancavalier/fx'
 
 import { w3cFetch } from '@briancavalier/fx/http-client'
 import { withConsoleLog } from '@briancavalier/fx/log'
-import { withScope, YieldFrom } from '@briancavalier/fx/scope'
+import { inScope, withScope } from '@briancavalier/fx/scope'
+import { YieldFrom } from '@briancavalier/fx/yield'
 import { defaultTime } from '@briancavalier/fx/time'
 
 import {
   AgentEvents,
-  AgentSessionScope,
   runAgent
 } from './domain.js'
 import { createToolAgentFixture, withFakeModel } from './fixture.js'
@@ -17,31 +17,31 @@ import { defaultToolSandboxPolicy, withToolSandbox } from './sandbox.js'
 
 const task = process.argv.slice(2).join(' ') || 'Review the package health and recommend next steps'
 const fixture = createToolAgentFixture()
-const logAgentEvents = handleScoped(YieldFrom<typeof AgentEvents>, AgentEvents, effect =>
+const logAgentEvents = handleKeyed(YieldFrom<typeof AgentEvents>, AgentEvents, effect =>
   consoleLog(`agent event: ${effect.arg}`)
 )
 
 const main = fx(function* ({ openAIApiKey }: OpenAIModelContext) {
   const result = openAIApiKey === undefined
-    ? yield* runAgent(task).pipe(
+    ? yield* withScope({ label: 'agent session' }, agentSessionScope => inScope(agentSessionScope, runAgent(agentSessionScope, task).pipe(
       withToolSandbox(defaultToolSandboxPolicy),
       fixture.handleTools,
       withFakeModel(),
       withConsoleLog,
       defaultTime,
-      withBoundedConcurrency(4),
-      withScope(AgentSessionScope),
+      withBoundedConcurrency(4)
+    ))).pipe(
       logAgentEvents,
       returnAll
     )
-    : yield* runAgent(task).pipe(
+    : yield* withScope({ label: 'agent session' }, agentSessionScope => inScope(agentSessionScope, runAgent(agentSessionScope, task).pipe(
       withToolSandbox(defaultToolSandboxPolicy),
       fixture.handleTools,
       withOpenAIModel,
       withConsoleLog,
       defaultTime,
       withBoundedConcurrency(4),
-      withScope(AgentSessionScope),
+    ))).pipe(
       logAgentEvents,
       w3cFetch(),
       returnAll

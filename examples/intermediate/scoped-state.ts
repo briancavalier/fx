@@ -1,13 +1,12 @@
 import { consoleLog, defaultConsole, fx, ok, runPromise } from '@briancavalier/fx'
-import { scope, withScope } from '@briancavalier/fx/scope'
-import { getState, modifyState, type Stateful, withStateInit } from '@briancavalier/fx/state'
+import { getState, key, modifyState, type Stateful, withStateInit } from '@briancavalier/fx/state'
 
 type Session = {
   readonly requests: number
   readonly lastRoute: string
 }
 
-const SessionState = scope<Stateful<Session>>()('example/SessionState')
+const SessionState = key<Stateful<Session>>()('example/SessionState')
 
 const recordRequest = (route: string) =>
   modifyState(SessionState, session => [
@@ -25,7 +24,6 @@ const program = fx(function* () {
 })
 
 await program.pipe(
-  withScope(SessionState),
   withStateInit(SessionState, ok({ requests: 0, lastRoute: 'none' })),
   defaultConsole,
   runPromise

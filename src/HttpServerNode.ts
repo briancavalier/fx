@@ -22,7 +22,7 @@ import {
 import { HandlerCapture, handleCaptured, withCapturedHandlers, withHandlerContext } from './HandlerCapture.js'
 import type { Interrupt } from './Interrupt.js'
 import * as Queue from './internal/Queue.js'
-import { scope, withScope } from './Scope.js'
+import { scope, inScope } from './Scope.js'
 
 export type NodeHttpOptions = {
   readonly createServer?: NodeHttpServerFactory
@@ -233,7 +233,7 @@ const runNodeRequest = async <E>(
   })
 
   const task = withHandlerContext(context, program as Fx<unknown, void>).pipe(
-    withScope(requestScope),
+    inScope(requestScope),
     catchAll(cause => {
       failure = { error: cause }
       return outgoing.destroyed

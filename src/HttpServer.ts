@@ -2,13 +2,10 @@ import { Async } from './Async.js'
 import { Effect } from './Effect.js'
 import { Get, provide, provideFrom, type ExcludeEnv } from './Env.js'
 import { Fail } from './Fail.js'
-import { Finally } from './Finalization.js'
 import { Fx, flatMap, ok } from './Fx.js'
 import { HandlerCapture, captureHandlers, type CapturedHandler } from './HandlerCapture.js'
 import { type Headers, type Method } from './HttpClient.js'
 import { Fork } from './internal/concurrent/effects.js'
-import { ScopedFork } from './internal/scopedFork.js'
-import { currentScope } from './Scope.js'
 
 /**
  * A transport-neutral HTTP server request.
@@ -232,31 +229,6 @@ export const provideRoutesFrom =
 
 export type ServerRouteEffects = Async | Fail<any> | Fork | HandlerCapture<string>
 
-export type ServerRequestScopeEffects<E> =
-  HandleServerRequestScopeEffect<E> | ServerRequestScopedForkEffects<E> | ServerRequestCleanupEffects<E> | ServerRequestCleanupFailure<E>
-
-type HandleServerRequestScopeEffect<E> =
-  E extends Finally<typeof currentScope, any> ? never
-  : E extends ScopedFork<typeof currentScope> ? never
-  : E
-
-type ServerRequestScopedForkEffects<E> =
-  E extends ScopedFork<typeof currentScope> ? Fork | Async | Fail<unknown> : never
-
-type MatchingServerRequestFinally<E> =
-  Extract<E, Finally<typeof currentScope, any>>
-
-type ServerRequestFinalizerEffects<E> =
-  MatchingServerRequestFinally<E> extends never
-    ? never
-    : MatchingServerRequestFinally<E> extends Finally<typeof currentScope, infer FE> ? FE : never
-
-type ServerRequestCleanupEffects<E> =
-  Exclude<ServerRequestFinalizerEffects<E>, Fail<any>>
-
-type ServerRequestCleanupFailure<E> =
-  MatchingServerRequestFinally<E> extends never ? never : Fail<AggregateError>
-
 export const ServeScope = 'fx/HttpServer/Serve'
 
 /**
@@ -280,14 +252,12 @@ export type ServeOptions<OE = never> = {
  * Request that an HTTP server run the provided routes.
  *
  * `serve` captures the surrounding handler context so route handlers can use
- * application handlers installed at the server boundary. Server interpreters
- * run each matched route handler in a request lifetime scope, so current-scope
- * finalizers and scoped forks are owned by the request.
+ * application handlers installed at the server boundary.
  */
 export const serve = <E, OE = never>(
   routes: Routes<E>,
   options: ServeOptions<OE>
-): Fx<Exclude<ServerRequestScopeEffects<E>, ServerRouteEffects> | OE | Serve<E, OE> | HandlerCapture<typeof ServeScope>, void> =>
+): Fx<Exclude<E, ServerRouteEffects> | OE | Serve<E, OE> | HandlerCapture<typeof ServeScope>, void> =>
   captureHandlers(ServeScope).pipe(
     flatMap(context => new Serve<E, OE>({ routes, options, context }))
   )

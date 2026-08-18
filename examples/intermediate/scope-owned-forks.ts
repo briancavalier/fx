@@ -1,15 +1,11 @@
 import { assert as assertNoFail, consoleLog, defaultConsole, fx, runPromise } from '@briancavalier/fx'
 import { forkIn, withBoundedConcurrency } from '@briancavalier/fx/concurrent'
-import { andFinally, currentScope, recoverInterrupt, scope, withScope } from '@briancavalier/fx/scope'
+import { andFinallyIn, recoverInterrupt, inScope, withScope, type AnyLifetimeScope } from '@briancavalier/fx/scope'
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 import { timeoutIn } from '@briancavalier/fx/timeout'
 
-const RequestScope = scope('examples/intermediate/scope-owned-forks', {
-  label: 'request'
-})
-
-const child = (name: string, ms: number) => fx(function* () {
-  yield* andFinally(exit =>
+const child = <const S extends AnyLifetimeScope>(requestScope: S, name: string, ms: number) => fx(function* () {
+  yield* andFinallyIn(requestScope, exit =>
     consoleLog(`${name}: cleanup after ${exit.type}`)
   )
 
@@ -19,20 +15,20 @@ const child = (name: string, ms: number) => fx(function* () {
   return name
 })
 
-const request = fx(function* () {
-  yield* timeoutIn(currentScope, { ms: 35, label: 'request deadline' })
-  yield* forkIn(currentScope, child('fast-cache-refresh', 20))
-  yield* forkIn(currentScope, child('slow-profile-load', 80))
+const request = <const S extends AnyLifetimeScope>(requestScope: S) => fx(function* () {
+  yield* timeoutIn(requestScope, { ms: 35, label: 'request deadline' })
+  yield* forkIn(requestScope, child(requestScope, 'fast-cache-refresh', 20))
+  yield* forkIn(requestScope, child(requestScope, 'slow-profile-load', 80))
   yield* consoleLog('request: children forked')
   return 'accepted'
 })
 
-const result = await request.pipe(
-  withScope(RequestScope),
-  recoverInterrupt(RequestScope, reason => fx(function* () {
+const result = await withScope({ label: 'request' }, requestScope => inScope(requestScope, request(requestScope)).pipe(
+  recoverInterrupt(requestScope, reason => fx(function* () {
     yield* consoleLog(`request: interrupted by ${formatReason(reason)}`)
     return 'timed out' as const
-  })),
+  }))
+)).pipe(
   defaultTime,
   withBoundedConcurrency(2),
   defaultConsole,

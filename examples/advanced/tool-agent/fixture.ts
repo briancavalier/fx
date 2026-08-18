@@ -1,6 +1,7 @@
 import { fail, fx, type Fx, handle } from '@briancavalier/fx'
 
-import { managed, yieldFrom } from '@briancavalier/fx/scope'
+import { managed } from '@briancavalier/fx/scope'
+import { yieldFrom } from '@briancavalier/fx/yield'
 
 import { sleep } from '@briancavalier/fx/time'
 

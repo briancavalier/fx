@@ -1,4 +1,4 @@
-export * from '../Sink.js'
+export * from '../YieldFrom.js'
 export {
   key,
   keyId,

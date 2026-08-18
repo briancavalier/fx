@@ -9,7 +9,7 @@ import { fx, runPromise } from './Fx.js'
 import { control } from './Handler.js'
 import { InterruptFrom } from './InterruptFrom.js'
 import { defaultRetry, retry } from './Retry.js'
-import { scope, scopeId, withScope } from './Scope.js'
+import { scope, scopeId, inScope } from './Scope.js'
 import { ScopeTypeId } from './internal/scopeIdentity.js'
 import { wait } from './Task.js'
 import { sleep, withClock } from './Time.js'
@@ -147,8 +147,8 @@ describe('Trace', () => {
     const f = fx(function* () {
       yield* fail(new Error('scoped failure'))
     }).pipe(
-      withScope(DbTransaction),
-      withScope(HttpRequest)
+      inScope(DbTransaction),
+      inScope(HttpRequest)
     )
 
     await assert.rejects(
@@ -184,7 +184,7 @@ describe('Trace', () => {
     const RequestScope = scope('test/Trace/request', { label: 'request' })
     const f = fx(function* () {
       yield* fail(new Error('labeled scope'))
-    }).pipe(withScope(RequestScope))
+    }).pipe(inScope(RequestScope))
 
     await assert.rejects(
       runPromise(f as never),
@@ -209,8 +209,8 @@ describe('Trace', () => {
     const f = fx(function* () {
       yield* fail(new Error('same diagnostic text'))
     }).pipe(
-      withScope(InnerRequest),
-      withScope(OuterRequest)
+      inScope(InnerRequest),
+      inScope(OuterRequest)
     )
 
     await assert.rejects(
@@ -239,8 +239,8 @@ describe('Trace', () => {
     const f = fx(function* () {
       yield* fail(new Error('scoped formatting'))
     }).pipe(
-      withScope(DbTransaction),
-      withScope(HttpRequest)
+      inScope(DbTransaction),
+      inScope(HttpRequest)
     )
 
     await assert.rejects(
@@ -255,7 +255,7 @@ describe('Trace', () => {
 
   it('compacts deep active scope stacks', async () => {
     const scoped = ['a', 'b', 'c', 'd', 'e'].map(name => scope(name)).reduceRight(
-      (f, name) => f.pipe(withScope(name)),
+      (f, name) => f.pipe(inScope(name)),
       fx(function* () {
         yield* fail(new Error('deep scopes'))
       })
@@ -472,7 +472,7 @@ describe('Trace', () => {
         yield* fail(new Error('fork scoped'))
       }))
       yield* wait(task)
-    }).pipe(withScope(HttpRequest))
+    }).pipe(inScope(HttpRequest))
 
     await assert.rejects(
       runPromise(f.pipe(withUnboundedConcurrency) as never),
@@ -490,10 +490,10 @@ describe('Trace', () => {
     const HttpRequest = scope('http/request')
     const allProgram = fx(function* () {
       yield* all([fx(function* () { yield* fail(new Error('all scoped')) })])
-    }).pipe(withScope(HttpRequest))
+    }).pipe(inScope(HttpRequest))
     const raceProgram = fx(function* () {
       yield* race([fx(function* () { yield* fail(new Error('race scoped')) })])
-    }).pipe(withScope(HttpRequest))
+    }).pipe(inScope(HttpRequest))
 
     await assert.rejects(
       runPromise(allProgram.pipe(withUnboundedConcurrency) as never),
@@ -521,13 +521,13 @@ describe('Trace', () => {
     const HttpRequest = scope('http/request')
     const allProgram = fx(function* () {
       yield* all([fx(function* () { yield* fail(new Error('hidden all scope')) })])
-    }).pipe(withScope(HttpRequest))
+    }).pipe(inScope(HttpRequest))
     const raceProgram = fx(function* () {
       yield* race([fx(function* () { yield* fail(new Error('hidden race scope')) })])
-    }).pipe(withScope(HttpRequest))
+    }).pipe(inScope(HttpRequest))
     const firstSuccessProgram = fx(function* () {
       yield* firstSuccess([fx(function* () { yield* fail(new Error('hidden firstSuccess scope')) })])
-    }).pipe(withScope(HttpRequest))
+    }).pipe(inScope(HttpRequest))
 
     await assert.rejects(
       runPromise(allProgram.pipe(withUnboundedConcurrency) as never),
@@ -575,7 +575,7 @@ describe('Trace', () => {
     })
 
     const timeoutPromise = runPromise(timeoutProgram.pipe(
-      withScope(HttpRequest),
+      inScope(HttpRequest),
       control(InterruptFrom, (_, interrupt) => fx(function* () {
         return interrupt.arg
       })),
@@ -596,7 +596,7 @@ describe('Trace', () => {
     const HttpRequest = scope('http/request')
     const f = fx(function* () {
       yield* tryPromise(() => Promise.reject(new Error('async scoped')))
-    }).pipe(withScope(HttpRequest))
+    }).pipe(inScope(HttpRequest))
 
     await assert.rejects(
       runPromise(f as never),
@@ -614,7 +614,7 @@ describe('Trace', () => {
     const DbTransaction = scope('db/transaction')
     const f = fx(function* () {
       yield* andFinallyIn(DbTransaction, fail(new Error('cleanup scoped')))
-    }).pipe(withScope(DbTransaction))
+    }).pipe(inScope(DbTransaction))
 
     await assert.rejects(
       runPromise(f as never),
@@ -705,7 +705,7 @@ describe('Trace', () => {
     })
 
     const timeoutPromise = runPromise(timeoutProgram.pipe(
-      withScope(TimeoutScope),
+      inScope(TimeoutScope),
       control(InterruptFrom, (_, interrupt) => fx(function* () {
         return interrupt.arg
       })),
@@ -767,7 +767,7 @@ describe('Trace', () => {
     })
 
     const labeledPromise = runPromise(labeledProgram.pipe(
-      withScope(LabeledDeadline),
+      inScope(LabeledDeadline),
       control(InterruptFrom, (_, interrupt) => fx(function* () {
         return interrupt.arg
       })),
@@ -789,7 +789,7 @@ describe('Trace', () => {
     })
 
     const fallbackPromise = runPromise(fallbackProgram.pipe(
-      withScope(FallbackDeadline),
+      inScope(FallbackDeadline),
       control(InterruptFrom, (_, interrupt) => fx(function* () {
         return interrupt.arg
       })),

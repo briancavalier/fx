@@ -1,8 +1,7 @@
-import { assert as assertNoFail, type Console, consoleLog, defaultConsole, fx, type Fx, handleScoped, run } from '@briancavalier/fx'
+import { assert as assertNoFail, type Console, consoleLog, defaultConsole, fx, type Fx, handleKeyed, run } from '@briancavalier/fx'
 
-import { managed, returnFrom, scope, withScope, usingManagedIn, yieldFrom, YieldFrom, type Control, type Yielding } from '@briancavalier/fx/scope'
-
-const ImportCsv = scope<Control>()('examples/intermediate/ImportCsv')
+import { inScope, managed, returnFrom, usingManagedIn, withControlScope, type AnyControlScope } from '@briancavalier/fx/scope'
+import { key, yieldFrom, YieldFrom, type Yielding } from '@briancavalier/fx/yield'
 
 type ImportResult =
   | { readonly type: 'imported'; readonly count: number }
@@ -20,11 +19,11 @@ type IndexedCsvRow = {
   readonly value: CsvRow
 }
 
-const CsvRows = scope<Yielding<CsvRow>>()('examples/intermediate/CsvRows')
-const IndexedCsvRows = scope<Yielding<IndexedCsvRow>>()('examples/intermediate/IndexedCsvRows')
+const CsvRows = key<Yielding<CsvRow>>()('examples/intermediate/CsvRows')
+const IndexedCsvRows = key<Yielding<IndexedCsvRow>>()('examples/intermediate/IndexedCsvRows')
 
-const stopImport = (reason: string) =>
-  returnFrom(ImportCsv, { type: 'skipped', reason } satisfies ImportResult)
+const stopImport = <const S extends AnyControlScope>(scope: S, reason: string) =>
+  returnFrom(scope, { type: 'skipped', reason } satisfies ImportResult)
 
 const openCsv = (path: string, text: string) => fx(function* () {
   yield* consoleLog(`opening ${path}`)
@@ -52,36 +51,36 @@ const readCsvRows = (file: CsvFile) => fx(function* () {
 const withIndex = <E>(rows: Fx<E | YieldFrom<typeof CsvRows>, void>) => fx(function* () {
   let index = 0
 
-  yield* rows.pipe(handleScoped(YieldFrom<typeof CsvRows>, CsvRows, effect => fx(function* () {
+  yield* rows.pipe(handleKeyed(YieldFrom<typeof CsvRows>, CsvRows, effect => fx(function* () {
     yield* yieldFrom(IndexedCsvRows, { index, value: effect.arg })
     index += 1
   })))
 })
 
-const validateHeader = (header: readonly string[] | undefined) => fx(function* () {
+const validateHeader = <const S extends AnyControlScope>(scope: S, header: readonly string[] | undefined) => fx(function* () {
   if (header === undefined) {
-    return yield* stopImport('CSV is empty')
+    return yield* stopImport(scope, 'CSV is empty')
   }
 
   if (!header.includes('email')) {
-    return yield* stopImport('CSV is missing email column')
+    return yield* stopImport(scope, 'CSV is missing email column')
   }
 })
 
-const importRows = (file: CsvFile) => fx(function* () {
+const importRows = <const S extends AnyControlScope>(scope: S, file: CsvFile) => fx(function* () {
   let count = 0
 
   yield* readCsvRows(file).pipe(
     withIndex,
-    handleScoped(YieldFrom<typeof IndexedCsvRows>, IndexedCsvRows, effect => fx(function* () {
+    handleKeyed(YieldFrom<typeof IndexedCsvRows>, IndexedCsvRows, effect => fx(function* () {
       const { index, value: row } = effect.arg
 
       if (index === 0) {
-        return yield* validateHeader(row)
+        return yield* validateHeader(scope, row)
       }
 
       if (row.every(cell => cell === '')) {
-        return yield* stopImport(`Encountered empty row after ${count} imports`)
+        return yield* stopImport(scope, `Encountered empty row after ${count} imports`)
       }
 
       yield* consoleLog(`importing ${row.join(' | ')}`)
@@ -92,12 +91,12 @@ const importRows = (file: CsvFile) => fx(function* () {
   return count
 })
 
-const importCsv = (path: string, text: string): Fx<Console, ImportResult> => fx(function* () {
-  const file = yield* usingManagedIn(ImportCsv, openCsv(path, text))
-  const count = yield* importRows(file)
+const importCsv = (path: string, text: string): Fx<Console, ImportResult> => withControlScope({ label: 'CSV import' }, importScope => inScope(importScope, fx(function* () {
+  const file = yield* usingManagedIn(importScope, openCsv(path, text))
+  const count = yield* importRows(importScope, file)
 
   return { type: 'imported', count } satisfies ImportResult
-}).pipe(withScope(ImportCsv)) as Fx<Console, ImportResult>
+}))) as Fx<Console, ImportResult>
 
 const goodCsv = `
 name,email

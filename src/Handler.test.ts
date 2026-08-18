@@ -41,7 +41,7 @@ describe('Handler', () => {
       const next = f[Symbol.iterator]().next()
 
       assert.equal(Request.is(next.value), true)
-      const effect = next.value as Request<typeof OtherScope>
+      const effect = next.value as unknown as Request<typeof OtherScope>
       assert.equal(effect.scope, OtherScope)
       assert.deepEqual(effect.arg, { value: 2 })
     })

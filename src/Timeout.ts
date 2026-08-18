@@ -6,7 +6,7 @@ import { Finally, andFinallyIn } from './Finalization.js'
 import { Fx, flatMap, fx, map, ok } from './Fx.js'
 import type { HandlerCapture } from './HandlerCapture.js'
 import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
-import { scope, scopeLabel, withScope, type AnyLifetimeScope, type Exit } from './Scope.js'
+import { assertScopeOpen, inScope, scopeLabel, withScope, type AnyLifetimeScope, type Exit } from './Scope.js'
 import { wait } from './Task.js'
 import { Sleep, sleep } from './Time.js'
 import type { TraceOrigin } from './Trace.js'
@@ -25,22 +25,21 @@ export function timeout<const Options extends AnyTimeoutOptions>(
   options: Options
 ): <const E, const A>(f: Fx<E, A>) => Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<AnyLifetimeScope, TimeoutReasonOf<Options>>, A> {
   const { ms, label } = options
-  const timeoutScope = scope(Symbol('fx/Timeout'), {
+  const scopeOptions = {
     label: label ?? 'timeout',
     diagnostic: false
-  })
-  const origin = at(`Timeout interrupted ${scopeLabel(timeoutScope)} after ${ms}ms`, timeout)
+  }
+  const origin = at(`Timeout interrupted ${scopeOptions.label} after ${ms}ms`, timeout)
   const trace = captureTrace(origin, undefined, { kind: 'timeout' })
 
   return <const E, const A>(f: Fx<E, A>): Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<AnyLifetimeScope, TimeoutReasonOf<Options>>, A> =>
-    fx(function* () {
+    (withScope(scopeOptions, timeoutScope => inScope(timeoutScope, fx(function* () {
       const task = yield* forkIn(timeoutScope, attempt(f), { origin, trace })
 
       yield* timeoutInWithTrace(timeoutScope, options, { origin, trace })
 
       return yield* wait(task)
-    }).pipe(
-      withScope(timeoutScope),
+    })) as Fx<unknown, unknown>) as Fx<E | Fork | Sleep | Async | Fail<unknown>, AttemptResult<ErrorsOf<E>, A>>).pipe(
       flatMap(unwrapAttempt)
     ) as Fx<E | Fork | Sleep | Async | Fail<unknown> | InterruptFrom<AnyLifetimeScope, TimeoutReasonOf<Options>>, A>
 }
@@ -59,6 +58,7 @@ export function timeoutIn<const Scope extends AnyLifetimeScope, const Options ex
   scope: Scope,
   options: Options
 ): Fx<Sleep | InterruptFrom<Scope, TimeoutReasonOf<Options>> | Fork | Finally<Scope, Async> | ScopedFork<Scope> | HandlerCapture<'fx/Concurrent/ForkIn'>, void> {
+  assertScopeOpen(scope)
   const origin = at(`Timeout interrupted ${options.label ?? scopeLabel(scope)} after ${options.ms}ms`, timeoutIn)
   const trace = captureTrace(origin, undefined, { kind: 'timeout' })
 

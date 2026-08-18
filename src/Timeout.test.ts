@@ -7,7 +7,7 @@ import { andFinallyIn } from './Finalization.js'
 import type { Fx } from './Fx.js'
 import { control } from './Handler.js'
 import { InterruptFrom, interruptFrom } from './InterruptFrom.js'
-import { scope, withScope, type AnyScope, type Exit } from './Scope.js'
+import { scope, inScope, type AnyScope, type Exit } from './Scope.js'
 import { TimeoutInterrupt, timeout, timeoutIn } from './Timeout.js'
 import { sleep, withClock } from './Time.js'
 import { getTrace } from './Trace.js'
@@ -28,7 +28,7 @@ describe('Timeout', () => {
         ms: 100,
         reason: () => void (reasons += 1)
       }),
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       withUnboundedConcurrency,
       returnFail,
@@ -115,7 +115,7 @@ describe('Timeout', () => {
       completed = true
     }).pipe(
       timeout({ ms: 50, reason: () => reason }),
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withUnboundedConcurrency,
       returnFail,
@@ -142,7 +142,7 @@ describe('Timeout', () => {
       yield* sleep(100)
     }).pipe(
       timeout({ ms: 50 }),
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withUnboundedConcurrency,
       returnFail,
@@ -191,7 +191,7 @@ describe('Timeout', () => {
       return 'unreachable'
     }).pipe(
       timeout({ ms: 100 }),
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       withUnboundedConcurrency,
       returnFail,
@@ -220,7 +220,7 @@ describe('Timeout', () => {
       yield* sleep(100)
     }).pipe(
       timeout({ ms: 50 }),
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       withUnboundedConcurrency,
       returnFail,
@@ -282,7 +282,7 @@ describe('Timeout', () => {
         completed = true
       }))
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withUnboundedConcurrency,
       returnFail,
@@ -308,7 +308,7 @@ describe('Timeout', () => {
       yield* sleep(60_000)
       completed = true
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withUnboundedConcurrency,
       returnFail,
@@ -335,7 +335,7 @@ describe('Timeout', () => {
       }))
       yield* timeoutIn(TestScope, { ms: 10, reason: () => reason })
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withBoundedConcurrency(1),
       returnFail,
@@ -362,7 +362,7 @@ describe('Timeout', () => {
       }))
       yield* timeoutIn(TestScope, { ms: 10, reason: () => reason })
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withCoopConcurrency({ concurrency: 1 }),
       returnFail,
@@ -388,7 +388,7 @@ describe('Timeout', () => {
       })
       return 'ok'
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, () => ok('interrupted')),
       withUnboundedConcurrency,
       returnFail,
@@ -427,7 +427,7 @@ describe('Timeout', () => {
       yield* sleep(0)
       yield* interruptFrom(TestScope, reason)
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withBoundedConcurrency(1),
       returnFail,
@@ -452,7 +452,7 @@ describe('Timeout', () => {
       yield* timeoutIn(TestScope, { ms: 50, label: 'request deadline' })
       yield* forkIn(TestScope, sleep(100))
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       control(InterruptFrom, (_, interrupt) => ok(interrupt.arg)),
       withUnboundedConcurrency,
       returnFail,

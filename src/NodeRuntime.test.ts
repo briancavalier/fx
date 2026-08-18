@@ -5,7 +5,7 @@ import { assert as assertNoFail } from './Fail.js'
 import { andFinallyIn } from './Finalization.js'
 import { fx, type Fx } from './Fx.js'
 import { runNodeMain, runNodePromise, type NodeSignalName, type NodeSignalProcess } from './NodeRuntime.js'
-import { scope, withScope } from './Scope.js'
+import { scope, inScope } from './Scope.js'
 
 describe('NodeRuntime', () => {
   it('installs and removes SIGINT and SIGTERM listeners by default', async () => {
@@ -49,7 +49,7 @@ describe('NodeRuntime', () => {
         asyncAborted = true
       })
     }).pipe(
-      withScope(TestScope),
+      inScope(TestScope),
       assertNoFail
     ), { process })
 

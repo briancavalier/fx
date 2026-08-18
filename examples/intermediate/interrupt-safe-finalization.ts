@@ -1,7 +1,7 @@
 import { assert as assertNoFail, consoleLog, defaultConsole, fx, runPromise } from '@briancavalier/fx'
 import { race, withUnboundedConcurrency } from '@briancavalier/fx/concurrent'
 
-import { scope, withScope, usingIn } from '@briancavalier/fx/scope'
+import { inScope, withScope, usingIn, type AnyLifetimeScope } from '@briancavalier/fx/scope'
 
 import { defaultTime, sleep } from '@briancavalier/fx/time'
 
@@ -12,11 +12,9 @@ import { defaultTime, sleep } from '@briancavalier/fx/time'
  * `race` interrupts the losing database branch and waits for its
  * scoped async finalizer before the program logs the result.
  *
- * The example shows exit-aware cleanup with `usingIn`, named finalization
- * with `scope`, and structured race cancellation.
+ * The example shows exit-aware cleanup with `usingIn`, a lexical scope handle,
+ * and structured race cancellation.
  */
-
-const RequestScope = scope('examples/intermediate/interrupt-safe-finalization')
 
 const openConnection = fx(function* () {
   yield* consoleLog('database: open connection')
@@ -30,9 +28,9 @@ const fetchFromCache = fx(function* () {
   return 'cached result'
 })
 
-const fetchFromDatabase = fx(function* () {
+const fetchFromDatabase = <const S extends AnyLifetimeScope>(requestScope: S) => fx(function* () {
   const connection = yield* usingIn(
-    RequestScope,
+    requestScope,
     openConnection,
     (_, exit) => fx(function* () {
       yield* consoleLog(`database: close connection after ${exit.type}`)
@@ -47,17 +45,16 @@ const fetchFromDatabase = fx(function* () {
   return 'database result'
 })
 
-const main = fx(function* () {
+const main = <const S extends AnyLifetimeScope>(requestScope: S) => fx(function* () {
   const result = yield* race([
     fetchFromCache,
-    fetchFromDatabase,
+    fetchFromDatabase(requestScope),
   ])
 
   yield* consoleLog('result:', result)
 })
 
-await main.pipe(
-  withScope(RequestScope),
+await withScope({ label: 'interrupt-safe finalization' }, requestScope => inScope(requestScope, main(requestScope))).pipe(
   defaultTime,
   withUnboundedConcurrency,
   defaultConsole,

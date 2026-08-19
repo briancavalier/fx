@@ -133,7 +133,7 @@ describe('Abort', () => {
 
     it('preserves the final abort effect when restarts are exhausted', () => {
       const original = withOrigin(
-        new Abort(TestScope, undefined),
+        new Abort(TestScope),
         at('test/Abort/restartOnAbort/original')
       )
 

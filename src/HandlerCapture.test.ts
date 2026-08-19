@@ -7,7 +7,7 @@ import { captureHandlers, closeHandlerCapture, withHandlerContext, type Captured
 
 describe('HandlerCapture', () => {
   it('allows user code to capture and apply named handlers', () => {
-    class CurrentValue extends Effect('test/HandlerCapture/CurrentValue')<void, string> { }
+    class CurrentValue extends Effect('test/HandlerCapture/CurrentValue')<[], string> { }
 
     const context = captureHandlers('test/scope').pipe(
       handle(CurrentValue, () => ok('handled')),
@@ -20,7 +20,7 @@ describe('HandlerCapture', () => {
   })
 
   it('does not stop capture at a differently named handler boundary', () => {
-    class CurrentValue extends Effect('test/HandlerCapture/ForwardedValue')<void, string> { }
+    class CurrentValue extends Effect('test/HandlerCapture/ForwardedValue')<[], string> { }
 
     const context = captureHandlers('test/target').pipe(
       closeHandlerCapture('test/other'),
@@ -35,7 +35,7 @@ describe('HandlerCapture', () => {
 
   describe('closeHandlerCapture', () => {
     it('stops matching handler capture at the matching boundary', () => {
-      class Outer extends Effect('test/HandlerCapture/Outer')<void, string> { }
+      class Outer extends Effect('test/HandlerCapture/Outer')<[], string> { }
 
       const context = captureHandlers('target').pipe(
         closeHandlerCapture('target'),
@@ -48,7 +48,7 @@ describe('HandlerCapture', () => {
     })
 
     it('forwards non-matching handler capture to an outer matching boundary', () => {
-      class Outer extends Effect('test/HandlerCapture/ForwardOuter')<void, string> { }
+      class Outer extends Effect('test/HandlerCapture/ForwardOuter')<[], string> { }
 
       const context = captureHandlers('target').pipe(
         closeHandlerCapture('other'),
@@ -63,7 +63,7 @@ describe('HandlerCapture', () => {
     })
 
     it('captures ordinary handlers between captureHandlers and closeHandlerCapture', () => {
-      class Local extends Effect('test/HandlerCapture/Local')<void, string> { }
+      class Local extends Effect('test/HandlerCapture/Local')<[], string> { }
 
       const context = captureHandlers('target').pipe(
         handle(Local, () => ok('local')),

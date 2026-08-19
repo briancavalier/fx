@@ -14,12 +14,12 @@ export type SinkInput<Scope> =
 
 export class Sink<
   const Scope extends AnyScope & Receiving<unknown>
-> extends ScopedEffect('fx/Sink')<Scope, void, SinkInput<Scope>> { }
+> extends ScopedEffect('fx/Sink')<Scope, [], SinkInput<Scope>> { }
 
 export const next = <const Scope extends AnyScope & Receiving<unknown>>(
   scope: Scope
 ): Sink<Scope> =>
-  new Sink(scope, undefined)
+  new Sink(scope)
 
 export type SinkValue<E, Scope extends AnyScope & Receiving<unknown>> =
   E extends Sink<Scope> ? SinkInput<Scope> : never

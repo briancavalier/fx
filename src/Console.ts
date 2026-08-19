@@ -4,11 +4,11 @@ import { handle } from './Handler.js'
 
 export type Console = Log | Error
 
-export class Log extends Effect("fx/Console/Log")<readonly unknown[], void> { }
+export class Log extends Effect("fx/Console/Log")<[readonly unknown[]], void> { }
 
 export const log = (...args: readonly unknown[]) => new Log(args)
 
-export class Error extends Effect("fx/Console/Error")<readonly unknown[], void> { }
+export class Error extends Effect("fx/Console/Error")<[readonly unknown[]], void> { }
 
 export const error = (...args: readonly unknown[]) => new Error(args)
 

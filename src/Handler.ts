@@ -52,7 +52,7 @@ type EffectScope<T extends ScopedEffectType> =
  *
  * @example
  * ```ts
- * class AskName extends Effect('app/AskName')<void, string> { }
+ * class AskName extends Effect('app/AskName')<[], string> { }
  *
  * const program = fx(function* () {
  *   return `hello ${yield* new AskName()}`
@@ -80,10 +80,10 @@ export const handle = <T extends EffectType, HandlerEffects>(
  * @example
  * ```ts
  * class Ask<const S extends Scope>
- *   extends ScopedEffect('app/Ask')<Scope, void, string> { }
+ *   extends ScopedEffect('app/Ask')<Scope, [], string> { }
  *
  * const program = fx(function* () {
- *   return yield* new Ask(UserScope, undefined)
+ *   return yield* new Ask(UserScope)
  * })
  *
  * const result = program.pipe(
@@ -116,7 +116,7 @@ export const handleScoped = <T extends ScopedEffectType, const Scope extends Eff
  *
  * @example
  * ```ts
- * class Choose extends Effect('app/Choose')<void, boolean> { }
+ * class Choose extends Effect('app/Choose')<[], boolean> { }
  *
  * const program = fx(function* () {
  *   return yield* new Choose()

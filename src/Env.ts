@@ -2,7 +2,7 @@ import { Effect } from './Effect.js'
 import { Fx, flatMap, map, ok } from './Fx.js'
 import { handle } from './Handler.js'
 
-export class Get<E extends Record<PropertyKey, unknown>> extends Effect('fx/Env')<void, E> { }
+export class Get<E extends Record<PropertyKey, unknown>> extends Effect('fx/Env')<[], E> { }
 
 export const get = <const E extends Record<PropertyKey, unknown>>() =>
   new Get<E>()

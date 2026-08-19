@@ -10,9 +10,9 @@ describe('Handler', () => {
     const TestScope = scope('test/Handler/handleScoped')
     const OtherScope = scope('test/Handler/handleScoped/other')
 
-    class Request<const Scope extends AnyScope> extends ScopedEffect('test/Handler/Request')<Scope, {
+    class Request<const Scope extends AnyScope> extends ScopedEffect('test/Handler/Request')<Scope, [{
       readonly value: number
-    }, string> { }
+    }], string> { }
 
     const request = <const Scope extends AnyScope>(scope: Scope, value: number): Request<Scope> =>
       new Request(scope, { value })

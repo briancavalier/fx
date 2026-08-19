@@ -262,7 +262,7 @@ export const ServeScope = 'fx/HttpServer/Serve'
 /**
  * Request that an HTTP server run the provided routes.
  */
-export class Serve<const E = never, const OE = never> extends Effect('fx/HttpServer/Serve')<ServeRequest<E, OE>, void> { }
+export class Serve<const E = never, const OE = never> extends Effect('fx/HttpServer/Serve')<[ServeRequest<E, OE>], void> { }
 
 export type ServeRequest<E = never, OE = never> = {
   readonly routes: Routes<E>

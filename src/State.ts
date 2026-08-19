@@ -17,13 +17,13 @@ export type StateOf<Scope> =
  * Read the current state from the named scope.
  */
 export class GetState<const Scope extends AnyScope & Stateful<unknown>>
-  extends ScopedEffect('fx/State/Get')<Scope, void, StateOf<Scope>> { }
+  extends ScopedEffect('fx/State/Get')<Scope, [], StateOf<Scope>> { }
 
 /**
  * Replace the current state and return a computed result.
  */
 export class ModifyState<const Scope extends AnyScope & Stateful<unknown>, const B = unknown>
-  extends ScopedEffect('fx/State/Modify')<Scope, (state: StateOf<Scope>) => readonly [StateOf<Scope>, B], B> { }
+  extends ScopedEffect('fx/State/Modify')<Scope, [(state: StateOf<Scope>) => readonly [StateOf<Scope>, B]], B> { }
 
 export type StateEffects<Scope extends AnyScope & Stateful<unknown>> =
   | GetState<Scope>
@@ -33,7 +33,7 @@ export type ExcludeState<E, Scope extends AnyScope & Stateful<unknown>> =
   HandleScoped<HandleScoped<E, GetState<Scope>, Scope>, ModifyState<Scope>, Scope>
 
 export const getState = <const Scope extends AnyScope & Stateful<unknown>>(scope: Scope): Fx<GetState<Scope>, StateOf<Scope>> =>
-  new GetState(scope, undefined)
+  new GetState(scope)
 
 export const modifyState = <const Scope extends AnyScope & Stateful<unknown>, const B>(
   scope: Scope,

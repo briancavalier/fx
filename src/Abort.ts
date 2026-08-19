@@ -8,10 +8,10 @@ import { sameScope } from './internal/scopeIdentity.js'
 /**
  * Abort the named scope without returning a result.
  */
-export class Abort<const Scope extends AnyControlScope> extends ScopedEffect('fx/Abort')<Scope, void, never> { }
+export class Abort<const Scope extends AnyControlScope> extends ScopedEffect('fx/Abort')<Scope, [], never> { }
 
 export const abort = <const Scope extends AnyControlScope>(scope: Scope): Fx<Abort<Scope>, never> =>
-  withOrigin(new Abort(scope, undefined), at('fx/Abort/abort', abort))
+  withOrigin(new Abort(scope), at('fx/Abort/abort', abort))
 
 /**
  * Return a default value from an abort of the named scope.

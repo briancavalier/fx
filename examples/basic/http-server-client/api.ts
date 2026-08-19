@@ -13,8 +13,8 @@ export type User = {
   readonly name: string
 }
 
-export class ListNotes extends Effect('example/HttpServerClient/ListNotes')<void, readonly Note[]> { }
-export class AddNote extends Effect('example/HttpServerClient/AddNote')<string, Note> { }
+export class ListNotes extends Effect('example/HttpServerClient/ListNotes')<[], readonly Note[]> { }
+export class AddNote extends Effect('example/HttpServerClient/AddNote')<[string], Note> { }
 
 export const listNotes = new ListNotes()
 export const createNote = (text: string) => new AddNote(text)

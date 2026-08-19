@@ -18,7 +18,7 @@ export interface AsyncContext<A> extends TraceOrigin {
  * Most application code should create `Async` requests with {@link tryPromise}
  * or {@link assertPromise} instead of constructing this effect directly.
  */
-export class Async extends Effect('fx/Async')<AsyncContext<any>> { }
+export class Async extends Effect('fx/Async')<[AsyncContext<any>]> { }
 
 /**
  * Convert an async boundary into an Fx.

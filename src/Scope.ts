@@ -244,7 +244,7 @@ class ScopeBoundary<E, A, Scope extends AnyLifetimeScope> implements Fx<unknown,
         // Abort exits are only produced by Abort effects, whose public constructors require control scopes.
         const abort = Abort.is(unhandledEffect)
           ? unhandledEffect
-          : new Abort(finalExit.scope as unknown as AnyControlScope, undefined)
+          : new Abort(finalExit.scope as unknown as AnyControlScope)
         return (yield abort) as A
       }
       if (finalExit.type === 'interrupted') {
@@ -588,7 +588,7 @@ const propagateRuntimeScopeExit = function* <A>(result: RuntimeScopeExit): Gener
   const exit = result.exit as Exit<AnyScope>
   // Return/abort runtime exits originate from control effects before being transported across scope boundaries.
   if (exit.type === 'returnFrom') return (yield new ReturnFrom(result.scope as unknown as AnyControlScope, exit.value)) as A
-  if (exit.type === 'abort') return (yield new Abort(result.scope as unknown as AnyControlScope, undefined)) as A
+  if (exit.type === 'abort') return (yield new Abort(result.scope as unknown as AnyControlScope)) as A
   if (exit.type === 'interrupted') return (yield new InterruptFrom(result.scope, exit.reason)) as A
   if (exit.type === 'failure') return (yield exit.failure) as A
   return exit.value as A

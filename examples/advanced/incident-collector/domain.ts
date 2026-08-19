@@ -78,40 +78,40 @@ export type IncidentCollectorEffects =
 /**
  * Request a managed bundle where snapshot artifacts can be written.
  */
-export class OpenBundle extends Effect('example/IncidentCollector/OpenBundle')<IncidentId, Managed<Bundle>> { }
+export class OpenBundle extends Effect('example/IncidentCollector/OpenBundle')<[IncidentId], Managed<Bundle>> { }
 
 /**
  * Request a managed collector session for observable collector lifetime.
  */
-export class StartCollector extends Effect('example/IncidentCollector/StartCollector')<CollectorName, Managed<CollectorName>> { }
+export class StartCollector extends Effect('example/IncidentCollector/StartCollector')<[CollectorName], Managed<CollectorName>> { }
 
 /**
  * Request that an artifact be written to the active snapshot bundle.
  */
-export class WriteBundleEntry extends Effect('example/IncidentCollector/WriteBundleEntry')<{
+export class WriteBundleEntry extends Effect('example/IncidentCollector/WriteBundleEntry')<[{
   readonly bundle: Bundle
   readonly entry: BundleEntry
-}, void> { }
+}], void> { }
 
 /**
  * Request logs for one service.
  */
-export class ReadServiceLog extends Effect('example/IncidentCollector/ReadServiceLog')<ServiceName, ServiceLog> { }
+export class ReadServiceLog extends Effect('example/IncidentCollector/ReadServiceLog')<[ServiceName], ServiceLog> { }
 
 /**
  * Request current service health metrics.
  */
-export class FetchMetrics extends Effect('example/IncidentCollector/FetchMetrics')<IncidentId, Metrics> { }
+export class FetchMetrics extends Effect('example/IncidentCollector/FetchMetrics')<[IncidentId], Metrics> { }
 
 /**
  * Request deploy context for the incident.
  */
-export class FetchDeployContext extends Effect('example/IncidentCollector/FetchDeployContext')<IncidentId, DeployContext> { }
+export class FetchDeployContext extends Effect('example/IncidentCollector/FetchDeployContext')<[IncidentId], DeployContext> { }
 
 /**
  * Request runtime status from a named source.
  */
-export class FetchRuntimeStatus extends Effect('example/IncidentCollector/FetchRuntimeStatus')<string, RuntimeStatus> { }
+export class FetchRuntimeStatus extends Effect('example/IncidentCollector/FetchRuntimeStatus')<[string], RuntimeStatus> { }
 
 export const openBundle = (incidentId: IncidentId) => new OpenBundle(incidentId)
 export const startCollector = (collector: CollectorName) => new StartCollector(collector)

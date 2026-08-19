@@ -4,9 +4,9 @@ import { describe, it } from 'node:test'
 import { fork, forkIn, withUnboundedConcurrency } from './Concurrent.js'
 import { Fail, catchAll, catchIf, fail, returnFail, runCatch } from './Fail.js'
 import { andFinally, andFinallyIn } from './Finalization.js'
-import { finalizing, fx, ok, run, runPromise, type Fx } from './Fx.js'
+import { bracket, finalizing, fx, ok, run, runPromise, type Fx } from './Fx.js'
 import { returnFrom } from './ReturnFrom.js'
-import { scope, withScope, type Control } from './Scope.js'
+import { scope, withScope, type Control, type RegionExit } from './Scope.js'
 import {
   GetState,
   getState,
@@ -256,6 +256,53 @@ describe('State', () => {
       }).pipe(withState(CounterState, 0), run)
 
       assert.deepEqual(program, ['body:0', 10])
+    })
+
+    it('preserves the original failure when exit-aware finalizing returns', () => {
+      const program = fx(function* () {
+        const recovered = yield* fx(function* () {
+          yield* modifyState(CounterState, count => [count + 1, undefined])
+          yield* fail('body')
+        }).pipe(
+          finalizing((_exit) => returnFrom(ForkScope, 'cleanup')),
+          transactionalState(CounterState),
+          withScope(ForkScope),
+          catchAll(error => fx(function* () {
+            const recoveredFrom = yield* getState(CounterState)
+            return `${error}:${recoveredFrom}`
+          })),
+          runCatch
+        )
+
+        return [recovered, yield* getState(CounterState)] as const
+      }).pipe(withState(CounterState, 0), run)
+
+      assert.deepEqual(program, ['body:0', 0])
+    })
+
+    it('preserves the original failure when exit-aware bracket cleanup returns', () => {
+      const program = fx(function* () {
+        const recovered = yield* bracket(
+          ok(undefined),
+          (_resource: void, _exit: RegionExit) => returnFrom(ForkScope, 'cleanup'),
+          () => fx(function* () {
+            yield* modifyState(CounterState, count => [count + 1, undefined])
+            yield* fail('body')
+          })
+        ).pipe(
+          transactionalState(CounterState),
+          withScope(ForkScope),
+          catchAll(error => fx(function* () {
+            const recoveredFrom = yield* getState(CounterState)
+            return `${error}:${recoveredFrom}`
+          })),
+          runCatch
+        )
+
+        return [recovered, yield* getState(CounterState)] as const
+      }).pipe(withState(CounterState, 0), run)
+
+      assert.deepEqual(program, ['body:0', 0])
     })
 
     it('preserves the original failure when transactional cleanup fails', () => {
